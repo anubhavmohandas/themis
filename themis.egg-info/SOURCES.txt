@@ -1,0 +1,14 @@
+README.md
+pyproject.toml
+tests/test_paper_claims.py
+themis/__init__.py
+themis/analysis.py
+themis/cli.py
+themis/corpus.py
+themis/provenance.py
+themis/taxonomy.py
+themis.egg-info/PKG-INFO
+themis.egg-info/SOURCES.txt
+themis.egg-info/dependency_links.txt
+themis.egg-info/entry_points.txt
+themis.egg-info/top_level.txt

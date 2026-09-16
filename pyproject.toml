@@ -1,0 +1,19 @@
+[project]
+name = "themis"
+version = "1.0.0"
+description = "Provenance-aware auditing of public Bitcoin attribution labels"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+themis = "themis.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["themis"]
+
+[tool.setuptools.package-data]
+themis = []

@@ -1,0 +1,86 @@
+{
+ "full_corpus": {
+  "claims": 1545710,
+  "addresses": 1497191,
+  "per_source": {
+   "ellipticpp": {
+    "addresses": 822937,
+    "claims": 822937
+   },
+   "schnoering": {
+    "addresses": 101387,
+    "claims": 103812
+   },
+   "rodwald_ransom": {
+    "addresses": 50322,
+    "claims": 50322
+   },
+   "rodwald_mixers": {
+    "addresses": 57817,
+    "claims": 57817
+   },
+   "ransomwhere": {
+    "addresses": 11186,
+    "claims": 11186
+   },
+   "tagpack": {
+    "addresses": 483296,
+    "claims": 499327
+   },
+   "watchyourback": {
+    "addresses": 309,
+    "claims": 309
+   }
+  },
+  "roots_identified": 21,
+  "roots_total": 25,
+  "unresolved_claims": 853989,
+  "unresolved_share": 0.5524897943339954,
+  "unresolved_addresses": 853583,
+  "unresolved_addr_share": 0.5701229836406978,
+  "root_claims": {
+   "elliptic_undisclosed": 822937,
+   "tagpack_GraphSense Core Team": 382622,
+   "bitcointalk_forum": 89477,
+   "tagpack_Talos Cisco": 58600,
+   "rodwald_mixers_own": 57808,
+   "tagpack_Matteo Romiti": 37527,
+   "rodwald_own_S": 28684,
+   "montreal_paquet_clouston_2019": 27714,
+   "ransomwhere_crowd": 18693,
+   "princeton_huang_2018": 9176,
+   "padua_conti_2018": 5827,
+   "rodwald_own_SH": 2367,
+   "padua_sextortion_2020": 1290,
+   "coinbase_messages": 898,
+   "tagpack_INTERPOL CNTL": 392,
+   "wbtc_disclosure": 370,
+   "exchange_self_disclosure": 342,
+   "watchyourback_manual": 309,
+   "tagpack_EtherScanDB Team": 305,
+   "ofac_sdn": 186,
+   "tagpack_GraphSense Core team": 155,
+   "tagpack_github user 3xp0rt": 18,
+   "walletexplorer": 9,
+   "tagpack_Beaunard Grobler": 3,
+   "rodwald_own_H,S": 1
+  }
+ },
+ "sample": {
+  "claims": 268891,
+  "addresses": 228847,
+  "multi_source_addresses": 15400,
+  "complete_sources": [
+   "ransomwhere",
+   "rodwald_mixers",
+   "rodwald_ransom",
+   "schnoering",
+   "watchyourback"
+  ],
+  "sampled_sources": [
+   "ellipticpp",
+   "tagpack"
+  ]
+ },
+ "note": "Every claim from every source except Elliptic++ and GraphSense TagPack is present in full, together with all multi-dataset addresses and a seeded sample of the remainder. Agreement, conflict, independence and drift results are therefore exact; corpus-wide totals come from full_corpus."
+}
