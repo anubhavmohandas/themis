@@ -47,6 +47,19 @@ class TestAgreement(Base):
         self.assertEqual(self.agree["single_source"], 1_481_791)
         self.assertAlmostEqual(100 * self.agree["multi_source_rate"], 1.03, places=2)
 
+    def test_dataset_distribution_is_corpus_wide_and_closes(self):
+        """The 1-dataset bucket must be the corpus figure, not the sample's, and
+        the buckets above it must sum to the multi-dataset total."""
+        d = self.agree["sources_per_address"]
+        self.assertEqual(d[1], 1_481_791)
+        self.assertEqual(d[2], 7_904)
+        self.assertEqual(d[3], 357)
+        self.assertEqual(d[4], 7_112)
+        self.assertEqual(d[5], 26)
+        self.assertEqual(d[6], 1)
+        self.assertEqual(sum(v for k, v in d.items() if k >= 2), 15_400)
+        self.assertEqual(sum(d.values()), 1_497_191)
+
     def test_outcome_counts(self):
         o = self.agree["outcomes"]
         self.assertEqual(o["exact"]["n"], 13_673)
@@ -132,6 +145,44 @@ class TestIndependence(Base):
         rc = {r["root"]: r["share"] for r in self.indep["root_concentration"]}
         self.assertAlmostEqual(100 * rc["elliptic_undisclosed"], 53.2, places=1)
         self.assertAlmostEqual(100 * rc["tagpack_GraphSense Core Team"], 24.8, places=1)
+
+
+class TestKappa(Base):
+    """Section 5.1 - chance-corrected agreement, now produced by released code
+    rather than traced to an external script."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.k = analysis.cohen_kappa(cls.c)
+
+    def test_pair_tally_closes(self):
+        k = self.k
+        self.assertEqual(k["n_pairs"], 17)
+        self.assertEqual(k["n_undefined"], 4)
+        self.assertEqual(k["n_zero"], 8)
+        self.assertLessEqual(k["n_undefined"] + k["n_zero"], k["n_pairs"])
+
+    def test_largest_overlap_matches_containment_table(self):
+        pair = next(r for r in self.k["pairs"]
+                    if {r["source_a"], r["source_b"]} == {"schnoering", "tagpack"})
+        self.assertEqual(pair["n"], 8_139)
+        self.assertAlmostEqual(100 * pair["percent_agreement"], 93.3, places=1)
+        self.assertAlmostEqual(pair["cohen_kappa"], 0.655, places=3)
+
+    def test_three_pairs_are_substantial(self):
+        self.assertEqual(len(self.k["substantial"]), 3)
+        by = {r["pair"]: r["cohen_kappa"] for r in self.k["substantial"]}
+        self.assertAlmostEqual(by["schnoering-tagpack"], 0.655, places=3)
+        self.assertAlmostEqual(by["schnoering-watchyourback"], 0.537, places=3)
+        self.assertAlmostEqual(by["tagpack-watchyourback"], 0.523, places=3)
+
+    def test_undefined_pairs_are_named_not_dropped(self):
+        und = [r for r in self.k["pairs"] if r["cohen_kappa"] is None]
+        self.assertEqual(len(und), 4)
+        for r in und:
+            self.assertIsNotNone(r["note"])
+            self.assertAlmostEqual(r["percent_agreement"], 1.0, places=6)
 
 
 class TestDrift(Base):

@@ -1,7 +1,8 @@
-# themis
+# THEMIS
 
-Provenance-aware auditing of public Bitcoin attribution labels — the runnable
-counterpart to *Provenance Before Precision*.
+**T**rust and **E**vidence-based **H**euristic **M**ethod for **I**nvestigative
+**S**ource Assessment — provenance-aware auditing of public Bitcoin attribution
+labels, and the runnable counterpart to *Provenance Before Precision*.
 
 A blockchain records transfers, not identities. Everything an investigator says
 about *who* controlled an address is a claim layered on top, and in practice
@@ -35,6 +36,11 @@ to run against a full local build instead of the bundled sample.
 | `explain <address>` | 3.2 | one address traced to its provenance roots, with apparent vs actual corroboration |
 | `bootstrap [--both]` | 5.4 | cluster-bootstrap intervals, resampling provenance roots rather than rows |
 | `taxonomy` | 3.2 | the classification rules, printed so they can be checked |
+
+`audit` also computes Cohen's kappa for every overlapping dataset pair, so the
+chance-corrected figures in §5.1 come from released code rather than an external
+script. Pairs whose shared region is single-class are named as undefined instead
+of being dropped.
 
 `explain` is the shortest route to the argument. Try these three:
 
@@ -91,11 +97,13 @@ One group in the real data is each.
 python -m unittest discover -s tests -v
 ```
 
-34 tests, each asserting a number printed in the paper. If the implementation
-drifts from what was published, they fail. Two of them caught genuine bugs
-during development: a circularity flag that only fired when *every* dataset
-shared one root, and a malformed provenance value being silently judged as
-inherited.
+39 tests, each asserting a number printed in the paper. If the implementation
+drifts from what was published, they fail. Four of them caught genuine bugs: a circularity flag that only fired when
+*every* dataset shared one root; a malformed provenance value silently judged as
+inherited; the 1-dataset bucket of the corroboration histogram reporting the
+sample count rather than the corpus count; and a first cut of the kappa stage
+that excluded `unknown` labels, which quietly changed the comparable set and
+moved the headline kappa from 0.655 to 0.684.
 
 ## Layout
 

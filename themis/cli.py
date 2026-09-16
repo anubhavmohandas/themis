@@ -1,4 +1,6 @@
-"""themis - run the attribution-reliability audit from the command line."""
+"""THEMIS - Trust and Evidence-based Heuristic Method for Investigative Source
+Assessment. Runs the attribution-reliability audit from the command line.
+"""
 from __future__ import annotations
 import argparse, json, sys, textwrap
 from .corpus import Corpus
@@ -29,6 +31,7 @@ def cmd_audit(args):
     c = load(args)
     a = analysis.agreement(c)
     i = analysis.independence(c)
+    kap = analysis.cohen_kappa(c)
     if c.sample_note:
         print(_c("note: " + c.sample_note, DIM))
 
@@ -52,6 +55,11 @@ def cmd_audit(args):
         col = RED if "conflict" in k else None
         line = f"  {k:<26}{v['n']:>8,}  {100*v['share']:6.2f}%"
         print(_c(line, col) if col else line)
+    print(_c(f"  chance-corrected: {kap['n_pairs']} overlapping pairs, "
+             f"{kap['n_undefined']} undefined, {kap['n_zero']} at zero", DIM))
+    for r in kap["substantial"]:
+        print(f"    {r['pair']:<28}n={r['n']:>6,}  raw {100*r['percent_agreement']:5.1f}%"
+              f"   kappa {r['cohen_kappa']:.3f}")
     if a["top_polarity_conflicts"]:
         print(_c("  largest licit/illicit conflicts:", DIM))
         for p in a["top_polarity_conflicts"][:4]:
@@ -83,7 +91,8 @@ def cmd_audit(args):
         print(f"    {rc['root']:<34}{100*rc['share']:6.2f}% of all claims")
     print(_c("  unresolved is not 'shared' - see `themis bootstrap --both`", DIM))
     if args.json:
-        json.dump(dict(agreement=a, independence=i), open(args.json, "w"), indent=1)
+        json.dump(dict(agreement=a, independence=i, kappa=kap),
+                  open(args.json, "w"), indent=1)
         print(f"\nwritten {args.json}")
 
 
@@ -178,8 +187,10 @@ def cmd_taxonomy(args):
 def main(argv=None):
     p = argparse.ArgumentParser(
         prog="themis",
-        description="Audit public Bitcoin attribution labels: provenance, "
-                    "independence, currency, and their effect on a forensic figure.")
+        description="THEMIS - Trust and Evidence-based Heuristic Method for "
+                    "Investigative Source Assessment. Audits public Bitcoin "
+                    "attribution labels: provenance, independence, currency, and "
+                    "their effect on a forensic figure.")
     p.add_argument("--observations", help="full observations.csv(.gz); omit to use "
                                           "the bundled sample")
     p.add_argument("--json", help="also write the result to this JSON file")

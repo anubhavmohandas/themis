@@ -4,6 +4,13 @@ import collections, random
 from . import taxonomy, provenance
 
 
+def _sources_per_address(corpus, n_multi):
+    d = collections.Counter(len({c["source"] for c in corpus.by_addr[a]})
+                            for a in corpus.by_addr)
+    d[1] = corpus.n_addresses - n_multi
+    return dict(sorted(d.items()))
+
+
 # --------------------------------------------------------------- E1 agreement
 def agreement(corpus) -> dict:
     multi = corpus.multi_source_addresses()
@@ -39,9 +46,61 @@ def agreement(corpus) -> dict:
         top_polarity_conflicts=[dict(source_a=k[0], label_a=k[1], source_b=k[2],
                                      label_b=k[3], n=v)
                                 for k, v in pairs.most_common(10)],
-        sources_per_address=dict(sorted(collections.Counter(
-            len({c["source"] for c in corpus.by_addr[a]}) for a in corpus.by_addr).items())),
+        # the 1-dataset bucket is corpus-wide, not sample-scoped: every
+        # multi-dataset address is present in the sample, so only the singles
+        # are undercounted there and the manifest carries the true total
+        sources_per_address=_sources_per_address(corpus, total),
     )
+
+
+# ------------------------------------------------- chance-corrected agreement
+def cohen_kappa(corpus) -> dict:
+    """Cohen's kappa for every pair of datasets that share addresses.
+
+    Raw agreement flatters a corpus dominated by one category, so the paper
+    reports kappa alongside it. Kappa is undefined when the shared region is
+    effectively single-class, which is the common case here; those pairs are
+    named rather than silently dropped.
+    """
+    # one label per (address, dataset): the modal canonical category, matching the
+    # overlap counts reported in the containment table. `unknown` is a category
+    # here, not a reason to drop the address - excluding it would silently change
+    # the comparable set and with it the denominator.
+    per = collections.defaultdict(dict)
+    tmp = collections.defaultdict(lambda: collections.defaultdict(collections.Counter))
+    for a, v in corpus.by_addr.items():
+        for c in v:
+            tmp[a][c["source"]][c["canon"]] += 1
+    for a, d in tmp.items():
+        for src, counts in d.items():
+            per[a][src] = counts.most_common(1)[0][0]
+    srcs = sorted(corpus.src_addr)
+    out = []
+    for i, s1 in enumerate(srcs):
+        for s2 in srcs[i + 1:]:
+            pairs = [(l[s1], l[s2]) for l in per.values() if s1 in l and s2 in l]
+            n = len(pairs)
+            if not n:
+                continue
+            agree = sum(1 for x, y in pairs if x == y) / n
+            m1 = collections.Counter(x for x, _ in pairs)
+            m2 = collections.Counter(y for _, y in pairs)
+            pe = sum(m1[k] * m2[k] for k in set(m1) | set(m2)) / (n * n)
+            if abs(1 - pe) < 1e-12:
+                k, note = None, "undefined: shared region is single-class"
+            else:
+                k, note = (agree - pe) / (1 - pe), None
+            out.append(dict(source_a=s1, source_b=s2, n=n,
+                            percent_agreement=agree, cohen_kappa=k, note=note))
+    out.sort(key=lambda r: -r["n"])
+    usable = [r for r in out if r["cohen_kappa"] is not None and r["cohen_kappa"] > 0.4]
+    return dict(pairs=out, n_pairs=len(out),
+                n_undefined=sum(1 for r in out if r["cohen_kappa"] is None),
+                n_zero=sum(1 for r in out if r["cohen_kappa"] is not None
+                           and abs(r["cohen_kappa"]) < 1e-9),
+                substantial=[dict(pair=f"{r['source_a']}-{r['source_b']}", n=r["n"],
+                                  percent_agreement=r["percent_agreement"],
+                                  cohen_kappa=r["cohen_kappa"]) for r in usable])
 
 
 # ------------------------------------------------------------ E2 independence
