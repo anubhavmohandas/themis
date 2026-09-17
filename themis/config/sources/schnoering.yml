@@ -1,0 +1,27 @@
+id: schnoering
+display_name: "Schnoering et al. corpus"
+chain: bitcoin
+citation: "Schnoering et al."
+license: "see publisher"
+confidence_semantics: "multi-input curation across named sub-corpora"
+known_dependencies: [ofac_sdn, coinbase_messages, exchange_self_disclosure]
+
+# The dataset's own `subcat` field already names its sub-corpus in plain
+# text, so provenance here is a direct declared-field lookup - no decoding
+# needed. SDN and Exchange terminate in independently re-checkable evidence
+# (a sanctions list entry, an issuer's own disclosure), so those two are
+# marked verified; the rest are named studies or crowd forums, not
+# independently re-checkable by this pipeline.
+provenance:
+  mode: field_map
+  field: subcat
+  map:
+    "Montréal":         {root: montreal_paquet_clouston_2019, resolved: true}
+    "Padua":            {root: padua_conti_2018,               resolved: true}
+    "PaduaSextorsion":  {root: padua_sextortion_2020,          resolved: true}
+    "BitcoinTalk":      {root: bitcointalk_forum,               resolved: true}
+    "SDN":              {root: ofac_sdn,                        resolved: true, verified: true}
+    "CoinbaseMessages": {root: coinbase_messages,                resolved: true}
+    "WBTC":             {root: wbtc_disclosure,                  resolved: true}
+    "Exchange":         {root: exchange_self_disclosure,         resolved: true, verified: true}
+  default: {root: schnoering_other, resolved: false}

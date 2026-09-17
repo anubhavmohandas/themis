@@ -1,0 +1,18 @@
+id: ellipticpp
+display_name: "Elliptic++"
+chain: bitcoin
+citation: "Elliptic++ dataset"
+license: "see publisher"
+confidence_semantics: "heuristic-derived; methodology not publicly disclosed per-label"
+known_dependencies: []
+
+# The publisher does not disclose per-label methodology, so every claim from
+# this source terminates in the same undisclosed root. This is a fixed root,
+# not "the dataset name is the root" - `elliptic_undisclosed` marks it
+# unresolved rather than pretending the dataset's own identity is evidence.
+provenance:
+  mode: fixed_root
+  root: elliptic_undisclosed
+  resolved: false
+  native: true
+  verified: false

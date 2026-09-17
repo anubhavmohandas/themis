@@ -1,0 +1,39 @@
+id: rodwald_ransom
+display_name: "Rodwald ransomware corpus"
+chain: bitcoin
+citation: "Rodwald"
+license: "see publisher"
+confidence_semantics: "compiled from multiple named inputs, encoded as source letters"
+known_dependencies: [ransomwhere_crowd, princeton_huang_2018, padua_conti_2018, montreal_paquet_clouston_2019]
+
+# `prov_family` stores "rodwald:<letters>", an undocumented per-address code
+# for which upstream input(s) contributed the address. `decode_field` (STEP
+# 8B) established what the letters mean by containment against candidate
+# datasets; the result of that decode is declared here rather than
+# re-derived at analysis time.
+#
+# Resolution order, tried top to bottom, first match wins:
+#   1. contains_rules   - a decoded letter is present  -> that letter's root
+#   2. residue_prefix_map - the claim's own `subcat` text names a known study
+#                           (STEP 8C naming residue) -> that study's root
+#   3. fallback_template - neither decoded -> rodwald's own, unresolved
+provenance:
+  mode: contains_rules
+  field: prov_family
+  parse: after_colon
+  parse_default: ""
+  contains_rules:
+    - contains: "R"
+      root: ransomwhere_crowd
+      resolved: true
+      native: false
+  residue_field: subcat
+  residue_prefix_map:
+    princeton: princeton_huang_2018
+    padua: padua_conti_2018
+    montreal: montreal_paquet_clouston_2019
+  residue_resolved: true
+  residue_native: false
+  fallback_template: "rodwald_own_{value_or_unknown}"
+  fallback_resolved: false
+  fallback_native: true

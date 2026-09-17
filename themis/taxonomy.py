@@ -1,24 +1,50 @@
 """Reliability taxonomy: tiers, flags, canonical categories, conflict logic.
 
 Every rule here is executable against a label corpus without human judgement
-beyond the category mapping itself, which is declared rather than inferred.
+beyond the category mapping itself, and that mapping is loaded from
+config/taxonomy.yml rather than declared here - a new category or a new
+source's verified roots need a config edit, not a code change.
 """
 from __future__ import annotations
 import datetime
+from . import config_io
 
-# ---------------------------------------------------------------- categories
-POLARITY = {
-    "ransomware": "illicit", "mixer": "illicit", "darknet_market": "illicit",
-    "ponzi": "illicit", "scam": "illicit", "sextortion": "illicit",
-    "malware": "illicit", "extremism": "illicit", "sanctioned": "illicit",
-    "hack": "illicit", "terrorism": "illicit", "trafficking": "illicit",
-    "exchange": "licit", "mining": "licit", "gambling": "licit",
-    "faucet": "licit", "bridge": "licit", "payment_proc": "licit",
-    "wallet_service": "licit", "marketplace_legal": "licit", "individual": "licit",
-    "illicit_unspec": "illicit", "licit_unspec": "licit",
-    "unknown": "unknown",
-}
-GENERIC = {"illicit_unspec", "licit_unspec"}
+_cfg = config_io.load()
+CATEGORIES: dict = _cfg.taxonomy
+
+#: category -> polarity, straight from config
+POLARITY = {cat: node.get("polarity", "unknown") for cat, node in CATEGORIES.items()}
+
+#: the underspecified placeholder at the root of each polarity branch - e.g.
+#: `illicit_unspec` - pairing one of these with a specific descendant is a
+#: refinement, not a conflict.
+GENERIC = {cat for cat, node in CATEGORIES.items()
+           if node.get("parent") is None and node.get("polarity") in ("licit", "illicit")}
+
+#: lowercased alias -> canonical category, for normalizing a newly-ingested
+#: dataset's raw label text (STEP 5). The canonical name and its own aliases
+#: both index to themselves/each other.
+ALIASES = {}
+for _cat, _node in CATEGORIES.items():
+    ALIASES[_cat.lower()] = _cat
+    for _a in _node.get("aliases", []) or []:
+        ALIASES[str(_a).lower()] = _cat
+
+
+def canonicalize_category(raw: str) -> str | None:
+    """Map free-text label text to a canonical category via the taxonomy's
+    declared aliases. Returns None - never a guess - when nothing matches."""
+    return ALIASES.get((raw or "").strip().lower())
+
+
+def ancestors(cat: str) -> set:
+    """`cat` and every category above it up to the root, by parent link."""
+    seen = set()
+    while cat and cat not in seen and cat in CATEGORIES:
+        seen.add(cat)
+        cat = CATEGORIES[cat].get("parent")
+    return seen
+
 
 # ---------------------------------------------------------------------- tiers
 TIER_VERIFIED = "verified"
@@ -37,15 +63,33 @@ TIER_BY_HEURISTIC = {
     "": TIER_REPORT,
 }
 
-#: provenance roots that terminate in evidence independent of on-chain inference
-VERIFIED_ROOTS = {"ofac_sdn", "watchyourback_manual", "exchange_self_disclosure"}
 
-STALE_AFTER_YEARS = 3.0
+def _verified_roots_from_config() -> set:
+    """Root names that some source config declares `verified: true` for -
+    STEP 6: a root terminating in independently re-checkable evidence.
+    Only statically-named roots (fixed_root / explicit map entries) can be
+    declared this way; a templated fallback root is never verified."""
+    roots = set()
+    for src in _cfg.sources.values():
+        prov = src.get("provenance", {})
+        if prov.get("mode") == "fixed_root" and prov.get("verified"):
+            roots.add(prov["root"])
+        for entry in list((prov.get("map") or {}).values()) + list(prov.get("contains_rules") or []):
+            if isinstance(entry, dict) and entry.get("verified"):
+                roots.add(entry["root"])
+    return roots
+
+
+VERIFIED_ROOTS = _verified_roots_from_config()
+STALE_AFTER_YEARS = float(_cfg.thresholds.get("staleness_years", 3.0))
 
 
 def tier_of(claim: dict) -> str:
-    """Tier for a single claim. Provenance root overrides heuristic dependency."""
-    if claim.get("root") in VERIFIED_ROOTS:
+    """Tier for a single claim. A verified provenance root overrides the
+    declared heuristic dependency; `prov_verified` is set by the provenance
+    resolver at load time, with a name-based fallback for claims built
+    without going through it (e.g. in tests)."""
+    if claim.get("prov_verified") or claim.get("root") in VERIFIED_ROOTS:
         return TIER_VERIFIED
     return TIER_BY_HEURISTIC.get(claim.get("heuristic", ""), TIER_REPORT)
 
@@ -67,7 +111,14 @@ def currency_flags(claim: dict, today: datetime.date | None = None) -> list[str]
 
 
 def classify_address(claims: list[dict]) -> str:
-    """Agreement outcome for one address carrying claims from >= 2 datasets."""
+    """Agreement outcome for one address carrying claims from >= 2 datasets.
+
+    Walks the taxonomy tree rather than a flat category list, so a claim
+    pair is a hierarchical refinement whenever one member is the polarity's
+    generic placeholder *or* one category is a taxonomy-declared ancestor of
+    the other (STEP 6's "service vs exchange" case), not only in the
+    two-level case this corpus happens to use.
+    """
     cats = {c["canon"] for c in claims if c["canon"] != "unknown"}
     if not cats:
         return "incomparable"
@@ -76,7 +127,13 @@ def classify_address(claims: list[dict]) -> str:
     pol = {POLARITY.get(c, "unknown") for c in cats} - {"unknown"}
     if len(pol) > 1:
         return "licit/illicit conflict"
-    return "hierarchical refinement" if len(cats - GENERIC) <= 1 else "entity-type conflict"
+    specific = cats - GENERIC
+    if len(specific) <= 1:
+        return "hierarchical refinement"
+    anc = {c: ancestors(c) for c in specific}
+    if all(a in anc[b] or b in anc[a] for a in specific for b in specific):
+        return "hierarchical refinement"
+    return "entity-type conflict"
 
 
 OUTCOMES = ["exact", "hierarchical refinement", "entity-type conflict",

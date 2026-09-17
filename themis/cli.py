@@ -4,7 +4,8 @@ Assessment. Runs the attribution-reliability audit from the command line.
 from __future__ import annotations
 import argparse, json, sys, textwrap
 from .corpus import Corpus
-from . import analysis, taxonomy
+from . import analysis, taxonomy, config_io, report as _report
+from .ingest import pipeline as _ingest_pipeline
 
 B, D, DIM = "\033[1m", "\033[0m", "\033[2m"
 RED, GRN, YEL = "\033[31m", "\033[32m", "\033[33m"
@@ -67,23 +68,23 @@ def cmd_audit(args):
                   f"vs {p['source_b']}:{p['label_b']}")
 
     rule("INDEPENDENCE  (RQ2)")
-    fd = i["field_decode"]
-    verdict = "CLEAN SPLIT" if fd["clean_split"] else "inconclusive"
-    print(f"  decoding {fd['dataset']}.source against {fd['candidate']}: "
-          f"{_c(verdict, GRN if fd['clean_split'] else YEL)}")
-    for v, g in list(fd["groups"].items())[:12]:
-        mark = "inherited" if g["verdict"] == "inherited" else g["verdict"]
-        print(f"    group {v or '(blank)':<6} n={g['n']:>7,}  "
-              f"{100*g['share_in_candidate']:6.1f}% inside  {mark}")
-    print(f"  -> {fd['inherited_addresses']:,} addresses inherited from {fd['candidate']}")
-    nr = i["naming_residue"]
-    print(f"  naming residue in {nr['dataset']}: {nr['attributed']:,} of {nr['total']:,} "
-          f"({100*nr['share']:.2f}%) name their upstream study")
-    m = i["montreal_set"]
-    print(f"  one 2019 ground-truth set ({m['size']:,} addresses) also appears in:")
-    for s, n in sorted(m["propagation"].items(), key=lambda kv: -kv[1]):
-        if n:
-            print(f"    {s:<18}{n:>7,}  {100*n/m['size']:6.2f}%")
+    for fd in i["field_decodes"]:
+        verdict = "CLEAN SPLIT" if fd["clean_split"] else "inconclusive"
+        print(f"  decoding {fd['dataset']}.{fd.get('field','source')} against {fd['candidate']}: "
+              f"{_c(verdict, GRN if fd['clean_split'] else YEL)}")
+        for v, g in list(fd["groups"].items())[:12]:
+            mark = "inherited" if g["verdict"] == "inherited" else g["verdict"]
+            print(f"    group {v or '(blank)':<6} n={g['n']:>7,}  "
+                  f"{100*g['share_in_candidate']:6.1f}% inside  {mark}")
+        print(f"  -> {fd['inherited_addresses']:,} addresses inherited from {fd['candidate']}")
+    for nr in i["naming_residues"]:
+        print(f"  naming residue in {nr['dataset']}: {nr['attributed']:,} of {nr['total']:,} "
+              f"({100*nr['share']:.2f}%) name their upstream study")
+    for m in i["notable_root_propagation"]:
+        print(f"  {m['label']} ({m['size']:,} addresses) also appears in:")
+        for s, n in sorted(m["propagation"].items(), key=lambda kv: -kv[1]):
+            if n:
+                print(f"    {s:<18}{n:>7,}  {100*n/m['size']:6.2f}%" if m["size"] else f"    {s:<18}{n:>7,}")
     print(f"  unresolved provenance: {i['unresolved_addresses']:,} addresses "
           f"({100*i['unresolved_addr_share']:.1f}% of the corpus)")
     print(_c("  concentration:", DIM))
@@ -182,6 +183,116 @@ def cmd_taxonomy(args):
     li = sorted(k for k, v in taxonomy.POLARITY.items() if v == "licit")
     print(textwrap.fill("illicit: " + ", ".join(il), 76, subsequent_indent="    "))
     print(textwrap.fill("licit:   " + ", ".join(li), 76, subsequent_indent="    "))
+    print(f"\n  {len(taxonomy.ALIASES)} raw-label aliases declared "
+          f"(config/taxonomy.yml) across {len(taxonomy.CATEGORIES)} categories")
+
+
+def cmd_sources(args):
+    """STEP 25 - the source registry, read straight from config/sources/."""
+    cfg = config_io.load()
+    rule("SOURCE REGISTRY")
+    for sid, src in sorted(cfg.sources.items()):
+        prov = src.get("provenance", {})
+        print(f"\n  {_c(sid, B)}  ({src.get('display_name', sid)})")
+        print(f"    chain              {src.get('chain', '?')}")
+        print(f"    citation           {src.get('citation', '(none declared)')}")
+        print(f"    confidence         {src.get('confidence_semantics', '(none declared)')}")
+        print(f"    provenance mode    {prov.get('mode', '(none - resolves UNRESOLVED)')}")
+        deps = src.get("known_dependencies") or []
+        if deps:
+            print(f"    known dependencies {', '.join(deps)}")
+    if args.json:
+        json.dump(cfg.sources, open(args.json, "w"), indent=1)
+        print(f"\nwritten {args.json}")
+
+
+def cmd_ingest(args):
+    """STEP 23 - new dataset mode: upload a previously unseen CSV."""
+    reference = None
+    if args.reference:
+        reference = Corpus.from_file(args.reference)
+    elif not args.no_reference:
+        reference = Corpus.demo()
+
+    override = {}
+    for spec in args.map or []:
+        if "=" not in spec:
+            print(f"--map expects role=column, got: {spec}", file=sys.stderr)
+            return 1
+        role, col = spec.split("=", 1)
+        override[role] = col
+
+    r = _ingest_pipeline.ingest(args.file, args.source_id, mapping_override=override or None,
+                                reference=reference)
+    if r["stopped"]:
+        rule("DATASET PRE-FLIGHT")
+        print(_c(r["message"], YEL))
+        print(f"\n  rows: {r['basic_quality']['rows']:,}   "
+              f"columns: {', '.join(r['basic_quality']['columns'])}")
+        if args.json:
+            json.dump(r, open(args.json, "w"), indent=1)
+        return 1
+
+    d = r["detection"]
+    rule("DATASET PRE-FLIGHT")
+    print(f"  cryptocurrency attribution dataset: {_c(d['confidence'], GRN if d['confidence']=='HIGH' else YEL)}")
+    print(f"  detected blockchain:  {d['blockchain']}")
+    print(f"  address field:        {d['address_field']}  (sample hit rate "
+          f"{100*d['sample_hit_rate']:.1f}% of {d['sampled']} sampled)")
+    rule("SCHEMA MAPPING")
+    for role, col in r["schema_mapping"].items():
+        print(f"  {role:<12}{col or '(none found - override with --map)'}")
+    rule("VALIDATION")
+    v = r["validation"]
+    print(f"  {v['n_input']:,} input rows -> {v['n_valid']:,} valid claims, "
+          f"{v['n_rejected']:,} rejected")
+    for reason, n in v["rejected_by_reason"].items():
+        print(f"    {reason:<20}{n:>8,}")
+    rule("CAPABILITIES")
+    for cap, ok in r["capabilities"].items():
+        print(f"  {_c('OK ', GRN)} {cap}" if ok else f"  {_c('--', DIM)} {cap}")
+    for lim in r["limitations"]:
+        print(_c(f"  !  {lim}", YEL))
+    rule("RELIABILITY PROFILE")
+    for dim, block in r["reliability_profile"].items():
+        if not block.get("available"):
+            print(f"  {dim:<16}{_c('unavailable: ' + block['reason'], DIM)}")
+        else:
+            print(f"  {dim}")
+            for k, v2 in block.items():
+                if k == "available":
+                    continue
+                print(f"    {k:<26}{v2}")
+    if args.json:
+        out = dict(r)
+        out["claims"] = len(r["claims"])   # the full claim list is large; keep the JSON small by default
+        json.dump(out, open(args.json, "w"), indent=1, default=str)
+        print(f"\nwritten {args.json}")
+
+
+def cmd_report(args):
+    """STEP 27 - the canonical, single-object report every other surface
+    (JSON export, future UI) reads from."""
+    c = load(args)
+    res = _report.build_corpus_report(c, include_bootstrap=args.bootstrap,
+                                      input_path=args.observations)
+    rule("THEMIS REPORT")
+    ds = res["dataset_summary"]
+    print(f"  {ds['n_claims']:,} claims over {ds['n_addresses']:,} addresses across "
+          f"{len(ds['sources'])} sources")
+    print(f"\n  audit trail")
+    at = res["audit_trail"]
+    print(f"    software version   {at['software_version']}")
+    print(f"    config hash        {at['config_hash'][:16]}...")
+    print(f"    timestamp          {at['analysis_timestamp']}")
+    if res["limitations"]:
+        print(_c("\n  limitations:", YEL))
+        for lim in res["limitations"]:
+            print(f"    - {lim}")
+    path = args.json or args.out
+    if path:
+        _report.to_json(res, path)
+        print(f"\nwritten {path}")
 
 
 def main(argv=None):
@@ -209,6 +320,23 @@ def main(argv=None):
     b.add_argument("--upper", action="store_true", help="unresolved records independent")
     b.add_argument("--both", action="store_true", help="report both lineage bounds")
     b.set_defaults(fn=cmd_bootstrap)
+
+    sub.add_parser("sources", help="print the source registry").set_defaults(fn=cmd_sources)
+
+    r = sub.add_parser("report", help="canonical single-object report + audit trail")
+    r.add_argument("--bootstrap", action="store_true", help="include cluster-bootstrap intervals")
+    r.add_argument("--out", help="write the report JSON here (same as --json)")
+    r.set_defaults(fn=cmd_report)
+
+    ig = sub.add_parser("ingest", help="STEP 23: audit a previously unseen CSV")
+    ig.add_argument("file", help="path to the CSV (or .csv.gz) to ingest")
+    ig.add_argument("--source-id", default="uploaded", help="id to tag this dataset's claims with")
+    ig.add_argument("--reference", help="compare against this observations file instead of the "
+                                        "bundled sample")
+    ig.add_argument("--no-reference", action="store_true", help="skip cross-source comparison entirely")
+    ig.add_argument("--map", action="append",
+                    help="override a schema role, e.g. --map address=btc_addr (repeatable)")
+    ig.set_defaults(fn=cmd_ingest)
 
     a = p.parse_args(argv)
     return a.fn(a) or 0

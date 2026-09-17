@@ -1,0 +1,26 @@
+id: tagpack
+display_name: "GraphSense TagPack"
+chain: bitcoin
+citation: "GraphSense TagPack collection"
+license: "see publisher"
+confidence_semantics: "per-tagpack creator, declared not independently verified"
+known_dependencies: [montreal_paquet_clouston_2019]
+
+# `prov_family` stores "tagpack:<creator>". Each declared creator is an
+# identified (if not independently verified) root in its own right - the
+# one exception is a creator string that itself names the Montreal 2019
+# study, which is folded into that study's root rather than treated as a
+# distinct TagPack-only root.
+provenance:
+  mode: substring_map
+  field: prov_family
+  parse: after_colon
+  parse_default: "unknown"
+  substring_map:
+    - contains: "paquet-clouston"
+      root: montreal_paquet_clouston_2019
+      resolved: true
+      native: false
+  fallback_template: "tagpack_{value}"
+  fallback_resolved: true
+  fallback_native: true

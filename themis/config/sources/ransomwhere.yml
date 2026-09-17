@@ -1,0 +1,20 @@
+id: ransomwhere
+display_name: "Ransomwhere"
+chain: bitcoin
+citation: "Ransomwhere crowd-sourced ransomware tracker"
+license: "public, crowd-submitted"
+confidence_semantics: "crowd report - unverified per the paper's evidence taxonomy"
+known_dependencies: []
+
+# Ransomwhere is itself the origin of its addresses (crowd-submitted, not
+# copied from elsewhere as far as this pipeline can establish), so every
+# claim resolves to one native root. That the root is *known* does not make
+# the evidence *verified* - a crowd report stays UNVERIFIED_REPORT tier
+# regardless of how cleanly its provenance resolves; see `heuristic` per
+# claim for the tier, which is orthogonal to this root assignment.
+provenance:
+  mode: fixed_root
+  root: ransomwhere_crowd
+  resolved: true
+  native: true
+  verified: false

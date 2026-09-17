@@ -1,0 +1,25 @@
+id: rodwald_mixers
+display_name: "Rodwald mixer corpus"
+chain: bitcoin
+citation: "Rodwald"
+license: "see publisher"
+confidence_semantics: "compiled from multiple named inputs, encoded as source letters"
+known_dependencies: [walletexplorer]
+
+provenance:
+  mode: contains_rules
+  field: prov_family
+  parse: after_colon
+  parse_default: ""
+  contains_rules:
+    - contains: "W"
+      root: walletexplorer
+      resolved: true
+      native: false
+  # Rodwald's own direct mixer classification (not decoded from WalletExplorer).
+  # Unlike rodwald_ransom's own-bucket, this is treated as an identified root:
+  # the letter code fully explains every claim that lands here, so nothing is
+  # left ambiguous - only the ransom corpus's undecoded remainder is unresolved.
+  fallback_template: "rodwald_mixers_own"
+  fallback_resolved: true
+  fallback_native: true

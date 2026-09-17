@@ -1,0 +1,32 @@
+# STEP 20/21 - label-trust policies as composable, reusable filters over
+# claims. A policy names which predicates a claim must pass (see
+# trust/predicates.py for what each predicate means) and how eligible
+# claims get aggregated into one figure. Nothing here is task-specific:
+# the same four policies apply to any task module that hands the engine a
+# list of value-bearing claims.
+#
+# `baseline` is the policy every other policy's coverage/ratio is reported
+# against - STEP 20 requires every forensic number to carry its coverage,
+# and coverage needs a fixed point of comparison.
+baseline: address_dedup
+
+policies:
+  naive_union:
+    label: "naive union, sources summed as independent"
+    aggregation: raw_sum
+    eligibility: []
+
+  address_dedup:
+    label: "address-level deduplication"
+    aggregation: dedup_max_per_address
+    eligibility: []
+
+  inheritance_collapsed:
+    label: "circular inheritance collapsed to its root"
+    aggregation: dedup_max_per_address
+    eligibility: [root_independent_or_native]
+
+  verified_only:
+    label: "highest-declared-confidence tier only"
+    aggregation: dedup_max_per_address
+    eligibility: [anchor_membership]

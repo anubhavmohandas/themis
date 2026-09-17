@@ -1,0 +1,32 @@
+# Every numeric knob the analysis engine uses, gathered in one place so a
+# value can be checked or overridden without touching analysis code.
+
+# STEP 13 - a claim with no revision date is CURRENCY_UNKNOWN, never stale.
+# A claim with a date older than this many years is STALE.
+staleness_years: 3.0
+
+# STEP 8 - a provenance-field value group smaller than this cannot establish
+# containment either way; it is reported as `insufficient`, not judged.
+min_containment_group: 5
+
+# STEP 8A - containment share above which a group is called `inherited`, and
+# below which it is called `independent`. Between the two: `mixed`.
+containment_inherited_share: 0.999
+containment_independent_share: 0.001
+
+# STEP 15 - cluster bootstrap over provenance roots, not rows.
+bootstrap:
+  iterations: 2000
+  seed: 42
+  confidence_level: 0.95
+
+# STEP 11 - a pair's kappa is only surfaced as "substantial agreement" above
+# this value; the raw figure and undefined/zero pairs are still reported.
+kappa_substantial_threshold: 0.4
+
+# STEP 8B - how many of a source's largest provenance-field value groups get
+# shown in the console report.
+decode_report_limit: 12
+
+# how many of the corpus's most concentrated provenance roots to surface.
+root_concentration_limit: 8

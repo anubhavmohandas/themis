@@ -1,0 +1,9 @@
+# STEP 8 - "how far does one upstream set propagate". Each entry names a
+# reference source/field/value that identifies one provenance root's address
+# list, so the propagation measurement (provenance.root_propagation) stays
+# generic: it never names a dataset itself, only what this config points it at.
+- root: montreal_paquet_clouston_2019
+  label: "Montreal 2019 ground-truth set"
+  seed_source: schnoering
+  seed_field: subcat
+  seed_value: "Montréal"

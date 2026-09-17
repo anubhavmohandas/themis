@@ -1,7 +1,11 @@
 """The four analyses: agreement, independence, drift, and the cluster bootstrap."""
 from __future__ import annotations
 import collections, random
-from . import taxonomy, provenance
+from . import taxonomy, provenance, config_io
+from .trust import policy as trust_policy, drift as trust_drift
+from .tasks import ransomware_revenue as _revenue_task
+
+_cfg = config_io.load()
 
 
 def _sources_per_address(corpus, n_multi):
@@ -108,16 +112,27 @@ def independence(corpus) -> dict:
     sa = corpus.src_addr
     cont = provenance.containment(sa)
     top = sorted(cont.items(), key=lambda kv: -kv[1]["share_of_a"])[:12]
-    decode = provenance.decode_field(corpus.claims, "rodwald_ransom",
-                                     "ransomwhere", sa.get("ransomwhere", set()))
-    residue = provenance.naming_residue(corpus.claims, "rodwald_ransom")
 
-    # how far one upstream set propagates
-    montreal = {c["address"] for c in corpus.claims
-                if c["source"] == "schnoering" and c.get("subcat") == "Montréal"}
-    propagation = {s: len(montreal & sa[s]) for s in sa if s != "schnoering"}
+    # STEP 8B - every (dataset, field, candidate) worth decoding, discovered
+    # from config rather than named here; a source only appears if its
+    # decoded root is natively owned by another source present in this corpus.
+    decodes = [provenance.decode_field(corpus.claims, d["dataset"], d["field"],
+                                       d["candidate"], sa.get(d["candidate"], set()))
+               for d in provenance.discover_decodes()]
+
+    # STEP 8C - every naming-residue check a source config declares.
+    residues = [provenance.naming_residue(corpus.claims, r["dataset"], r["field"], r["prefix_map"])
+                for r in provenance.discover_residue_checks()]
+
+    # STEP 8 - how far each configured reference root's address list
+    # propagates into every other source.
+    propagations = [dict(root=n["root"], label=n.get("label", n["root"]),
+                         **provenance.root_propagation(corpus.claims, sa, n["seed_source"],
+                                                       n["seed_field"], n["seed_value"]))
+                    for n in _cfg.notable_roots]
 
     cr = corpus.corpus_roots()
+    limit = _cfg.thresholds.get("root_concentration_limit", 8)
     roots = collections.Counter(cr["root_claims"]) or corpus.roots()
     total_claims = sum(roots.values()) or len(corpus.claims)
 
@@ -127,66 +142,57 @@ def independence(corpus) -> dict:
 
     return dict(
         containment_top=[dict(source=a, inside=b, **v) for (a, b), v in top],
-        field_decode=decode,
-        naming_residue=residue,
-        montreal_set=dict(size=len(montreal), propagation=propagation),
+        field_decodes=decodes,
+        naming_residues=residues,
+        notable_root_propagation=propagations,
         n_roots_total=cr["total"],
         n_roots_identified=cr["identified"],
         unresolved_addresses=cr["unresolved_addresses"],
         unresolved_addr_share=cr["unresolved_addr_share"],
         root_concentration=[dict(root=r, claims=n, share=n / total_claims)
-                            for r, n in roots.most_common(8)],
+                            for r, n in roots.most_common(limit)],
         roots_per_multi_address=dict(sorted(by_root.items())),
     )
 
 
 # ------------------------------------------------------------------ E3 drift
-def drift(corpus, revenue_rows=None, anchors=None) -> dict:
+#: generic policy name -> the paper's condition letter, purely for the
+#: console/report labelling this function has always used.
+_CONDITION_LETTER = {"naive_union": "A", "address_dedup": "B",
+                     "inheritance_collapsed": "C", "verified_only": "D"}
+
+
+def drift(corpus, revenue_rows=None, anchors=None, task=_revenue_task) -> dict:
+    """STEP 20 - re-run `task`'s forensic aggregation under every configured
+    trust-rule policy (config/trust_rules.yml). The eligibility logic lives
+    in the generic policy engine (themis/trust/); this function only wires a
+    task's claims and value field into it and relabels the result A-D to
+    match the paper's condition names.
+    """
     rows = revenue_rows if revenue_rows is not None else corpus.revenue_rows()
     anchors = anchors if anchors is not None else corpus.verified_anchors()
 
-    rod, rw, meta = {}, {}, {}
-    for r in rows:
-        usd = float(r["usd"] or 0)
-        if r["dataset"] == "rodwald_ransom":
-            rod[r["address"]] = usd
-            meta[r["address"]] = (r.get("family", ""), r.get("src_letters", ""))
-        else:
-            rw[r["address"]] = usd
+    claims = task.build_claims(rows)
+    policies, baseline = trust_policy.load_policies(_cfg.trust_rules)
+    result = trust_drift.run(claims, policies, baseline, task.aggregate,
+                             context=dict(anchor_addresses=anchors))
 
-    ded = dict(rod)
-    for a, u in rw.items():
-        ded[a] = max(ded.get(a, 0.0), u)
+    by_addr = collections.defaultdict(set)
+    for c in claims:
+        by_addr[c["address"]].add(c["source"])
+    shared_addresses = sum(1 for srcs in by_addr.values() if len(srcs) >= 2)
 
-    def inherited(a):
-        fam, letters = meta.get(a, ("", ""))
-        return "R" in letters or fam.lower().startswith(
-            tuple(p for p, _ in provenance.FAMILY_MARKERS))
-
-    keep_c = {a: u for a, u in ded.items()
-              if not (a in rod and inherited(a) and a not in rw)}
-    keep_d = {a: u for a, u in ded.items() if a in anchors}
-
-    base_usd = sum(ded.values())
-    base_n = len(ded)
-    conds = {
-        "A": dict(label="naive union, sources summed as independent",
-                  observations=len(rod) + len(rw), addresses=len(set(rod) | set(rw)),
-                  usd=sum(rod.values()) + sum(rw.values())),
-        "B": dict(label="address-level deduplication",
-                  observations=base_n, addresses=base_n, usd=base_usd),
-        "C": dict(label="circular inheritance collapsed to its root",
-                  observations=len(keep_c), addresses=len(keep_c), usd=sum(keep_c.values())),
-        "D": dict(label="highest-declared-confidence tier only",
-                  observations=len(keep_d), addresses=len(keep_d), usd=sum(keep_d.values())),
-    }
-    for c in conds.values():
-        c["ratio_vs_B"] = c["usd"] / base_usd if base_usd else None
-        c["coverage_vs_B"] = c["observations"] / base_n if base_n else None
-    return dict(conditions=conds,
-                shared_addresses=len(set(rod) & set(rw)),
-                spread_B_over_D=conds["B"]["usd"] / conds["D"]["usd"] if conds["D"]["usd"] else None,
-                spread_A_over_D=conds["A"]["usd"] / conds["D"]["usd"] if conds["D"]["usd"] else None)
+    conds = {}
+    for pname, r in result["results"].items():
+        letter = _CONDITION_LETTER.get(pname, pname)
+        conds[letter] = dict(label=r["label"], observations=r["observations"],
+                             addresses=r["addresses"], usd=r["value"],
+                             ratio_vs_B=r["ratio_vs_baseline"], coverage_vs_B=r["coverage_vs_baseline"])
+    a_usd, b_usd, d_usd = conds["A"]["usd"], conds["B"]["usd"], conds["D"]["usd"]
+    return dict(conditions=conds, shared_addresses=shared_addresses,
+                spread_B_over_D=b_usd / d_usd if d_usd else None,
+                spread_A_over_D=a_usd / d_usd if d_usd else None,
+                policies=result["results"])
 
 
 # ------------------------------------------------------- cluster bootstrap CIs
@@ -269,6 +275,26 @@ def bootstrap(corpus, n_boot=2000, seed=42, upper_bound=False) -> dict:
                 "corpus-wide rates omitted on the bundled sample; conditional "
                 "rates are exact. Use --observations with a full build to "
                 "reproduce the paper's multi-dataset-rate interval.")
+
+
+# ------------------------------------------------------------- STEP 13 freshness
+def freshness(claims: list[dict]) -> dict:
+    """CURRENT / STALE / CURRENCY_UNKNOWN over a flat claim list. A claim
+    with no revision date is always CURRENCY_UNKNOWN, never STALE - see
+    taxonomy.currency_flags."""
+    current = stale = unknown = 0
+    for c in claims:
+        flags = taxonomy.currency_flags(c)
+        if "stale" in flags:
+            stale += 1
+        elif "currency-unknown" in flags:
+            unknown += 1
+        else:
+            current += 1
+    total = len(claims) or 1
+    return dict(current=current, stale=stale, currency_unknown=unknown,
+                current_share=current / total, stale_share=stale / total,
+                currency_unknown_share=unknown / total)
 
 
 # --------------------------------------------------------- per-address report

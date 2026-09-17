@@ -1,0 +1,117 @@
+# Canonical category tree. Every node has a polarity and an optional parent;
+# `classify_address` walks these parent links generically, so a new leaf
+# category needs no code change - only an entry here.
+#
+# `illicit_unspec` / `licit_unspec` are the generic root of each polarity
+# branch: a claim landing there is "some kind of illicit/licit entity, kind
+# unspecified", which is why pairing it with any specific descendant reads as
+# a refinement rather than a conflict.
+categories:
+  unknown:
+    polarity: unknown
+
+  illicit_unspec:
+    polarity: illicit
+    aliases: [illicit, illicit-unspecified, illicit_unknown]
+
+  licit_unspec:
+    polarity: licit
+    aliases: [licit, licit-unspecified, licit_unknown]
+
+  ransomware:
+    polarity: illicit
+    parent: illicit_unspec
+    aliases: [ransom, ransomware payment, ransomware-wallet, ransomware_payment]
+
+  mixer:
+    polarity: illicit
+    parent: illicit_unspec
+    aliases: [mixing service, tumbler, mixing_service]
+
+  darknet_market:
+    polarity: illicit
+    parent: illicit_unspec
+    aliases: [darknet, dnm, darknet-market]
+
+  ponzi:
+    polarity: illicit
+    parent: illicit_unspec
+    aliases: [ponzi scheme, ponzi_scheme]
+
+  scam:
+    polarity: illicit
+    parent: illicit_unspec
+    aliases: [fraud]
+
+  sextortion:
+    polarity: illicit
+    parent: illicit_unspec
+
+  malware:
+    polarity: illicit
+    parent: illicit_unspec
+
+  extremism:
+    polarity: illicit
+    parent: illicit_unspec
+
+  sanctioned:
+    polarity: illicit
+    parent: illicit_unspec
+    aliases: [sanctions, ofac, sdn]
+
+  hack:
+    polarity: illicit
+    parent: illicit_unspec
+    aliases: [hacked, theft, stolen_funds]
+
+  terrorism:
+    polarity: illicit
+    parent: illicit_unspec
+
+  trafficking:
+    polarity: illicit
+    parent: illicit_unspec
+
+  exchange:
+    polarity: licit
+    parent: licit_unspec
+    aliases: [centralized exchange, cex, trading platform, trading_platform]
+
+  mining:
+    polarity: licit
+    parent: licit_unspec
+    aliases: [mining pool, mining_pool]
+
+  gambling:
+    polarity: licit
+    parent: licit_unspec
+    aliases: [casino]
+
+  faucet:
+    polarity: licit
+    parent: licit_unspec
+
+  bridge:
+    polarity: licit
+    parent: licit_unspec
+
+  payment_proc:
+    polarity: licit
+    parent: licit_unspec
+    aliases: [payment processor, payment_processor]
+
+  wallet_service:
+    polarity: licit
+    parent: licit_unspec
+    aliases: [hosted wallet, custodial_wallet]
+
+  marketplace_legal:
+    polarity: licit
+    parent: licit_unspec
+    aliases: [legal marketplace, marketplace]
+
+  individual:
+    polarity: licit
+    parent: licit_unspec
+    aliases: [person, personal_wallet]

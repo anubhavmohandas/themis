@@ -1,0 +1,14 @@
+id: watchyourback
+display_name: "WatchYourBack"
+chain: bitcoin
+citation: "WatchYourBack manual curation"
+license: "see publisher"
+confidence_semantics: "manually verified per source declaration"
+known_dependencies: []
+
+provenance:
+  mode: fixed_root
+  root: watchyourback_manual
+  resolved: true
+  native: true
+  verified: true

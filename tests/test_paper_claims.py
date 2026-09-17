@@ -90,7 +90,7 @@ class TestIndependence(Base):
         extreme: wholly inside Ransomwhere, or disjoint from it. Groups too small
         to establish containment, and the one malformed value the dataset ships,
         are reported separately rather than forced to a verdict."""
-        fd = self.indep["field_decode"]
+        fd = self.indep["field_decodes"][0]
         self.assertTrue(fd["clean_split"], "R-groups must split cleanly at 100%/0%")
         for v, g in fd["groups"].items():
             if g["verdict"] in ("malformed", "insufficient"):
@@ -103,18 +103,18 @@ class TestIndependence(Base):
                 self.assertAlmostEqual(g["share_in_candidate"], 0.0, places=6)
 
     def test_malformed_group_is_named_not_silently_judged(self):
-        fd = self.indep["field_decode"]
+        fd = self.indep["field_decodes"][0]
         self.assertEqual(fd["groups"]["H,S"]["verdict"], "malformed")
         self.assertIn("H,S", fd["inconclusive_groups"])
 
     def test_tiny_groups_are_insufficient_not_conclusive(self):
-        fd = self.indep["field_decode"]
+        fd = self.indep["field_decodes"][0]
         for v, g in fd["groups"].items():
             if g["n"] < 5 and v.isalpha():
                 self.assertEqual(g["verdict"], "insufficient", f"group {v}")
 
     def test_decoded_group_sizes(self):
-        g = self.indep["field_decode"]["groups"]
+        g = self.indep["field_decodes"][0]["groups"]
         self.assertEqual(g["RSH"]["n"], 6_546)
         self.assertEqual(g["RS"]["n"], 494)
         self.assertEqual(g["R"]["n"], 400)
@@ -123,10 +123,10 @@ class TestIndependence(Base):
         self.assertEqual(g["SH"]["n"], 2_367)
 
     def test_inherited_total(self):
-        self.assertEqual(self.indep["field_decode"]["inherited_addresses"], 7_508)
+        self.assertEqual(self.indep["field_decodes"][0]["inherited_addresses"], 7_508)
 
     def test_naming_residue(self):
-        nr = self.indep["naming_residue"]
+        nr = self.indep["naming_residues"][0]
         self.assertEqual(nr["total"], 50_322)
         self.assertEqual(nr["attributed"], 11_796)
         self.assertAlmostEqual(100 * nr["share"], 23.44, places=2)
@@ -135,7 +135,7 @@ class TestIndependence(Base):
         self.assertEqual(nr["by_root"]["montreal_paquet_clouston_2019"], 819)
 
     def test_montreal_set_propagation(self):
-        m = self.indep["montreal_set"]
+        m = self.indep["notable_root_propagation"][0]
         self.assertEqual(m["size"], 7_222)
         self.assertEqual(m["propagation"]["ransomwhere"], 7_208)
         self.assertEqual(m["propagation"]["tagpack"], 7_208)

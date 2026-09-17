@@ -10,10 +10,18 @@ those claims come from a short list of public corpora. This tool audits them:
 what corroborates what, which agreement is inherited rather than independent,
 and what the choice of trust rule does to a forensic figure.
 
+THEMIS generalizes beyond that one paper: the analysis engine
+(`themis/taxonomy.py`, `provenance.py`, `analysis.py`, `trust/`) carries no
+dataset-specific logic at all. Every source's provenance rule, every category,
+every trust-rule policy lives in `themis/config/` (YAML). Reproducing the
+paper's exact figures is one configuration of that engine, not a special case
+of it - see `themis/config/sources/*.yml` for the seven bundled datasets and
+`themis/config/trust_rules.yml` for the four label-trust conditions.
+
 ## Install and run
 
-No dependencies beyond the standard library. NumPy is used if present, only to
-speed up the bootstrap.
+One dependency: PyYAML, for the config files above. NumPy is used if present,
+only to speed up the bootstrap.
 
 ```
 pip install -e .
@@ -22,6 +30,9 @@ themis drift
 themis explain 14BWrn1evbyvBGGxFzUCVQ61ntNtRjRdm7
 themis bootstrap --both
 themis taxonomy
+themis sources
+themis report --bootstrap --json report.json
+themis ingest my_dataset.csv --source-id my_dataset
 ```
 
 Every command takes `--json FILE` to write its result, and `--observations FILE`
@@ -36,6 +47,23 @@ to run against a full local build instead of the bundled sample.
 | `explain <address>` | 3.2 | one address traced to its provenance roots, with apparent vs actual corroboration |
 | `bootstrap [--both]` | 5.4 | cluster-bootstrap intervals, resampling provenance roots rather than rows |
 | `taxonomy` | 3.2 | the classification rules, printed so they can be checked |
+| `sources` | — | the source registry: every bundled dataset's declared provenance rule, read straight from config |
+| `report` | — | the canonical result object (dataset summary, every analysis, the reliability profile, an audit trail) as one JSON document |
+| `ingest <file>` | — | STEP 23: audit a dataset THEMIS has never seen - crypto detection, schema mapping, address validation, and (if a reference corpus is available) cross-source comparison |
+
+### Auditing a new dataset
+
+`themis ingest` runs the full pre-flight-through-reliability-profile pipeline
+on any CSV. It never assumes the file is cryptocurrency-related: it samples
+every column against the registered blockchain adapters (Bitcoin's base58check
+and bech32/bech32m, `themis/chains/bitcoin.py`) and stops with an explanation
+if nothing looks like an address. Schema roles (address/label/category/source/
+timestamp/confidence) are inferred from column names and sampled values and
+can be overridden with `--map role=column`. An unrecognized `--source-id` gets
+no provenance rule from `config/sources/`, so every claim it produces resolves
+`UNRESOLVED` by construction - a new dataset is never silently assumed
+independent. Compare it against the bundled sample with `--reference FILE` (a
+full observations build) or skip comparison with `--no-reference`.
 
 `audit` also computes Cohen's kappa for every overlapping dataset pair, so the
 chance-corrected figures in §5.1 come from released code rather than an external
@@ -91,31 +119,58 @@ two would overclaim, and two thirds of this corpus has no date at all.
 values the dataset ships broken, instead of forcing every group to a verdict.
 One group in the real data is each.
 
+**Config, not code, is dataset-specific.** Nothing under `themis/*.py` names a
+source, a category, or a trust condition by string literal. `provenance.py`'s
+`resolve()` reads a generic rule shape (`fixed_root` / `field_map` /
+`contains_rules` / `substring_map`) out of `config/sources/<id>.yml`; even
+`is_unresolved(root)` derives its answer by walking that same config, not from
+a hardcoded prefix tuple. Adding an eighth source, an eleventh category, or a
+fifth trust condition is a config change.
+
+**One policy engine, any task.** `themis/trust/` scores claims against
+composable predicates (`root_independent_or_native`, `anchor_membership`, ...)
+named in `config/trust_rules.yml`; `themis/tasks/ransomware_revenue.py` is the
+one module that knows the paper's task is a USD sum per address. A different
+forensic task (sanctions exposure, entity counts) is a new module in that
+shape, reusing the same four policies, not a new branch in the engine.
+
 ## Tests
 
 ```
 python -m unittest discover -s tests -v
 ```
 
-39 tests, each asserting a number printed in the paper. If the implementation
+74 tests. 39 assert a number printed in the paper - if the implementation
 drifts from what was published, they fail. Four of them caught genuine bugs: a circularity flag that only fired when
 *every* dataset shared one root; a malformed provenance value silently judged as
 inherited; the 1-dataset bucket of the corroboration histogram reporting the
 sample count rather than the corpus count; and a first cut of the kappa stage
 that excluded `unknown` labels, which quietly changed the comparable set and
-moved the headline kappa from 0.655 to 0.684.
+moved the headline kappa from 0.655 to 0.684. The rest cover the generic
+engine directly: Bitcoin address validation against real mainnet vectors, the
+new-dataset pipeline (crypto detection, schema inference, rejection reporting,
+non-crypto stop), the policy engine against a synthetic non-Bitcoin task, and
+that an unconfigured source really does resolve UNRESOLVED rather than being
+assumed independent.
 
 ## Layout
 
 ```
 themis/
-  taxonomy.py     tiers, flags, categories, conflict logic
-  provenance.py   root assignment and the three independence tests
+  taxonomy.py     tiers, flags, categories, conflict logic - all config-driven
+  provenance.py   root resolution and the three independence tests
   corpus.py       loading, sample-vs-full accounting
-  analysis.py     agreement, independence, drift, cluster bootstrap
+  analysis.py     agreement, independence, drift, freshness, cluster bootstrap
+  reliability.py  STEP 16 multidimensional reliability profile
+  report.py       canonical result object, JSON export, audit trail
   cli.py          command line
+  chains/         blockchain adapters (Bitcoin: base58check + bech32/bech32m)
+  ingest/         STEP 23 new-dataset pipeline: detect, schema, validate, claims
+  trust/          composable trust-rule policy engine
+  tasks/          task-specific aggregation (ransomware revenue is the one bundled)
+  config/         taxonomy.yml, trust_rules.yml, thresholds.yml, sources/*.yml
 demo_data/        bundled corpus sample + manifest
-tests/            assertions against every published figure
+tests/            paper regression + generic-engine tests
 provenance_register.html   interactive register (same data, self-contained)
 ```
 

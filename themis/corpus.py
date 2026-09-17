@@ -24,7 +24,11 @@ class Corpus:
         self.manifest = manifest or {}
         self.full = full
         for c in self.claims:
-            c["root"] = provenance.root_of(c)
+            r = provenance.resolve(c)
+            c["root"] = r["root"]
+            c["prov_resolved"] = r["resolved"]
+            c["prov_native"] = r["native"]
+            c["prov_verified"] = r["verified"]
         self.by_addr = collections.defaultdict(list)
         for c in self.claims:
             self.by_addr[c["address"]].append(c)
