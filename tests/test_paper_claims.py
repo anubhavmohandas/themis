@@ -7,7 +7,7 @@ import unittest, datetime, sys, pathlib
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from themis.corpus import Corpus
-from themis import analysis, taxonomy, provenance
+from themis import analysis, taxonomy, provenance, report
 
 
 class Base(unittest.TestCase):
@@ -17,6 +17,26 @@ class Base(unittest.TestCase):
         cls.agree = analysis.agreement(cls.c)
         cls.indep = analysis.independence(cls.c)
         cls.drift = analysis.drift(cls.c)
+
+
+class TestAsOfDate(Base):
+    """Loop 2 STEP 16/28 - paper reproduction freezes freshness to the
+    corpus's own snapshot date, not the wall clock at report time."""
+
+    def test_snapshot_date_is_fixed_not_todays_date(self):
+        snap = self.c.snapshot_date
+        self.assertIsNotNone(snap)
+        self.assertNotEqual(snap, datetime.date.today())
+
+    def test_report_freshness_matches_explicit_snapshot_date(self):
+        r1 = report.build_corpus_report(self.c)
+        r2 = report.build_corpus_report(self.c, analysis_as_of_date=self.c.snapshot_date)
+        self.assertEqual(r1["freshness"], r2["freshness"])
+        self.assertEqual(r1["analysis_as_of_date"], str(self.c.snapshot_date))
+
+    def test_missing_date_claim_is_currency_unknown_regardless_of_as_of(self):
+        flags = taxonomy.currency_flags({"lastmod": ""}, today=self.c.snapshot_date)
+        self.assertEqual(flags, ["currency-unknown"])
 
 
 class TestCorpus(Base):

@@ -42,6 +42,17 @@ class TestBitcoinAddress(unittest.TestCase):
     def test_txid_non_hex_rejected(self):
         self.assertFalse(a.validate_transaction_hash("z" * 64))
 
+    def test_v0_encoded_as_bech32m_rejected(self):
+        # same witness v0 program as test_valid_segwit_v0, re-encoded with the
+        # bech32m checksum constant instead of bech32 - BIP-350 forbids this
+        self.assertFalse(a.validate_address("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kemeawh"))
+
+    def test_v1_encoded_as_bech32_rejected(self):
+        # same witness v1 (taproot) program as test_valid_taproot_bech32m,
+        # re-encoded with the bech32 checksum constant instead of bech32m
+        self.assertFalse(a.validate_address(
+            "bc1p5d7rjq7g6rdk2yhzks9smlaqtedr4dekq08ge8ztwac72sfr9rusn5pxqu"))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

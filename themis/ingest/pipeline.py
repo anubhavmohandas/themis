@@ -9,11 +9,16 @@ evidence to support it. An unrecognized `source_id` gets no provenance rule
 from config/sources/ and therefore resolves UNRESOLVED by construction
 (themis.provenance.resolve) - a brand-new dataset is never silently assumed
 either identified or independent.
+
+Loop 2 STEP 3: cross-source comparison is computed by `target_audit`, never
+by unioning the target's claims into the reference corpus and re-running the
+corpus-wide agreement/independence analyses - that would let reference-
+reference relationships the target never touched leak into its numbers.
 """
 from __future__ import annotations
 import csv, gzip
 
-from .. import corpus as _corpus, analysis, reliability
+from .. import corpus as _corpus, analysis, target_audit
 from . import detect as _detect, schema as _schema, validate as _validate, claims as _claims
 
 NOT_CRYPTO_MESSAGE = (
@@ -34,7 +39,8 @@ def load_csv(path: str) -> tuple[list[dict], list[str]]:
 
 
 def ingest(path: str, source_id: str, mapping_override: dict | None = None,
-          reference: "_corpus.Corpus | None" = None, sample_size: int = 500) -> dict:
+          reference: "_corpus.Corpus | None" = None, sample_size: int = 500,
+          analysis_as_of_date=None) -> dict:
     rows, fieldnames = load_csv(path)
 
     inferred = _schema.infer_mapping(rows, fieldnames, sample_size)
@@ -52,27 +58,24 @@ def ingest(path: str, source_id: str, mapping_override: dict | None = None,
 
     chain_id = detection.get("blockchain")
     validation = _validate.validate_rows(rows, mapping, chain_id)
-    claims = _claims.build_claims(validation["valid_rows"], mapping, source_id)
+    claims = _claims.build_claims(validation["valid_rows"], mapping, source_id, blockchain=chain_id)
 
     capabilities = {"address_validation": True, "claim_normalization": True,
                     "internal_consistency": True}
     limitations = []
 
-    fresh = None
-    if mapping.get("timestamp"):
-        fresh = analysis.freshness(claims)
-        capabilities["freshness"] = True
-    else:
+    if not mapping.get("timestamp"):
         limitations.append("Freshness unavailable: no timestamp field was mapped.")
+    else:
+        capabilities["freshness"] = True
 
-    agree = indep = kappa = None
+    target_result = None
     if reference is not None and claims:
-        combined = _corpus.Corpus(list(claims) + list(reference.claims), full=True)
-        agree = analysis.agreement(combined)
-        indep = analysis.independence(combined)
-        kappa = analysis.cohen_kappa(combined)
+        target_result = target_audit.audit_target_against_reference(
+            claims, reference, analysis_as_of_date=analysis_as_of_date)
         capabilities["cross_source_comparison"] = True
         capabilities["provenance_extraction"] = True
+        limitations.extend(target_result["limitations"])
         if getattr(reference, "sample_note", None):
             limitations.append("Reference corpus is a bundled sample, not the full published "
                                "corpus: cross-source figures above cover only what the sample "
@@ -81,15 +84,32 @@ def ingest(path: str, source_id: str, mapping_override: dict | None = None,
         limitations.append("Cross-source comparison unavailable: no reference corpus was supplied.")
         limitations.append("Provenance extraction limited: this source has no declared "
                            "provenance rule, so every claim's root is UNRESOLVED by default.")
-
-    profile = reliability.build_profile(validation, agreement=agree, independence=indep,
-                                        freshness=fresh, kappa=kappa)
+        fresh = analysis.freshness(claims, as_of=analysis_as_of_date) if mapping.get("timestamp") else None
+        target_result = dict(
+            n_target_addresses=len({c["address"] for c in claims}), n_target_claims=len(claims),
+            address_comparability={}, address_resolution={},
+            profile=dict(
+                data_quality=dict(available=True, target_addresses=len({c["address"] for c in claims}),
+                                  target_claims=len(claims)),
+                reference_comparability=_unavailable_dim("no reference corpus was supplied"),
+                agreement=_unavailable_dim("no reference corpus was supplied"),
+                provenance=_unavailable_dim("no reference corpus was supplied"),
+                independence=_unavailable_dim("no reference corpus was supplied"),
+                currency=(dict(available=True, **fresh) if fresh is not None
+                         else _unavailable_dim("no revision-date field was mapped")),
+                evidence_class=target_audit.evidence_class_tally(claims),
+            ),
+            limitations=[], inheritance_candidates=[],
+        )
 
     return dict(
         source_id=source_id, stopped=False,
         detection=detection, schema_mapping=mapping,
         validation={k: v for k, v in validation.items() if k != "valid_rows"},
         claims=claims, capabilities=capabilities, limitations=limitations,
-        agreement=agree, independence=indep, kappa=kappa, freshness=fresh,
-        reliability_profile=profile,
+        target_audit=target_result, reliability_profile=target_result["profile"],
     )
+
+
+def _unavailable_dim(reason: str) -> dict:
+    return dict(available=False, reason=reason)

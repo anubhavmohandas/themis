@@ -56,23 +56,27 @@ def _bech32_hrp_expand(hrp: str):
 
 
 def _bech32_decode(bech: str):
+    """Returns (hrp, data, const) where const identifies which checksum
+    constant validated - BIP-350 requires the caller to then check that
+    constant against the witness version (v0 -> bech32, v1+ -> bech32m);
+    decoding alone does not establish that."""
     if any(ord(c) < 33 or ord(c) > 126 for c in bech):
-        return None, None
+        return None, None, None
     if bech.lower() != bech and bech.upper() != bech:
-        return None, None
+        return None, None, None
     bech = bech.lower()
     pos = bech.rfind("1")
     if pos < 1 or pos + 7 > len(bech) or len(bech) > 90:
-        return None, None
+        return None, None, None
     hrp, data_part = bech[:pos], bech[pos + 1:]
     if not all(c in _BECH32_CHARSET for c in data_part):
-        return None, None
+        return None, None, None
     data = [_BECH32_CHARSET.index(c) for c in data_part]
     values = _bech32_hrp_expand(hrp) + data
     const = _bech32_polymod(values)
     if const not in (_BECH32_CONST, _BECH32M_CONST):
-        return None, None
-    return hrp, data[:-6]
+        return None, None, None
+    return hrp, data[:-6], const
 
 
 def _convertbits(data, frombits: int, tobits: int, pad: bool = True):
@@ -95,7 +99,7 @@ def _convertbits(data, frombits: int, tobits: int, pad: bool = True):
 
 
 def _validate_segwit(address: str) -> bool:
-    hrp, data = _bech32_decode(address)
+    hrp, data, const = _bech32_decode(address)
     if hrp != "bc" or not data:
         return False
     witver, witprog = data[0], _convertbits(data[1:], 5, 8, False)
@@ -103,7 +107,9 @@ def _validate_segwit(address: str) -> bool:
         return False
     if witver == 0 and len(witprog) not in (20, 32):
         return False
-    return True
+    # BIP-350: witness v0 must be encoded Bech32, v1+ must be Bech32m
+    required = _BECH32_CONST if witver == 0 else _BECH32M_CONST
+    return const == required
 
 
 class BitcoinAdapter(BlockchainAdapter):

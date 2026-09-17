@@ -1,28 +1,80 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api.js";
+import { useAnalysis } from "../lib/AnalysisContext.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import Tooltip from "../components/Tooltip.jsx";
-import ReliabilityProfile from "../components/ReliabilityProfile.jsx";
 
-export default function UploadPage() {
+const ROLES = [
+  { key: "address", label: "Address field", required: true },
+  { key: "label", label: "Label field" },
+  { key: "category", label: "Category field" },
+  { key: "actor", label: "Actor field" },
+  { key: "source", label: "Declared source / URL field" },
+  { key: "timestamp", label: "Timestamp field" },
+  { key: "confidence", label: "Confidence field" },
+];
+
+// Loop 2 STEP 2/10: upload -> pre-flight -> schema mapping confirmation ->
+// run audit. Nothing is analyzed as cryptocurrency attribution data until
+// the user confirms the mapping.
+export default function LandingPage() {
+  const navigate = useNavigate();
+  const { activate } = useAnalysis();
+
   const [file, setFile] = useState(null);
+  const [stage, setStage] = useState("idle");        // idle -> preflighted -> running
+  const [preflight, setPreflight] = useState(null);
+  const [mapping, setMapping] = useState({});
   const [sourceId, setSourceId] = useState("uploaded_dataset");
   const [useReference, setUseReference] = useState(true);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const [result, setResult] = useState(null);
+  const [paperBusy, setPaperBusy] = useState(false);
 
-  async function onSubmit(e) {
+  async function runPreflight(e) {
     e.preventDefault();
     if (!file) return;
-    setBusy(true); setError(null); setResult(null);
+    setError(null);
     try {
-      const r = await api.ingest({ file, sourceId, useReference });
-      setResult(r);
+      const r = await api.preflight(file);
+      setPreflight(r);
+      setMapping(r.mapping);
+      setStage("preflighted");
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function confirmAndRun() {
+    setStage("running");
+    setError(null);
+    try {
+      const r = await api.createAnalysis({ file, sourceId, useReference, mapping });
+      if (r.preflight?.stopped) {
+        setError(null);
+        setPreflight({ ...preflight, stopped: true, message: r.preflight.message });
+        setStage("preflighted");
+        return;
+      }
+      activate(r.analysis_id, r.meta);
+      navigate("/overview");
+    } catch (err) {
+      setError(err.message);
+      setStage("preflighted");
+    }
+  }
+
+  async function reproducePaper() {
+    setPaperBusy(true);
+    setError(null);
+    try {
+      const r = await api.reproducePaper();
+      activate(r.analysis_id, r.meta);
+      navigate("/overview");
     } catch (err) {
       setError(err.message);
     } finally {
-      setBusy(false);
+      setPaperBusy(false);
     }
   }
 
@@ -40,14 +92,37 @@ export default function UploadPage() {
         </p>
       </div>
 
+      <div className="section grid cols-2">
+        <div className="tile">
+          <div className="k">Audit your own dataset</div>
+          <p className="muted" style={{ fontSize: 13, marginBottom: 12 }}>
+            Upload a CSV of cryptocurrency attribution claims. THEMIS inspects it, lets you
+            confirm the column mapping, then runs a target-specific reliability audit against
+            the bundled reference corpus.
+          </p>
+        </div>
+        <div className="tile">
+          <div className="k">Reproduce the paper</div>
+          <p className="muted" style={{ fontSize: 13, marginBottom: 12 }}>
+            Run the full published methodology against the bundled seven-source research
+            corpus — provenance, agreement, independence, drift and the cluster bootstrap.
+          </p>
+          <button type="button" onClick={reproducePaper} disabled={paperBusy}>
+            {paperBusy ? "Loading…" : "Reproduce paper"}
+          </button>
+        </div>
+      </div>
+
       <div className="section">
         <h2>Upload a dataset</h2>
         <div className="card">
-          <form onSubmit={onSubmit}>
+          <form onSubmit={runPreflight}>
             <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-end" }}>
               <div>
                 <div className="k mono" style={{ fontSize: 11, marginBottom: 6, color: "var(--muted)" }}>CSV FILE</div>
-                <input type="file" accept=".csv,.gz" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+                <input type="file" accept=".csv,.gz" onChange={(e) => {
+                  setFile(e.target.files?.[0] || null); setStage("idle"); setPreflight(null);
+                }} />
               </div>
               <div>
                 <div className="k mono" style={{ fontSize: 11, marginBottom: 6, color: "var(--muted)" }}>SOURCE ID</div>
@@ -55,11 +130,11 @@ export default function UploadPage() {
               </div>
               <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13.5 }}>
                 <input type="checkbox" checked={useReference} onChange={(e) => setUseReference(e.target.checked)} />
-                <Tooltip text="Compare against the bundled seven-dataset reference corpus for cross-source agreement, independence and provenance. Without it, only internal checks (address validation, freshness) are possible.">
+                <Tooltip text="Compare against the bundled seven-dataset reference corpus for reference comparability, agreement and independence. Without it, only internal checks (address validation, freshness) are possible.">
                   compare against reference corpus
                 </Tooltip>
               </label>
-              <button type="submit" disabled={!file || busy}>{busy ? "Auditing…" : "Run pre-flight audit"}</button>
+              <button type="submit" disabled={!file}>Inspect file</button>
             </div>
           </form>
         </div>
@@ -67,23 +142,23 @@ export default function UploadPage() {
 
       {error && <div className="callout warn">{error}</div>}
 
-      {result && result.stopped && (
-        <div className="section">
-          <h2>Dataset pre-flight</h2>
-          <div className="callout warn" style={{ whiteSpace: "pre-line" }}>{result.message}</div>
-          <p className="muted">
-            {result.basic_quality.rows.toLocaleString()} rows, columns: {result.basic_quality.columns.join(", ")}
-          </p>
-        </div>
+      {preflight && stage === "preflighted" && !preflight.stopped && (
+        <PreflightAndMapping preflight={preflight} mapping={mapping} setMapping={setMapping}
+          onConfirm={confirmAndRun} busy={stage === "running"} />
       )}
 
-      {result && !result.stopped && <IngestReport result={result} />}
+      {preflight && preflight.stopped && (
+        <div className="section">
+          <h2>Dataset pre-flight</h2>
+          <div className="callout warn" style={{ whiteSpace: "pre-line" }}>{preflight.message}</div>
+        </div>
+      )}
     </>
   );
 }
 
-function IngestReport({ result }) {
-  const d = result.detection, v = result.validation;
+function PreflightAndMapping({ preflight, mapping, setMapping, onConfirm, busy }) {
+  const d = preflight.detection;
   return (
     <>
       <div className="section">
@@ -94,59 +169,56 @@ function IngestReport({ result }) {
             <div className="v"><StatusBadge label={d.confidence} kind={d.confidence === "HIGH" ? "ok" : d.confidence === "NONE" ? "warn" : "flag"} /></div>
           </div>
           <div className="tile"><div className="k">Blockchain</div><div className="v">{d.blockchain || "—"}</div></div>
-          <div className="tile"><div className="k">Address field</div><div className="v" style={{ fontSize: 16 }}>{d.address_field || "—"}</div></div>
+          <div className="tile"><div className="k">Rows</div><div className="v" style={{ fontSize: 16 }}>{preflight.n_rows.toLocaleString()}</div></div>
         </div>
       </div>
 
       <div className="section">
-        <h2>Schema interpretation</h2>
-        <table>
-          <thead><tr><th>Role</th><th>Column</th></tr></thead>
-          <tbody>
-            {Object.entries(result.schema_mapping).map(([role, col]) => (
-              <tr key={role}><td style={{ textTransform: "capitalize" }}>{role}</td><td>{col || <span className="muted">not found</span>}</td></tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="section">
-        <h2>Input validation</h2>
-        <div className="grid cols-3">
-          <MiniTile label="input rows" value={v.n_input} />
-          <MiniTile label="valid claims" value={v.n_valid} />
-          <MiniTile label="rejected" value={v.n_rejected} />
-        </div>
-        {Object.keys(v.rejected_by_reason).length > 0 && (
-          <table style={{ marginTop: 12 }}>
-            <thead><tr><th>Rejection reason</th><th className="num">Count</th></tr></thead>
+        <h2>Confirm schema mapping</h2>
+        <p className="muted" style={{ fontSize: 13, marginBottom: 12 }}>
+          THEMIS's best guess at which column plays which role. Correct anything before running
+          the audit — nothing is analyzed until you confirm.
+        </p>
+        <div className="card">
+          <table>
+            <thead><tr><th>Role</th><th>Column</th></tr></thead>
             <tbody>
-              {Object.entries(v.rejected_by_reason).map(([reason, n]) => (
-                <tr key={reason}><td>{reason}</td><td className="num">{n.toLocaleString()}</td></tr>
+              {ROLES.map((role) => (
+                <tr key={role.key}>
+                  <td>{role.label}{role.required && " *"}</td>
+                  <td>
+                    <select value={mapping[role.key] || ""}
+                      onChange={(e) => setMapping({ ...mapping, [role.key]: e.target.value || null })}>
+                      <option value="">— not present —</option>
+                      {preflight.fieldnames.map((f) => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </td>
+                </tr>
               ))}
             </tbody>
           </table>
-        )}
-      </div>
-
-      <div className="section">
-        <h2>What THEMIS could and could not check</h2>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-          {Object.entries(result.capabilities).map(([cap, ok]) => (
-            <span key={cap} className={`badge ${ok ? "ok" : "muted"}`}>{ok ? "✓" : "–"} {cap.replaceAll("_", " ")}</span>
-          ))}
         </div>
-        {result.limitations.map((lim, i) => <div className="callout muted" key={i}>{lim}</div>)}
       </div>
 
       <div className="section">
-        <h2>Reliability profile</h2>
-        <ReliabilityProfile profile={result.reliability_profile} />
+        <h2>Sample rows</h2>
+        <div className="card" style={{ overflowX: "auto" }}>
+          <table>
+            <thead><tr>{preflight.fieldnames.map((f) => <th key={f}>{f}</th>)}</tr></thead>
+            <tbody>
+              {preflight.sample_rows.map((row, i) => (
+                <tr key={i}>{preflight.fieldnames.map((f) => <td key={f}>{row[f]}</td>)}</tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="section">
+        <button type="button" onClick={onConfirm} disabled={busy || !mapping.address}>
+          {busy ? "Running audit…" : "Confirm & run audit"}
+        </button>
       </div>
     </>
   );
-}
-
-function MiniTile({ label, value }) {
-  return <div className="tile"><div className="k">{label}</div><div className="v">{value.toLocaleString()}</div></div>;
 }

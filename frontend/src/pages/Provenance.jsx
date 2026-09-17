@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import ReactFlow, { Background, Controls, MarkerType } from "reactflow";
 import "reactflow/dist/style.css";
 import { api } from "../lib/api.js";
 import { useApiData } from "../lib/useApi.js";
+import { useAnalysis } from "../lib/AnalysisContext.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 
 const KIND_COLOR = { DECLARED: "#2c6350", INFERRED: "#8a5e12", UNKNOWN: "#8c2f1f" };
@@ -45,12 +47,24 @@ function baseStyle(bg, color) {
 }
 
 export default function ProvenanceExplorerPage() {
-  const { data: graph, error, loading } = useApiData(() => api.graph(), []);
+  const { analysisId } = useAnalysis();
+  const { data: prov, error, loading } = useApiData(
+    () => (analysisId ? api.provenance(analysisId) : Promise.resolve(null)), [analysisId]);
   const { data: sources } = useApiData(() => api.sources(), []);
   const [selected, setSelected] = useState(null);
 
+  const graph = prov?.graph;
   const flow = useMemo(() => (graph ? layout(graph) : null), [graph]);
 
+  if (!analysisId) {
+    return (
+      <div className="section">
+        <div className="callout muted">
+          No active analysis. <Link to="/">Upload a dataset or reproduce the paper</Link> to begin.
+        </div>
+      </div>
+    );
+  }
   if (loading) return <p className="muted">Loading provenance graph…</p>;
   if (error) return <div className="callout warn">{error}</div>;
   if (!flow) return null;
@@ -108,6 +122,29 @@ export default function ProvenanceExplorerPage() {
           )}
         </div>
       </div>
+
+      {prov.inheritance_candidates?.length > 0 && (
+        <div className="section">
+          <h2>Candidate inheritance signals</h2>
+          <p className="muted" style={{ fontSize: 13, marginBottom: 12 }}>
+            Directional containment and naming residue between this uploaded dataset and each
+            reference source — evidence only, never a declared fact of copying.
+          </p>
+          <table>
+            <thead><tr><th>Reference source</th><th>Status</th><th className="num">Shared addresses</th><th>Evidence</th></tr></thead>
+            <tbody>
+              {prov.inheritance_candidates.map((c) => (
+                <tr key={c.source}>
+                  <td>{c.source}</td>
+                  <td><StatusBadge label={c.status} /></td>
+                  <td className="num">{c.n_shared_addresses.toLocaleString()}</td>
+                  <td className="muted" style={{ fontSize: 12.5 }}>{c.evidence.join("; ") || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </>
   );
 }

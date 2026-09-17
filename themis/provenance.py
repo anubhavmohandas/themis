@@ -268,6 +268,61 @@ def discover_residue_checks(sources: dict | None = None) -> list[dict]:
     return out
 
 
+def address_independence(claims: list[dict]) -> dict:
+    """Apparent vs. *confirmed* independent corroboration for one address's
+    claims (STEPS 5/6). An unresolved root is an unknown relationship, not a
+    distinct identity: two sources that both resolve UNRESOLVED must not be
+    counted as two confirmed independent roots just because their root
+    strings differ (each source's unresolved bucket is only ever equal to
+    itself). Only resolved roots - whose identity is actually known - can be
+    confirmed distinct from one another.
+
+    confirmed_independent_root_count: distinct *resolved* roots. Two+
+    sources sharing one resolved root count once (`shared_root_count` is the
+    excess, i.e. the circular/inherited restatements).
+
+    independence_min/max: the range consistent with the evidence. min is
+    what's already proven (the confirmed count, or 1 if there's any claim at
+    all and nothing is confirmed yet - the worst case being every unresolved
+    source secretly shares the same unknown origin). max is the best case:
+    every unresolved source turns out to be an additional distinct origin.
+    """
+    by_source: dict[str, str] = {}
+    for c in claims:
+        by_source[c["source"]] = c.get("root", root_of(c))
+    apparent = len(by_source)
+
+    resolved_roots, unresolved_sources = [], []
+    for src, root in by_source.items():
+        (unresolved_sources if is_unresolved(root) else resolved_roots).append((src, root))
+
+    distinct_resolved = sorted({r for _, r in resolved_roots})
+    confirmed = len(distinct_resolved)
+    unresolved_n = len(unresolved_sources)
+    shared = len(resolved_roots) - confirmed
+
+    # which sources collapsed onto an already-represented root (all but the
+    # first occurrence of each shared resolved root)
+    seen_roots: set[str] = set()
+    collapsed = []
+    for s, r in resolved_roots:
+        if r in seen_roots:
+            collapsed.append(dict(source=s, root=r))
+        seen_roots.add(r)
+
+    return dict(
+        apparent_dataset_count=apparent,
+        resolved_root_count=confirmed,
+        confirmed_independent_root_count=confirmed,
+        unresolved_source_count=unresolved_n,
+        shared_root_count=shared,
+        independence_min=confirmed if confirmed else (1 if apparent else 0),
+        independence_max=confirmed + unresolved_n,
+        circular=shared > 0,
+        collapsed_claims=collapsed,
+    )
+
+
 def root_propagation(claims: list[dict], src_addr: dict, seed_source: str,
                      seed_field: str, seed_value: str) -> dict:
     """How far one reference source's addresses for a given root propagate

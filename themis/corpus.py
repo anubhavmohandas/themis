@@ -1,6 +1,6 @@
 """Corpus loading. Works on the bundled sample or on a full local build."""
 from __future__ import annotations
-import csv, gzip, json, os, collections, pathlib
+import csv, datetime, gzip, json, os, collections, pathlib
 from . import provenance
 
 csv.field_size_limit(10 ** 9)
@@ -109,6 +109,21 @@ class Corpus:
                     unresolved_addresses=f.get("unresolved_addresses"),
                     unresolved_addr_share=f.get("unresolved_addr_share"),
                     root_claims=f.get("root_claims", {}))
+
+    @property
+    def snapshot_date(self):
+        """Loop 2 STEP 16 - the fixed date a paper-reproduction run treats
+        as "today": the latest revision date actually present in this
+        corpus's own claims, derived from the immutable bundled data rather
+        than the wall clock, so the same archived corpus reproduces the
+        same freshness figures regardless of when it's re-run."""
+        dates = [(c.get("lastmod") or "").strip()[:10] for c in self.claims if (c.get("lastmod") or "").strip()]
+        if not dates:
+            return None
+        try:
+            return datetime.date.fromisoformat(max(dates))
+        except ValueError:
+            return None
 
     def revenue_rows(self, path=None):
         path = path or DEMO / "revenue.csv.gz"

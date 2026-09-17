@@ -196,7 +196,10 @@ def drift(corpus, revenue_rows=None, anchors=None, task=_revenue_task) -> dict:
 
 
 # ------------------------------------------------------- cluster bootstrap CIs
-def bootstrap(corpus, n_boot=2000, seed=42, upper_bound=False) -> dict:
+_BOOT_CFG = _cfg.thresholds.get("bootstrap", {})
+
+
+def bootstrap(corpus, n_boot=None, seed=None, confidence_level=None, upper_bound=False) -> dict:
     """Resample provenance roots, not rows. `upper_bound` treats every
     unresolved-provenance address as its own root instead of pooling them.
 
@@ -205,7 +208,16 @@ def bootstrap(corpus, n_boot=2000, seed=42, upper_bound=False) -> dict:
     sample, not the corpus, so the figure would be meaningless. Rates
     conditional on being multi-dataset are unaffected, because every
     multi-dataset address is present in the sample.
+
+    n_boot/seed/confidence_level default to config/thresholds.yml's
+    `bootstrap` block (STEP 14/15) - paper reproduction uses those defaults
+    unchanged; a live audit can override any of the three per run.
     """
+    n_boot = _BOOT_CFG.get("iterations", 2000) if n_boot is None else n_boot
+    seed = _BOOT_CFG.get("seed", 42) if seed is None else seed
+    confidence_level = (_BOOT_CFG.get("confidence_level", 0.95)
+                        if confidence_level is None else confidence_level)
+    tail = (1 - confidence_level) / 2
     rng = random.Random(seed)
     addrs = list(corpus.by_addr)
     dom, multi, outcome = [], [], []
@@ -266,10 +278,11 @@ def bootstrap(corpus, n_boot=2000, seed=42, upper_bound=False) -> dict:
                 if d_:
                     vals.append(n_ / d_)
         vals.sort()
-        lo = vals[int(.025 * (len(vals) - 1))] if vals else None
-        hi = vals[int(.975 * (len(vals) - 1))] if vals else None
+        lo = vals[int(tail * (len(vals) - 1))] if vals else None
+        hi = vals[int((1 - tail) * (len(vals) - 1))] if vals else None
         agg[name] = dict(point=pt_n / pt_d if pt_d else None, ci_low=lo, ci_high=hi)
     return dict(n_clusters=len(keys), upper_bound=upper_bound, stats=agg,
+                confidence_level=confidence_level, n_boot=n_boot, seed=seed,
                 corpus_wide_rates=corpus.full,
                 note=None if corpus.full else
                 "corpus-wide rates omitted on the bundled sample; conditional "
@@ -278,13 +291,19 @@ def bootstrap(corpus, n_boot=2000, seed=42, upper_bound=False) -> dict:
 
 
 # ------------------------------------------------------------- STEP 13 freshness
-def freshness(claims: list[dict]) -> dict:
+def freshness(claims: list[dict], as_of=None) -> dict:
     """CURRENT / STALE / CURRENCY_UNKNOWN over a flat claim list. A claim
     with no revision date is always CURRENCY_UNKNOWN, never STALE - see
-    taxonomy.currency_flags."""
+    taxonomy.currency_flags.
+
+    `as_of` (Loop 2 STEP 16) fixes "today" for this computation: a live
+    audit defaults to the real current date, but a paper-reproduction run
+    passes its snapshot date so the same archived corpus doesn't drift more
+    "stale" every year it's re-run.
+    """
     current = stale = unknown = 0
     for c in claims:
-        flags = taxonomy.currency_flags(c)
+        flags = taxonomy.currency_flags(c, today=as_of)
         if "stale" in flags:
             stale += 1
         elif "currency-unknown" in flags:
@@ -305,6 +324,7 @@ def explain(corpus, address: str) -> dict:
     roots = sorted({c["root"] for c in claims})
     srcs = sorted({c["source"] for c in claims})
     outcome = taxonomy.classify_address(claims) if len(srcs) >= 2 else "single-source"
+    indep = provenance.address_independence(claims)
     return dict(
         address=address, found=True,
         claims=[dict(source=c["source"], label=c["canon"], raw=c["raw_label"],
@@ -313,9 +333,13 @@ def explain(corpus, address: str) -> dict:
                      lastmod=c["lastmod"] or None,
                      flags=taxonomy.currency_flags(c)) for c in claims],
         datasets=srcs, roots=roots,
-        apparent_corroboration=len(srcs),
-        actual_corroboration=len(roots),
-        circular=len(srcs) >= 2 and len(roots) < len(srcs),
+        # apparent = distinct datasets; actual/confirmed = distinct *resolved*
+        # roots only - an unresolved root is an unknown relationship, never a
+        # confirmed independent one (see provenance.address_independence)
+        apparent_corroboration=indep["apparent_dataset_count"],
+        actual_corroboration=indep["confirmed_independent_root_count"],
+        circular=indep["circular"],
+        independence=indep,
         outcome=outcome,
         tier=taxonomy.best_tier(claims),
         flags=taxonomy.flags_for_address(claims),

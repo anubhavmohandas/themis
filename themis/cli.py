@@ -256,7 +256,7 @@ def cmd_ingest(args):
     rule("RELIABILITY PROFILE")
     for dim, block in r["reliability_profile"].items():
         if not block.get("available"):
-            print(f"  {dim:<16}{_c('unavailable: ' + block['reason'], DIM)}")
+            print(f"  {dim:<24}{_c('unavailable: ' + block['reason'], DIM)}")
         else:
             print(f"  {dim}")
             for k, v2 in block.items():

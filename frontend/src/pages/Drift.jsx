@@ -1,13 +1,37 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts";
+import { Link } from "react-router-dom";
 import { api } from "../lib/api.js";
 import { useApiData } from "../lib/useApi.js";
+import { useAnalysis } from "../lib/AnalysisContext.jsx";
 import MetricTile from "../components/MetricTile.jsx";
 
 const COLORS = { A: "#95a0af", B: "#1f4e79", C: "#2c6350", D: "#8a5e12" };
 const usd = (n) => `$${Math.round(n).toLocaleString()}`;
 
 export default function DriftPage() {
-  const { data, error, loading } = useApiData(() => api.drift(), []);
+  const { analysisId, meta } = useAnalysis();
+  const { data, error, loading } = useApiData(
+    () => (analysisId ? api.drift(analysisId) : Promise.resolve(null)), [analysisId]);
+
+  if (!analysisId) {
+    return (
+      <div className="section">
+        <div className="callout muted">
+          No active analysis. <Link to="/">Upload a dataset or reproduce the paper</Link> to begin.
+        </div>
+      </div>
+    );
+  }
+  if (meta && meta.mode !== "PAPER_REPRODUCTION") {
+    return (
+      <div className="section">
+        <div className="callout muted">
+          Trust-rule sensitivity is reproduced against the bundled ransomware-revenue task and is
+          only available for a Paper Reproduction analysis, not an uploaded dataset.
+        </div>
+      </div>
+    );
+  }
   if (loading) return <p className="muted">Loading trust-rule sensitivity…</p>;
   if (error) return <div className="callout warn">{error}</div>;
   if (!data) return null;

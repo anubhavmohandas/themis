@@ -6,8 +6,9 @@ from __future__ import annotations
 import datetime, re
 from . import detect as _detect
 
-LABEL_HINTS = ("label", "entity", "actor", "tag", "name")
+LABEL_HINTS = ("label", "entity", "tag", "name")
 CATEGORY_HINTS = ("category", "classification", "type")
+ACTOR_HINTS = ("actor", "perpetrator", "group_name", "threat_actor", "operator")
 SOURCE_HINTS = ("source", "origin", "reference", "provenance", "citation")
 DATE_HINTS = ("date", "time", "updated", "revision", "lastmod", "retrieved", "seen")
 CONFIDENCE_HINTS = ("confidence", "certainty", "trust", "reliability", "score")
@@ -48,14 +49,18 @@ def infer_mapping(rows: list[dict], fieldnames: list[str], sample_size: int = 20
     label_field = _best_field(rows, remaining, LABEL_HINTS, sample_size=sample_size)
     remaining_2 = [f for f in remaining if f != label_field]
     category_field = _best_field(rows, remaining_2, CATEGORY_HINTS, sample_size=sample_size)
-    source_field = _best_field(rows, remaining_2, SOURCE_HINTS, value_check=_looks_like_url,
+    remaining_3 = [f for f in remaining_2 if f != category_field]
+    actor_field = _best_field(rows, remaining_3, ACTOR_HINTS, sample_size=sample_size)
+    remaining_4 = [f for f in remaining_3 if f != actor_field]
+    source_field = _best_field(rows, remaining_4, SOURCE_HINTS, value_check=_looks_like_url,
                                sample_size=sample_size)
-    timestamp_field = _best_field(rows, remaining_2, DATE_HINTS, value_check=_looks_like_date,
+    timestamp_field = _best_field(rows, remaining_4, DATE_HINTS, value_check=_looks_like_date,
                                   sample_size=sample_size)
-    confidence_field = _best_field(rows, remaining_2, CONFIDENCE_HINTS, sample_size=sample_size)
+    confidence_field = _best_field(rows, remaining_4, CONFIDENCE_HINTS, sample_size=sample_size)
 
     return dict(
         detection=detection,
         mapping=dict(address=address_field, label=label_field, category=category_field,
-                    source=source_field, timestamp=timestamp_field, confidence=confidence_field),
+                    actor=actor_field, source=source_field, timestamp=timestamp_field,
+                    confidence=confidence_field),
     )

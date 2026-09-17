@@ -3,7 +3,9 @@ const KIND_BY_LABEL = {
   "entity-type conflict": "warn", "licit/illicit conflict": "warn", incomparable: "muted",
   circular: "warn", conflicting: "warn", stale: "flag", "currency-unknown": "muted",
   DECLARED: "ok", INFERRED: "flag", UNKNOWN: "muted",
-  verified: "ok", derived: "flag", "unverified-report": "muted",
+  verified: "ok", derived: "flag", "unverified-report": "muted", unknown: "warn",
+  NO_REFERENCE_MATCH: "muted", REFERENCE_MATCH_BUT_SAME_PROVENANCE: "flag",
+  REFERENCE_MATCH_WITH_DISTINCT_PROVENANCE: "ok", REFERENCE_RELATIONSHIP_UNRESOLVED: "muted",
 };
 
 export default function StatusBadge({ label, kind }) {

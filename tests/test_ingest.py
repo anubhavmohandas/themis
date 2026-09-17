@@ -5,7 +5,7 @@ guarantee for a source THEMIS has never configured.
 import sys, pathlib, unittest, tempfile, csv, os
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from themis.ingest import detect, schema, validate, claims as claim_mod, pipeline
-from themis import provenance
+from themis import provenance, taxonomy
 
 
 def _write_csv(rows, fieldnames):
@@ -102,6 +102,25 @@ class TestClaimNormalization(unittest.TestCase):
         row = {"wallet_address": "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2", "entity_type": "totally-novel-thing"}
         c = claim_mod.build_claim(row, dict(address="wallet_address", label="entity_type"), "test_src")
         self.assertEqual(c["canon"], "unknown")
+
+
+class TestUnknownEvidenceTier(unittest.TestCase):
+    """Loop 2 STEP 9/28 - an upload with no declared methodology must land
+    on TIER_UNKNOWN, never be silently upgraded to TIER_DERIVED."""
+
+    def test_freshly_ingested_claim_defaults_to_unknown_tier(self):
+        row = {"wallet_address": "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2", "entity_type": "ransomware"}
+        c = claim_mod.build_claim(row, dict(address="wallet_address", label="entity_type"), "test_src")
+        self.assertEqual(c["heuristic"], "unknown")
+        self.assertEqual(taxonomy.tier_of(c), taxonomy.TIER_UNKNOWN)
+
+    def test_confidence_field_survives_ingestion_uninterpreted(self):
+        row = {"wallet_address": "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2", "entity_type": "ransomware",
+              "score": "high"}
+        mapping = dict(address="wallet_address", label="entity_type", confidence="score")
+        c = claim_mod.build_claim(row, mapping, "test_src")
+        self.assertEqual(c["confidence_raw"], "high")
+        self.assertIsNone(c["confidence_normalized"])   # never guessed
 
 
 class TestUnknownProvenanceStaysUnknown(unittest.TestCase):

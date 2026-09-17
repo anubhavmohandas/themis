@@ -7,7 +7,7 @@ source's verified roots need a config edit, not a code change.
 """
 from __future__ import annotations
 import datetime
-from . import config_io
+from . import config_io, provenance
 
 _cfg = config_io.load()
 CATEGORIES: dict = _cfg.taxonomy
@@ -50,7 +50,13 @@ def ancestors(cat: str) -> set:
 TIER_VERIFIED = "verified"
 TIER_DERIVED = "derived"
 TIER_REPORT = "unverified-report"
-TIER_ORDER = [TIER_VERIFIED, TIER_DERIVED, TIER_REPORT]
+#: insufficient metadata to place a claim in one of the paper's three
+#: evidence classes - distinct from TIER_REPORT, which means the metadata
+#: *is* sufficient to say "no heuristic was declared". An arbitrary upload
+#: with no declared methodology must land here, never silently become
+#: DERIVED (STEP 9): unknown methodology is not evidence of derivation.
+TIER_UNKNOWN = "unknown"
+TIER_ORDER = [TIER_VERIFIED, TIER_DERIVED, TIER_REPORT, TIER_UNKNOWN]
 
 #: heuristic-dependency value -> tier. Declared per source at ingestion.
 TIER_BY_HEURISTIC = {
@@ -61,6 +67,7 @@ TIER_BY_HEURISTIC = {
     "undisclosed": TIER_DERIVED,
     "none": TIER_REPORT,
     "": TIER_REPORT,
+    "unknown": TIER_UNKNOWN,
 }
 
 
@@ -146,9 +153,7 @@ def flags_for_address(claims: list[dict], today=None) -> list[str]:
     outcome = classify_address(claims) if len({c["source"] for c in claims}) >= 2 else None
     if outcome in ("licit/illicit conflict", "entity-type conflict"):
         out.append("conflicting")
-    roots = {c.get("root") for c in claims}
-    srcs = {c["source"] for c in claims}
-    if len(srcs) >= 2 and len(roots) < len(srcs):
+    if provenance.address_independence(claims)["circular"]:
         out.append("circular")   # at least one apparent confirmation is inherited
     per = [f for c in claims for f in currency_flags(c, today)]
     if per and all(f == "currency-unknown" for f in per):

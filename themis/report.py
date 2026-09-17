@@ -44,14 +44,21 @@ def audit_trail(input_path=None, parameters: dict | None = None, warnings: list 
 
 
 def build_corpus_report(corpus, include_bootstrap: bool = False, bootstrap_kwargs: dict | None = None,
-                        input_path=None) -> dict:
+                        input_path=None, analysis_as_of_date=None) -> dict:
     """STEP 27 - the canonical result for a corpus already fully loaded
     (bundled sample or a full local build): every figure `themis audit` /
-    `drift` print, assembled once."""
+    `drift` print, assembled once.
+
+    `analysis_as_of_date` (Loop 2 STEP 16) defaults to the corpus's own
+    `snapshot_date` - the latest revision date actually present in its
+    claims - so a paper-reproduction run's freshness figures are a function
+    of the archived data, not of when the report happens to be generated.
+    """
+    as_of = analysis_as_of_date or corpus.snapshot_date
     agreement = analysis.agreement(corpus)
     independence = analysis.independence(corpus)
     kappa = analysis.cohen_kappa(corpus)
-    fresh = analysis.freshness(corpus.claims)
+    fresh = analysis.freshness(corpus.claims, as_of=as_of)
     uncertainty = analysis.bootstrap(corpus, **(bootstrap_kwargs or {})) if include_bootstrap else None
 
     validation = dict(n_input=corpus.n_claims, n_valid=corpus.n_claims,
@@ -67,7 +74,8 @@ def build_corpus_report(corpus, include_bootstrap: bool = False, bootstrap_kwarg
         dataset_summary=dict(n_claims=corpus.n_claims, n_addresses=corpus.n_addresses,
                              sources=corpus.source_sizes()),
         agreement=agreement, independence=independence, kappa=kappa,
-        freshness=fresh, uncertainty=uncertainty, reliability_profile=profile,
+        freshness=fresh, analysis_as_of_date=str(as_of) if as_of else None,
+        uncertainty=uncertainty, reliability_profile=profile,
         limitations=limitations, audit_trail=audit_trail(input_path=input_path),
     )
 

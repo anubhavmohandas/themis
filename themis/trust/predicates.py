@@ -7,7 +7,7 @@ eligible. None of them know what a "ransomware" or a "rodwald" is - a policy
 is just a named list of these, declared in config/trust_rules.yml.
 """
 from __future__ import annotations
-from .. import taxonomy
+from .. import taxonomy, provenance
 
 
 def _siblings(claim, context):
@@ -54,9 +54,7 @@ def _address_outcome(claim, context):
 
 def non_circular(claim, context):
     sibs = _siblings(claim, context)
-    srcs = {c["source"] for c in sibs}
-    roots = {c.get("root") for c in sibs}
-    return not (len(srcs) >= 2 and len(roots) < len(srcs))
+    return not provenance.address_independence(sibs)["circular"]
 
 
 def exclude_conflicts(claim, context):
