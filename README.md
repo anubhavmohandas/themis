@@ -51,6 +51,29 @@ to run against a full local build instead of the bundled sample.
 | `report` | — | the canonical result object (dataset summary, every analysis, the reliability profile, an audit trail) as one JSON document |
 | `ingest <file>` | — | STEP 23: audit a dataset THEMIS has never seen - crypto detection, schema mapping, address validation, and (if a reference corpus is available) cross-source comparison |
 
+## Web dashboard
+
+A React + Vite UI (`frontend/`) over a thin FastAPI backend (`themis/api.py`,
+the `ui` extra) — seven pages (Upload, Corpus Audit, Address Inspector,
+Provenance Explorer, Trust-Rule Sensitivity, Sources, Export), all reading
+the same canonical result objects the CLI prints. The API contains no
+analysis logic of its own; it's a pass-through to `themis.report` /
+`analysis` / `graph`, so `themis audit` and the dashboard can never disagree.
+
+```
+pip install -e ".[ui]"
+python -m themis.api          # backend on http://127.0.0.1:5001
+
+cd frontend
+npm install
+npm run dev                   # frontend on http://127.0.0.1:5173
+```
+
+Both need to be running together. `frontend/src/lib/api.js` points at
+`http://127.0.0.1:5001` by default; override with `VITE_API_URL` if you run
+the API on a different port. `npm run build && npm run preview` serves the
+production build.
+
 ### Auditing a new dataset
 
 `themis ingest` runs the full pre-flight-through-reliability-profile pipeline
@@ -163,6 +186,8 @@ themis/
   analysis.py     agreement, independence, drift, freshness, cluster bootstrap
   reliability.py  STEP 16 multidimensional reliability profile
   report.py       canonical result object, JSON export, audit trail
+  graph.py        STEP 18 provenance lineage graph (config -> nodes/edges)
+  api.py          thin FastAPI JSON API for the web dashboard (ui extra)
   cli.py          command line
   chains/         blockchain adapters (Bitcoin: base58check + bech32/bech32m)
   ingest/         STEP 23 new-dataset pipeline: detect, schema, validate, claims
@@ -171,6 +196,7 @@ themis/
   config/         taxonomy.yml, trust_rules.yml, thresholds.yml, sources/*.yml
 demo_data/        bundled corpus sample + manifest
 tests/            paper regression + generic-engine tests
+frontend/         React + Vite dashboard (talks to themis/api.py)
 provenance_register.html   interactive register (same data, self-contained)
 ```
 

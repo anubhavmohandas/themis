@@ -26,31 +26,39 @@ def _fill(template: str, value: str) -> str:
 def resolve(claim: dict, sources: dict | None = None) -> dict:
     """Assign this claim's provenance root per its source's declared rule.
 
-    Returns {root, resolved, native, verified}. `resolved` means the root is
-    a known evidential origin (STEP 7); `native` means this source *is* that
-    origin rather than re-describing another one's finding; `verified`
-    means the root terminates in independently re-checkable evidence
-    (STEP 6) - a declaration a source config must make explicitly, never
-    inferred from a dataset calling itself verified.
+    Returns {root, resolved, native, verified, kind}. `resolved` means the
+    root is a known evidential origin (STEP 7); `native` means this source
+    *is* that origin rather than re-describing another one's finding;
+    `verified` means the root terminates in independently re-checkable
+    evidence (STEP 6) - a declaration a source config must make explicitly,
+    never inferred from a dataset calling itself verified. `kind` is for the
+    provenance explorer (STEP 18): DECLARED when the config states the root
+    outright (a fixed identity or an exact declared-field match), INFERRED
+    when it came from decoding an undocumented code or a residue/fallback
+    guess, UNKNOWN when no rule was configured at all - no edge is ever
+    shown as fact beyond what this reflects.
     """
     sources = sources if sources is not None else _cfg.sources
     src_id = claim.get("source")
     cfg = sources.get(src_id)
     prov = (cfg or {}).get("provenance")
     if not prov:
-        return dict(root=f"{src_id}:unresolved", resolved=False, native=False, verified=False)
+        return dict(root=f"{src_id}:unresolved", resolved=False, native=False,
+                    verified=False, kind="UNKNOWN")
 
     mode = prov["mode"]
 
     if mode == "fixed_root":
         return dict(root=prov["root"], resolved=bool(prov.get("resolved", False)),
-                    native=bool(prov.get("native", True)), verified=bool(prov.get("verified", False)))
+                    native=bool(prov.get("native", True)), verified=bool(prov.get("verified", False)),
+                    kind="DECLARED")
 
     if mode == "field_map":
         entry = prov.get("map", {}).get(claim.get(prov["field"], ""))
         d = entry or prov.get("default", {})
         return dict(root=d.get("root", f"{src_id}_other"), resolved=bool(d.get("resolved", False)),
-                    native=bool(d.get("native", False)), verified=bool(d.get("verified", False)))
+                    native=bool(d.get("native", False)), verified=bool(d.get("verified", False)),
+                    kind="DECLARED" if entry else "INFERRED")
 
     if mode in ("contains_rules", "substring_map"):
         raw = claim.get(prov["field"], "") or ""
@@ -61,18 +69,19 @@ def resolve(claim: dict, sources: dict | None = None) -> dict:
             hit = (rule["contains"] in value) if mode == "contains_rules" else (rule["contains"].lower() in low)
             if hit:
                 return dict(root=rule["root"], resolved=bool(rule.get("resolved", False)),
-                            native=bool(rule.get("native", False)), verified=bool(rule.get("verified", False)))
+                            native=bool(rule.get("native", False)), verified=bool(rule.get("verified", False)),
+                            kind="INFERRED")
         if "residue_prefix_map" in prov:
             residue = (claim.get(prov["residue_field"], "") or "").lower()
             for prefix, root in prov["residue_prefix_map"].items():
                 if residue.startswith(prefix):
                     return dict(root=root, resolved=bool(prov.get("residue_resolved", True)),
                                 native=bool(prov.get("residue_native", False)),
-                                verified=bool(prov.get("residue_verified", False)))
+                                verified=bool(prov.get("residue_verified", False)), kind="INFERRED")
         root = _fill(prov["fallback_template"], value)
         return dict(root=root, resolved=bool(prov.get("fallback_resolved", False)),
                     native=bool(prov.get("fallback_native", True)),
-                    verified=bool(prov.get("fallback_verified", False)))
+                    verified=bool(prov.get("fallback_verified", False)), kind="INFERRED")
 
     raise ValueError(f"unknown provenance mode: {mode!r}")
 

@@ -13,6 +13,16 @@ venv/
 .pytest_cache/
 .coverage
 
+# Node / Next.js (frontend/)
+node_modules/
+.next/
+out/
+next-env.d.ts
+npm-debug.log*
+*.env
+*.env.*
+!*.env.example
+
 # OS
 .DS_Store
 

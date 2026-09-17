@@ -29,6 +29,7 @@ class Corpus:
             c["prov_resolved"] = r["resolved"]
             c["prov_native"] = r["native"]
             c["prov_verified"] = r["verified"]
+            c["prov_kind"] = r["kind"]
         self.by_addr = collections.defaultdict(list)
         for c in self.claims:
             self.by_addr[c["address"]].append(c)

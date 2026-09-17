@@ -308,7 +308,8 @@ def explain(corpus, address: str) -> dict:
     return dict(
         address=address, found=True,
         claims=[dict(source=c["source"], label=c["canon"], raw=c["raw_label"],
-                     root=c["root"], tier=taxonomy.tier_of(c),
+                     root=c["root"], root_kind=c.get("prov_kind", "UNKNOWN"),
+                     tier=taxonomy.tier_of(c),
                      lastmod=c["lastmod"] or None,
                      flags=taxonomy.currency_flags(c)) for c in claims],
         datasets=srcs, roots=roots,
