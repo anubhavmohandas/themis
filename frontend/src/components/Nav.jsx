@@ -5,6 +5,7 @@ const LINKS = [
   { href: "/", label: "Start" },
   { href: "/overview", label: "Overview", needsAnalysis: true },
   { href: "/address", label: "Address Inspector", needsAnalysis: true },
+  { href: "/claims", label: "Claims", needsAnalysis: true },
   { href: "/provenance", label: "Provenance Explorer", needsAnalysis: true },
   { href: "/drift", label: "Trust-Rule Sensitivity", needsAnalysis: true, paperOnly: true },
   { href: "/sources", label: "Sources" },

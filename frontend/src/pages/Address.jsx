@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api.js";
 import { useAnalysis } from "../lib/AnalysisContext.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
@@ -8,10 +8,19 @@ import Tooltip from "../components/Tooltip.jsx";
 
 export default function AddressInspectorPage() {
   const { analysisId, meta } = useAnalysis();
-  const [query, setQuery] = useState("");
+  const [searchParams] = useSearchParams();
+  const [query, setQuery] = useState(searchParams.get("q") || "");
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  // a deep link from the Claims page (?q=<address>) runs the lookup
+  // immediately rather than requiring the user to re-submit the form
+  useEffect(() => {
+    const q = searchParams.get("q");
+    if (q && analysisId) run(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, analysisId]);
 
   async function run(addr) {
     const a = (addr ?? query).trim();

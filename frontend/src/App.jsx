@@ -4,6 +4,7 @@ import Nav from "./components/Nav.jsx";
 import LandingPage from "./pages/Upload.jsx";
 import OverviewPage from "./pages/Audit.jsx";
 import AddressInspectorPage from "./pages/Address.jsx";
+import ClaimsPage from "./pages/Claims.jsx";
 import ProvenanceExplorerPage from "./pages/Provenance.jsx";
 import DriftPage from "./pages/Drift.jsx";
 import SourcesPage from "./pages/Sources.jsx";
@@ -18,6 +19,7 @@ export default function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/overview" element={<OverviewPage />} />
           <Route path="/address" element={<AddressInspectorPage />} />
+          <Route path="/claims" element={<ClaimsPage />} />
           <Route path="/provenance" element={<ProvenanceExplorerPage />} />
           <Route path="/drift" element={<DriftPage />} />
           <Route path="/sources" element={<SourcesPage />} />

@@ -56,6 +56,10 @@ export const api = {
   analysisMeta: (id) => getJSON(`/api/analysis/${id}`),
   summary: (id) => getJSON(`/api/analysis/${id}/summary`),
   address: (id, addr) => getJSON(`/api/analysis/${id}/address/${encodeURIComponent(addr)}`),
+  claims: (id, params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
+    return getJSON(`/api/analysis/${id}/claims?${q}`);
+  },
   provenance: (id) => getJSON(`/api/analysis/${id}/provenance`),
   drift: (id) => getJSON(`/api/analysis/${id}/drift`),
   exportUrl: (id, name) => `${BASE}/api/analysis/${id}/export/${name}`,
