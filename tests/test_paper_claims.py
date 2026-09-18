@@ -314,6 +314,56 @@ class TestTaxonomy(unittest.TestCase):
         self.assertFalse(provenance.is_unresolved("ofac_sdn"))
 
 
+class TestHierarchyAdversarial(unittest.TestCase):
+    """Part N - the bundled taxonomy.yml is only ever 2 levels deep (every
+    specific category's parent is directly illicit_unspec/licit_unspec), so
+    classify_address's generic N-level ancestor walk is never actually
+    exercised past that incidental case by the paper corpus. These tests
+    swap in a synthetic 3-level tree to prove the walk is structural (via
+    `parent:` links only) rather than name-based, and that only a genuine
+    ancestor/descendant pair reads as refinement - siblings under a shared
+    non-root parent, or categories in unrelated branches, must not.
+    """
+    SYNTHETIC = {
+        "illicit_unspec": {"polarity": "illicit"},
+        "service": {"polarity": "illicit", "parent": "illicit_unspec"},
+        "exchange_service": {"polarity": "illicit", "parent": "service"},
+        "otc_desk": {"polarity": "illicit", "parent": "service"},
+        "unrelated_branch": {"polarity": "illicit", "parent": "illicit_unspec"},
+    }
+
+    def setUp(self):
+        self._orig_categories = taxonomy.CATEGORIES
+        self._orig_polarity = taxonomy.POLARITY
+        self._orig_generic = taxonomy.GENERIC
+        taxonomy.CATEGORIES = self.SYNTHETIC
+        taxonomy.POLARITY = {c: n.get("polarity", "unknown") for c, n in self.SYNTHETIC.items()}
+        taxonomy.GENERIC = {c for c, n in self.SYNTHETIC.items()
+                            if n.get("parent") is None and n.get("polarity") in ("licit", "illicit")}
+
+    def tearDown(self):
+        taxonomy.CATEGORIES = self._orig_categories
+        taxonomy.POLARITY = self._orig_polarity
+        taxonomy.GENERIC = self._orig_generic
+
+    def _classify(self, a, b):
+        return taxonomy.classify_address([{"source": "a", "canon": a}, {"source": "b", "canon": b}])
+
+    def test_grandparent_grandchild_is_a_genuine_refinement(self):
+        # "service" is a real 2-hop ancestor of "exchange_service", not just
+        # the generic polarity root - this only passes if ancestors() walks
+        # the full parent chain rather than checking one hop.
+        self.assertEqual(self._classify("service", "exchange_service"), "hierarchical refinement")
+
+    def test_siblings_under_a_shared_non_root_parent_are_not_refinement(self):
+        # neither is an ancestor of the other - a common non-root parent
+        # must not be mistaken for a direct relationship.
+        self.assertEqual(self._classify("exchange_service", "otc_desk"), "entity-type conflict")
+
+    def test_unrelated_branches_are_not_refinement(self):
+        self.assertEqual(self._classify("exchange_service", "unrelated_branch"), "entity-type conflict")
+
+
 class TestExplain(Base):
     """The per-address demonstration."""
 
