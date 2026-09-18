@@ -126,6 +126,24 @@ class TestUploadInputValidation(unittest.TestCase):
             r = self.client.get(f"/api/analysis/does-not-exist{path}")
             self.assertEqual(r.status_code, 404, path)
 
+    def test_hostile_filenames_do_not_crash_and_never_reach_a_csv_cell(self):
+        # Part J/G: the uploaded filename is never used to build a
+        # filesystem path (tempfile.mkstemp ignores it entirely) and is
+        # only ever echoed back as JSON metadata (dataset_name), never
+        # written into normalized_claims.csv's fields - so it can't reach
+        # the CSV-injection guard's blind spot even if hostile.
+        hostile = ["../../../../etc/passwd.csv", "a" * 500 + ".csv", "=cmd|calc.csv",
+                  "..\\..\\windows.csv", "<script>alert(1)</script>.csv"]
+        for fn in hostile:
+            r = self.client.post("/api/analysis", files={"file": (fn, BTC_CSV, "text/csv")},
+                                 data={"source_id": "t", "use_reference": "false"})
+            self.assertEqual(r.status_code, 200, fn)
+            aid = r.json()["analysis_id"]
+            self.assertEqual(r.json()["meta"]["dataset_name"], fn)
+            export = self.client.get(f"/api/analysis/{aid}/export/normalized_claims.csv")
+            self.assertEqual(export.status_code, 200)
+            self.assertNotIn(fn, export.text)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
