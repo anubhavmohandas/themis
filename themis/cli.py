@@ -149,10 +149,13 @@ def cmd_explain(args):
 def cmd_bootstrap(args):
     c = load(args)
     rule("CLUSTER BOOTSTRAP  (resampling unit = provenance root)")
+    if args.fast:
+        print(_c("  --fast: numpy RNG, exploratory only - endpoints will not match "
+                  "the canonical (default) path or the paper", YEL))
     runs = [False, True] if args.both else [args.upper]
     out = {}
     for ub in runs:
-        b = analysis.bootstrap(c, n_boot=args.n, upper_bound=ub)
+        b = analysis.bootstrap(c, n_boot=args.n, upper_bound=ub, fast=args.fast)
         name = "upper bound (unresolved independent)" if ub else "lower bound (unresolved pooled)"
         out["upper" if ub else "lower"] = b
         print(f"\n  {name}: {b['n_clusters']:,} clusters")
@@ -319,6 +322,9 @@ def main(argv=None):
     b.add_argument("-n", type=int, default=2000)
     b.add_argument("--upper", action="store_true", help="unresolved records independent")
     b.add_argument("--both", action="store_true", help="report both lineage bounds")
+    b.add_argument("--fast", action="store_true",
+                   help="numpy RNG for large K (requires numpy); exploratory only, "
+                        "not the canonical/paper path")
     b.set_defaults(fn=cmd_bootstrap)
 
     sub.add_parser("sources", help="print the source registry").set_defaults(fn=cmd_sources)

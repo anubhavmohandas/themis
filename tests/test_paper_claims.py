@@ -594,6 +594,45 @@ class TestBootstrap(Base):
         hi = analysis.bootstrap(self.c, n_boot=50, upper_bound=True)
         self.assertGreater(hi["n_clusters"], lo["n_clusters"])
 
+    def test_canonical_path_is_deterministic_regardless_of_numpy(self):
+        # same seed, canonical (fast=False) path: CI endpoints must be
+        # bit-identical whether or not numpy happens to be importable in
+        # this environment - a reviewer without numpy must reproduce the
+        # exact same interval as one with it. See analysis.bootstrap's
+        # docstring: numpy's default_rng is a different algorithm and would
+        # silently shift CI endpoints (not point estimates) if it were ever
+        # used for the canonical path.
+        with_numpy = analysis.bootstrap(self.c, n_boot=100, seed=7)
+        import sys
+        real_numpy = sys.modules.get("numpy")
+        sys.modules["numpy"] = None
+        try:
+            without_numpy = analysis.bootstrap(self.c, n_boot=100, seed=7)
+        finally:
+            if real_numpy is not None:
+                sys.modules["numpy"] = real_numpy
+            else:
+                sys.modules.pop("numpy", None)
+        self.assertEqual(with_numpy["stats"], without_numpy["stats"])
+        self.assertEqual(with_numpy["engine"], "python_canonical")
+        self.assertEqual(without_numpy["engine"], "python_canonical")
+
+    def test_fast_mode_is_marked_non_canonical_and_requires_numpy(self):
+        try:
+            import numpy  # noqa: F401
+        except ImportError:
+            self.skipTest("numpy not installed")
+        b = analysis.bootstrap(self.c, n_boot=50, fast=True)
+        self.assertEqual(b["engine"], "numpy_fast_exploratory")
+        import sys
+        real_numpy = sys.modules.get("numpy")
+        sys.modules["numpy"] = None
+        try:
+            with self.assertRaises(ImportError):
+                analysis.bootstrap(self.c, n_boot=50, fast=True)
+        finally:
+            sys.modules["numpy"] = real_numpy
+
     def test_empty_corpus_does_not_crash_with_or_without_numpy(self):
         # K=0 clusters: the numpy path computed 1.0/K directly (a
         # ZeroDivisionError before numpy ever ran), while the no-numpy path

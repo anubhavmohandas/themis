@@ -207,7 +207,8 @@ def drift(corpus, revenue_rows=None, anchors=None, task=_revenue_task, as_of=Non
 _BOOT_CFG = _cfg.thresholds.get("bootstrap", {})
 
 
-def bootstrap(corpus, n_boot=None, seed=None, confidence_level=None, upper_bound=False) -> dict:
+def bootstrap(corpus, n_boot=None, seed=None, confidence_level=None, upper_bound=False,
+              fast=False) -> dict:
     """Resample provenance roots, not rows. `upper_bound` treats every
     unresolved-provenance address as its own root instead of pooling them.
 
@@ -220,7 +221,26 @@ def bootstrap(corpus, n_boot=None, seed=None, confidence_level=None, upper_bound
     n_boot/seed/confidence_level default to config/thresholds.yml's
     `bootstrap` block (STEP 14/15) - paper reproduction uses those defaults
     unchanged; a live audit can override any of the three per run.
+
+    The canonical path (`fast=False`, the default) always resamples with the
+    stdlib `random.Random`, whether or not numpy happens to be installed -
+    numpy's `default_rng` is a different algorithm, so the same seed produces
+    different CI endpoints under it (point estimates are unaffected; only the
+    resampled interval is). A reviewer must get the same interval regardless
+    of their environment, so paper reproduction never switches RNG based on
+    what's importable. `fast=True` opts into the numpy path for large `K`
+    (e.g. a full-corpus upper-bound run) where the stdlib loop is slow; it
+    requires numpy and its result is explicitly marked non-canonical.
     """
+    if fast:
+        try:
+            import numpy as _np
+        except ImportError:
+            raise ImportError(
+                "bootstrap(fast=True) requires numpy; install it, or omit "
+                "fast= for the canonical reproducible path (no dependency needed)")
+    else:
+        _np = None
     n_boot = _BOOT_CFG.get("iterations", 2000) if n_boot is None else n_boot
     seed = _BOOT_CFG.get("seed", 42) if seed is None else seed
     confidence_level = (_BOOT_CFG.get("confidence_level", 0.95)
@@ -250,11 +270,6 @@ def bootstrap(corpus, n_boot=None, seed=None, confidence_level=None, upper_bound
         stats[name] = ((lambda n: (lambda i: outcome[i] == n))(name),
                        (lambda i: multi[i]))
 
-    try:
-        import numpy as _np
-    except ImportError:
-        _np = None
-
     agg = {}
     for name, (num_f, den_f) in stats.items():
         cn = [sum(1 for i in clusters[k] if den_f(i) and num_f(i)) for k in keys]
@@ -266,7 +281,7 @@ def bootstrap(corpus, n_boot=None, seed=None, confidence_level=None, upper_bound
             # resample would have an empty denominator anyway, so this
             # just states that directly instead of computing multinomial
             # weights over zero clusters, which is a ZeroDivisionError
-            # (1.0 / K) rather than the empty-`vals` result the no-numpy
+            # (1.0 / K) rather than the empty-`vals` result the pure-Python
             # path already reaches here by the loop over `range(K)` never
             # running.
             vals = []
@@ -301,6 +316,7 @@ def bootstrap(corpus, n_boot=None, seed=None, confidence_level=None, upper_bound
     return dict(n_clusters=len(keys), upper_bound=upper_bound, stats=agg,
                 confidence_level=confidence_level, n_boot=n_boot, seed=seed,
                 corpus_wide_rates=corpus.full,
+                engine="numpy_fast_exploratory" if fast else "python_canonical",
                 note=None if corpus.full else
                 "corpus-wide rates omitted on the bundled sample; conditional "
                 "rates are exact. Use --observations with a full build to "
