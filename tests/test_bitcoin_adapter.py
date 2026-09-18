@@ -63,6 +63,52 @@ class TestBitcoinAddress(unittest.TestCase):
         mixed = addr[:5] + addr[5:].upper()
         self.assertFalse(a.validate_address(mixed))
 
+    def test_testnet_bech32_rejected_by_mainnet_only_adapter(self):
+        # the official BIP-173 testnet test vector for the same witness
+        # program as test_valid_segwit_v0's mainnet one - correctly-formed
+        # and correctly-checksummed, wrong network only.
+        self.assertFalse(a.validate_address("tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx"))
+
+    def test_witness_version_above_16_rejected(self):
+        # BIP-173 caps witness versions at 16 (encoded 0-16); version 17 is
+        # a structurally valid bech32 string with a checksum THEMIS's own
+        # encoder produced, but must still be rejected.
+        self.assertFalse(a.validate_address("bc13w508d6qejxtdg4y5r3zarvary0c5xw7kxflzvg"))
+
+    def test_v0_with_21_byte_program_rejected(self):
+        # BIP-141 restricts witness v0 programs to exactly 20 (P2WPKH) or
+        # 32 (P2WSH) bytes; 21 is within the generic 2-40 byte range but
+        # invalid specifically for v0.
+        self.assertFalse(a.validate_address("bc1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj9pecr"))
+
+    def test_v0_below_minimum_program_length_rejected(self):
+        self.assertFalse(a.validate_address("bc1qqqglchaj"))
+
+    def test_v1_with_20_byte_program_is_structurally_valid(self):
+        # BIP-350's witness-version-agnostic length rule (2-40 bytes)
+        # applies here, not BIP-341's taproot-specific 32-byte rule - v1+
+        # only gets the narrower 20/32 restriction when witver == 0.
+        # Structurally valid per the spec THEMIS implements even though a
+        # real Taproot output is always 32 bytes; locked in so this isn't
+        # "fixed" into a false rejection by a future reader.
+        self.assertTrue(a.validate_address("bc1pw508d6qejxtdg4y5r3zarvary0c5xw7kj9wkru"))
+
+    def test_invalid_base58_character_rejected(self):
+        # '0' is not in the base58 alphabet (visually confusable with 'O').
+        self.assertFalse(a.validate_address("1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN0"))
+
+    def test_valid_checksum_wrong_network_version_byte_rejected(self):
+        # a real Bitcoin testnet P2PKH address (version byte 0x6f) with a
+        # genuinely valid checksum - must still be rejected: THEMIS only
+        # accepts mainnet version bytes 0x00 (P2PKH) / 0x05 (P2SH).
+        self.assertFalse(a.validate_address("mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn"))
+
+    def test_too_short_base58_rejected(self):
+        self.assertFalse(a.validate_address("1BvBMSEYstWet"))
+
+    def test_too_long_base58_rejected(self):
+        self.assertFalse(a.validate_address("1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2" + "A" * 20))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
