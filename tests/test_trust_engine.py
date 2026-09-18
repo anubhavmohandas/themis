@@ -3,7 +3,7 @@ ransomware-revenue task it happens to be reproduced against in the paper,
 plus a config-loader test proving taxonomy/thresholds are genuinely
 data-driven (STEP 3: configurable, not buried constants).
 """
-import sys, pathlib, unittest, tempfile, shutil
+import datetime, sys, pathlib, unittest, tempfile, shutil
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from themis import config_io
 from themis.trust import policy as trust_policy, predicates
@@ -104,6 +104,23 @@ class TestAnchorSelfValidation(unittest.TestCase):
         claim = {"address": "x"}
         ctx = {"anchor_addresses": {"x"}}
         self.assertTrue(predicates.anchor_membership(claim, ctx))
+
+
+class TestCurrentOnlyIsDeterministic(unittest.TestCase):
+    """current_only must honor an explicit as_of from context rather than
+    always falling back to the live wall clock - otherwise a policy using
+    it would report a different eligible set on different days for the
+    exact same archived corpus (Loop 2 STEP 16's determinism requirement,
+    same one analysis.explain()/drift() already freeze to snapshot_date)."""
+
+    def test_honors_explicit_as_of_from_context(self):
+        claim = {"lastmod": "2019-01-01"}
+        self.assertFalse(predicates.current_only(claim, {"as_of": datetime.date(2026, 1, 1)}))
+        self.assertTrue(predicates.current_only(claim, {"as_of": datetime.date(2019, 6, 1)}))
+
+    def test_falls_back_to_today_only_when_context_has_no_as_of(self):
+        claim = {"lastmod": str(datetime.date.today())}
+        self.assertTrue(predicates.current_only(claim, {}))
 
 
 class TestConfigIsDataDriven(unittest.TestCase):

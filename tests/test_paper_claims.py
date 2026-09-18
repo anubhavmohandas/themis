@@ -56,6 +56,32 @@ class TestAsOfDate(Base):
         flags = {f for cl in r["claims"] if cl["source"] == dated["source"] for f in cl["flags"]}
         self.assertIn("stale", flags)
 
+    def test_drift_threads_snapshot_date_into_a_current_only_policy(self):
+        # none of the four bundled paper conditions use current_only, and
+        # the revenue task's own claims carry no lastmod field at all (so
+        # this can't discriminate wall-clock-vs-snapshot the way
+        # TestCurrentOnlyIsDeterministic in test_trust_engine.py does
+        # directly against the predicate) - this only proves the wiring
+        # itself: drift()'s new as_of parameter reaches the policy context
+        # without raising, and its default agrees with an explicit
+        # snapshot_date, for any custom policy a real dataset might define.
+        original = analysis._cfg.trust_rules
+        patched = dict(original)
+        patched["policies"] = dict(patched["policies"])
+        patched["policies"]["fresh_only"] = {
+            "label": "current only", "aggregation": "dedup_max_per_address",
+            "eligibility": ["current_only"],
+        }
+        analysis._cfg.trust_rules = patched
+        try:
+            d_default = analysis.drift(self.c)
+            d_explicit = analysis.drift(self.c, as_of=self.c.snapshot_date)
+        finally:
+            analysis._cfg.trust_rules = original
+        self.assertEqual(d_default["conditions"]["fresh_only"]["observations"],
+                         d_explicit["conditions"]["fresh_only"]["observations"])
+        self.assertGreater(d_default["conditions"]["fresh_only"]["observations"], 0)
+
 
 class TestCorpus(Base):
     def test_totals(self):

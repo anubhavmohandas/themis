@@ -66,7 +66,13 @@ def exclude_licit_illicit_conflict(claim, context):
 
 
 def current_only(claim, context):
-    return "stale" not in taxonomy.currency_flags(claim)
+    # `as_of` (Loop 2 STEP 16): defaults to live "today" only when the
+    # caller supplies none, same fallback as taxonomy.currency_flags itself
+    # - a paper-reproduction run must pass the corpus's frozen snapshot_date
+    # via context, or this policy's eligible set (and therefore any
+    # downstream drift figure that uses it) would silently change as real
+    # time passes even though the archived corpus never does.
+    return "stale" not in taxonomy.currency_flags(claim, today=context.get("as_of"))
 
 
 REGISTRY = {

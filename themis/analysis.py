@@ -163,20 +163,27 @@ _CONDITION_LETTER = {"naive_union": "A", "address_dedup": "B",
                      "inheritance_collapsed": "C", "verified_only": "D"}
 
 
-def drift(corpus, revenue_rows=None, anchors=None, task=_revenue_task) -> dict:
+def drift(corpus, revenue_rows=None, anchors=None, task=_revenue_task, as_of=None) -> dict:
     """STEP 20 - re-run `task`'s forensic aggregation under every configured
     trust-rule policy (config/trust_rules.yml). The eligibility logic lives
     in the generic policy engine (themis/trust/); this function only wires a
     task's claims and value field into it and relabels the result A-D to
     match the paper's condition names.
+
+    `as_of` defaults to the corpus's own `snapshot_date` (same as
+    `report.build_report`/`explain`) and is passed through to any
+    date-sensitive predicate (e.g. `current_only`) via context - none of
+    the four bundled paper conditions use one today, but a custom policy
+    on an uploaded dataset can.
     """
     rows = revenue_rows if revenue_rows is not None else corpus.revenue_rows()
     anchors = anchors if anchors is not None else corpus.verified_anchors()
+    as_of = as_of or getattr(corpus, "snapshot_date", None)
 
     claims = task.build_claims(rows)
     policies, baseline = trust_policy.load_policies(_cfg.trust_rules)
     result = trust_drift.run(claims, policies, baseline, task.aggregate,
-                             context=dict(anchor_addresses=anchors))
+                             context=dict(anchor_addresses=anchors, as_of=as_of))
 
     by_addr = collections.defaultdict(set)
     for c in claims:

@@ -199,12 +199,37 @@ unrelated branches, do not — the check is structural (via `parent:` links)
 rather than name-based. No code change was needed; this was a coverage gap,
 not a bug.
 
+### 9. `current_only` trust-rule predicate had the same wall-clock bug as #4
+**Files:** `themis/trust/predicates.py` (`current_only`), `themis/analysis.py`
+(`drift`)
+**Root cause:** `current_only(claim, context)` called
+`taxonomy.currency_flags(claim)` with no `today`, so it always used the live
+wall clock rather than the corpus's frozen snapshot date — same bug class
+as #4, in a different module. None of the four bundled paper-reproduction
+trust-rule policies (`naive_union`/`address_dedup`/`inheritance_collapsed`/
+`verified_only`) use `current_only`, so the paper's RQ3 drift table is
+unaffected today, but the predicate is registered and available to any
+custom policy on an uploaded dataset (matching PART X's "current only" test
+category), and would have silently drifted for one.
+**Fix:** `current_only` now reads `context.get("as_of")`;
+`analysis.drift()` gained an `as_of` parameter (defaulting to
+`corpus.snapshot_date`, same pattern as `explain()`) and threads it into
+the policy-engine context.
+**Tests:** `tests/test_trust_engine.py::TestCurrentOnlyIsDeterministic` (direct,
+discriminating - dated claim, two different `as_of` values, opposite
+results), `tests/test_paper_claims.py::TestAsOfDate::test_drift_threads_snapshot_date_into_a_current_only_policy`
+(integration-level wiring check — the bundled revenue task's own claims
+have no `lastmod` field, so this one can't discriminate the date value
+itself, only that the parameter reaches the policy context without
+raising).
+
 ## Test suite state
 
-- Backend: **87/87 → 110/110** passing (23 new tests across 6 files, one new
+- Backend: **87/87 → 113/113** passing (26 new tests across 6 files, one new
   file `tests/test_api_export.py`).
-- Paper regression (`tests/test_paper_claims.py`): 42/42 → 48/48 passing.
+- Paper regression (`tests/test_paper_claims.py`): 42/42 → 49/49 passing.
 - `tests/test_target_audit.py`: 2/2 → 7/7 passing.
+- `tests/test_trust_engine.py`: 9/9 → 11/11 passing.
 - Frontend production build: clean (one pre-existing bundle-size advisory,
   not a defect — not touched).
 - Live API smoke test: paper-reproduction workspace creation, address
@@ -212,14 +237,26 @@ not a bug.
   unsupported-chain) plus a valid-Bitcoin control upload — all exercised
   against the actual running FastAPI backend over HTTP, not just unit tests.
 
+## Notable non-bug finding
+
+The trust-policy engine (`themis/trust/`) is generic and fully tested in
+isolation, but `analysis.drift()` — reproducing the paper's four
+ransomware-revenue conditions — is currently its *only* real caller
+anywhere in the codebase. PART X's "for arbitrary uploads: report surviving
+claims and coverage" (applying a trust-rule policy to any ingested
+dataset, not just the bundled revenue task) is not wired up yet. Not a bug
+— the engine was clearly built generic on purpose (STEP 20/21's docstrings
+say as much) — but a real gap between what the architecture supports and
+what's reachable today.
+
 ## Explicitly not yet covered
 
 External public dataset discovery/download and compatibility testing,
-frontend browser-automation E2E, deeper taxonomy/polarity/hierarchy
-adversarial tests, target-audit isolation stress tests beyond what code
-reading confirmed, persistence/restart testing (the workspace store is
-in-memory by design — already labeled with an `occam:` comment noting the
-upgrade path, not a bug), per-source confidence-semantics research, and the
-full malicious-input matrix (formula-injection *labels* at ingestion time
-rather than export, HTML/JS strings, path-like strings, right-to-left text,
-etc.) beyond what was spot-checked.
+frontend browser-automation E2E, target-audit isolation stress tests beyond
+what code reading and the Part P cases confirmed, persistence/restart
+testing (the workspace store is in-memory by design — already labeled with
+an `occam:` comment noting the upgrade path, not a bug), per-source
+confidence-semantics research, and the full malicious-input matrix
+(formula-injection *labels* at ingestion time rather than export, HTML/JS
+strings, path-like strings, right-to-left text, etc.) beyond what was
+spot-checked.
