@@ -53,6 +53,16 @@ class TestBitcoinAddress(unittest.TestCase):
         self.assertFalse(a.validate_address(
             "bc1p5d7rjq7g6rdk2yhzks9smlaqtedr4dekq08ge8ztwac72sfr9rusn5pxqu"))
 
+    def test_all_uppercase_segwit_accepted(self):
+        # BIP-173: a bech32 string may be entirely lowercase or entirely
+        # uppercase - both are valid, only *mixed* case is forbidden.
+        self.assertTrue(a.validate_address("BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4"))
+
+    def test_mixed_case_segwit_rejected(self):
+        addr = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
+        mixed = addr[:5] + addr[5:].upper()
+        self.assertFalse(a.validate_address(mixed))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -430,6 +430,20 @@ class TestBootstrap(Base):
         hi = analysis.bootstrap(self.c, n_boot=50, upper_bound=True)
         self.assertGreater(hi["n_clusters"], lo["n_clusters"])
 
+    def test_empty_corpus_does_not_crash_with_or_without_numpy(self):
+        # K=0 clusters: the numpy path computed 1.0/K directly (a
+        # ZeroDivisionError before numpy ever ran), while the no-numpy path
+        # avoided it by accident (range(K) with K=0 never calls
+        # randrange(K)). Every stat must degrade to None, not raise,
+        # regardless of which backend is active in this environment.
+        empty = Corpus([], full=True)
+        b = analysis.bootstrap(empty, n_boot=20)
+        self.assertEqual(b["n_clusters"], 0)
+        for s in b["stats"].values():
+            self.assertIsNone(s["point"])
+            self.assertIsNone(s["ci_low"])
+            self.assertIsNone(s["ci_high"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -225,8 +225,9 @@ raising).
 
 ## Test suite state
 
-- Backend: **87/87 → 119/119** passing (32 new tests across 6 files, one new
-  file `tests/test_api_export.py`).
+- Backend: **87/87 → 122/122** passing (35 new tests across 7 files, one new
+  file `tests/test_api_export.py`). `numpy` is now installed in the venv,
+  so this count includes the bootstrap suite running against both backends.
 - Paper regression (`tests/test_paper_claims.py`): 42/42 → 49/49 passing.
 - `tests/test_target_audit.py`: 2/2 → 7/7 passing.
 - `tests/test_trust_engine.py`: 9/9 → 11/11 passing.
@@ -263,6 +264,35 @@ of raising, so ingestion degrades to "no usable address column found"
 `test_zero_byte_upload_does_not_crash` (already worked, confirmed no
 regression)
 
+### 12. Cluster bootstrap crashed on an empty corpus when numpy is installed
+**File:** `themis/analysis.py` (`bootstrap`)
+**Root cause:** with zero clusters (`K=0`, e.g. an empty corpus), the numpy
+path computed `p = _np.full(K, 1.0 / K)` — a plain Python `1.0 / 0`,
+`ZeroDivisionError`, before any numpy call. The pure-Python fallback path
+avoided this *by accident*: `for _ in range(K)` with `K=0` never executes,
+so `rng.randrange(K)` is never called and `vals` ends up correctly empty.
+Two backends of the same function silently disagreed on whether this
+crashes.
+**How found:** numpy was not installed anywhere in this environment for
+the whole session up to this point (`themis bootstrap` had only ever been
+exercised via the pure-Python fallback), which is itself a gap worth
+recording — installed it specifically to cross-check the bootstrap
+implementation, and this is what that check turned up.
+**Fix:** explicit `if K == 0: vals = []` guard ahead of the numpy/no-numpy
+branch, stating directly what the no-numpy path already did implicitly.
+**Test:** `tests/test_paper_claims.py::TestBootstrap::test_empty_corpus_does_not_crash_with_or_without_numpy`
+**Also confirmed (not a bug, but worth recording):** with numpy now
+installed, re-ran `themis bootstrap --both` and the full suite — every
+existing bootstrap test passes against the numpy-accelerated path too.
+Point estimates (deterministic) match the pure-Python run exactly;
+confidence intervals differ slightly between backends even with the same
+`seed=42`, because `random.Random` (Mersenne Twister) and
+`numpy.random.default_rng` (PCG64) are different PRNG algorithms — seeding
+only guarantees reproducibility *within* one backend, not bit-identical
+results across both. Both intervals bracket the point estimate sensibly
+and both show the upper bound's interval narrower than the lower bound's,
+as the paper's methodology requires.
+
 ## API hardening sweep (also confirmed correct, no fix needed)
 
 Invalid/unknown `analysis_id` returns a clean 404 with no stack trace on
@@ -275,6 +305,18 @@ literal constants). An invalid `use_reference` form value gets FastAPI's
 own built-in 422 validation error, not a crash. Tests:
 `tests/test_api_export.py::TestUploadInputValidation::test_unknown_export_name_is_a_clean_404`,
 `test_unknown_analysis_id_is_a_clean_404_everywhere`.
+
+## Frontend / address-validation confirmations (no fix needed)
+
+- Grepped the entire frontend for `dangerouslySetInnerHTML`/`innerHTML`/`eval`:
+  none exist. Every attacker-controllable field (raw labels, etc.) renders
+  through ordinary JSX text interpolation, which React auto-escapes — no
+  XSS path found.
+- Bech32 case handling (`themis/chains/bitcoin.py`) already correctly
+  accepts all-lowercase and all-uppercase addresses and rejects mixed-case
+  per BIP-173, but had no test for either — added
+  `tests/test_bitcoin_adapter.py::test_all_uppercase_segwit_accepted` and
+  `test_mixed_case_segwit_rejected`.
 
 ## Notable non-bug finding
 

@@ -261,7 +261,16 @@ def bootstrap(corpus, n_boot=None, seed=None, confidence_level=None, upper_bound
         cd = [sum(1 for i in clusters[k] if den_f(i)) for k in keys]
         pt_n, pt_d = sum(cn), sum(cd)
         K = len(keys)
-        if _np is not None:
+        if K == 0:
+            # nothing to resample (an empty corpus/cluster set) - every
+            # resample would have an empty denominator anyway, so this
+            # just states that directly instead of computing multinomial
+            # weights over zero clusters, which is a ZeroDivisionError
+            # (1.0 / K) rather than the empty-`vals` result the no-numpy
+            # path already reaches here by the loop over `range(K)` never
+            # running.
+            vals = []
+        elif _np is not None:
             # multinomial cluster weights: same estimator, no index materialising,
             # which keeps the upper bound (hundreds of thousands of clusters) fast
             rs = _np.random.default_rng(seed)
