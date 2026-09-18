@@ -648,5 +648,110 @@ class TestBootstrap(Base):
             self.assertIsNone(s["ci_high"])
 
 
+class _FakeCorpus:
+    """anchor_validation only reads corpus.by_addr - a bare stand-in lets
+    tests set each claim's `root` directly, the same way test_independence.py
+    bypasses Corpus(...) (whose constructor overwrites `root` via the real
+    source registry) to control provenance roots explicitly."""
+
+    def __init__(self, by_addr):
+        self.by_addr = by_addr
+
+
+def _claim(source, root, canon):
+    return dict(source=source, root=root, canon=canon)
+
+
+class TestAnchorValidation(unittest.TestCase):
+    """Sec 4.3/4.7 - an anchor can only be validated by a claim whose
+    resolved provenance ROOT differs from the anchor's own declared root,
+    not merely by a differently-named dataset."""
+
+    def test_literal_self_validation_excluded(self):
+        # same source, same root as the anchor: not independent
+        c = _FakeCorpus({"1A": [_claim("ofac_program", "ofac_sdn", "sanctioned")]})
+        anchors = {"1A": ("sanctioned", "ofac_sdn")}
+        r = analysis.anchor_validation(c, anchors=anchors)
+        self.assertEqual(r["usable_anchors"], 0)
+        self.assertEqual(r["excluded_self_root_claims"], 1)
+        self.assertEqual(r["per_source"], {})
+
+    def test_same_root_different_dataset_name_excluded(self):
+        # THE naive-check trap: a differently-named source whose claim
+        # still resolves to the anchor's own root must not count as
+        # independent just because the dataset names differ.
+        c = _FakeCorpus({"1A": [_claim("schnoering", "ofac_sdn", "sanctioned")]})
+        anchors = {"1A": ("sanctioned", "ofac_sdn")}
+        r = analysis.anchor_validation(c, anchors=anchors)
+        self.assertEqual(r["usable_anchors"], 0)
+        self.assertEqual(r["excluded_self_root_claims"], 1)
+
+    def test_independent_root_counted_as_exact(self):
+        c = _FakeCorpus({"1A": [_claim("tagpack", "tagpack_own", "mixer")]})
+        anchors = {"1A": ("mixer", "ofac_sdn")}
+        r = analysis.anchor_validation(c, anchors=anchors)
+        self.assertEqual(r["usable_anchors"], 1)
+        self.assertEqual(r["per_source"]["tagpack"]["n"], 1)
+        self.assertEqual(r["per_source"]["tagpack"]["exact"], 1)
+        self.assertTrue(r["per_source"]["tagpack"]["estimable"])
+
+    def test_licit_illicit_conflict_counted_not_exact(self):
+        c = _FakeCorpus({"1A": [_claim("tagpack", "tagpack_own", "exchange")]})
+        anchors = {"1A": ("mixer", "ofac_sdn")}  # mixer=illicit, exchange=licit
+        r = analysis.anchor_validation(c, anchors=anchors)
+        v = r["per_source"]["tagpack"]
+        self.assertEqual(v["n"], 1)
+        self.assertEqual(v["exact"], 0)
+        self.assertEqual(v["conflicting"], 1)
+
+    def test_hierarchical_refinement_counted_separately(self):
+        c = _FakeCorpus({"1A": [_claim("tagpack", "tagpack_own", "illicit_unspec")]})
+        anchors = {"1A": ("mixer", "ofac_sdn")}
+        r = analysis.anchor_validation(c, anchors=anchors)
+        v = r["per_source"]["tagpack"]
+        self.assertEqual(v["hierarchical"], 1)
+        self.assertEqual(v["exact"], 0)
+
+    def test_uninterpretable_claim_label_is_incomparable_not_a_denominator_hit(self):
+        c = _FakeCorpus({"1A": [_claim("tagpack", "tagpack_own", "unknown")]})
+        anchors = {"1A": ("mixer", "ofac_sdn")}
+        r = analysis.anchor_validation(c, anchors=anchors)
+        self.assertEqual(r["usable_anchors"], 1)
+        # the claim existed (independent root) but never canonicalized, so
+        # it must not inflate the accuracy denominator - reported as
+        # touched-but-not-estimable, distinct from a source never seen at all
+        v = r["per_source"]["tagpack"]
+        self.assertEqual(v["n"], 0)
+        self.assertEqual(v["incomparable"], 1)
+        self.assertFalse(v["estimable"])
+
+    def test_uninterpretable_ground_truth_label_is_flagged(self):
+        c = _FakeCorpus({"1A": [_claim("tagpack", "tagpack_own", "mixer")]})
+        anchors = {"1A": ("not-a-real-category", "ofac_sdn")}
+        r = analysis.anchor_validation(c, anchors=anchors)
+        self.assertEqual(r["usable_anchors"], 1)
+        self.assertEqual(r["uninterpretable_ground_truth_label"], 1)
+        self.assertEqual(r["per_source"], {})
+
+    def test_no_independent_claims_anywhere_is_not_estimable(self):
+        c = _FakeCorpus({"1A": [_claim("ofac_program", "ofac_sdn", "sanctioned")]})
+        anchors = {"1A": ("sanctioned", "ofac_sdn")}
+        r = analysis.anchor_validation(c, anchors=anchors)
+        self.assertFalse(r["estimable"])
+        self.assertEqual(r["usable_anchors"], 0)
+
+    def test_wilson_interval_brackets_the_point_estimate(self):
+        by_addr = {f"addr{i}": [_claim("tagpack", f"root{i}", "mixer" if i < 8 else "exchange")]
+                   for i in range(10)}
+        c = _FakeCorpus(by_addr)
+        anchors = {f"addr{i}": ("mixer", "ofac_sdn") for i in range(10)}
+        r = analysis.anchor_validation(c, anchors=anchors)
+        v = r["per_source"]["tagpack"]
+        self.assertEqual(v["n"], 10)
+        self.assertAlmostEqual(v["accuracy"], 0.8)
+        self.assertLess(v["ci_low"], v["accuracy"])
+        self.assertGreater(v["ci_high"], v["accuracy"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

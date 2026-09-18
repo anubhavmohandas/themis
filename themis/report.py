@@ -44,7 +44,7 @@ def audit_trail(input_path=None, parameters: dict | None = None, warnings: list 
 
 
 def build_corpus_report(corpus, include_bootstrap: bool = False, bootstrap_kwargs: dict | None = None,
-                        input_path=None, analysis_as_of_date=None) -> dict:
+                        include_anchors: bool = False, input_path=None, analysis_as_of_date=None) -> dict:
     """STEP 27 - the canonical result for a corpus already fully loaded
     (bundled sample or a full local build): every figure `themis audit` /
     `drift` print, assembled once.
@@ -60,6 +60,7 @@ def build_corpus_report(corpus, include_bootstrap: bool = False, bootstrap_kwarg
     kappa = analysis.cohen_kappa(corpus)
     fresh = analysis.freshness(corpus.claims, as_of=as_of)
     uncertainty = analysis.bootstrap(corpus, **(bootstrap_kwargs or {})) if include_bootstrap else None
+    anchors = analysis.anchor_validation(corpus) if include_anchors else None
 
     validation = dict(n_input=corpus.n_claims, n_valid=corpus.n_claims,
                       n_rejected=0, rejected_by_reason={})
@@ -75,7 +76,7 @@ def build_corpus_report(corpus, include_bootstrap: bool = False, bootstrap_kwarg
                              sources=corpus.source_sizes()),
         agreement=agreement, independence=independence, kappa=kappa,
         freshness=fresh, analysis_as_of_date=str(as_of) if as_of else None,
-        uncertainty=uncertainty, reliability_profile=profile,
+        uncertainty=uncertainty, anchor_validation=anchors, reliability_profile=profile,
         limitations=limitations, audit_trail=audit_trail(input_path=input_path),
     )
 

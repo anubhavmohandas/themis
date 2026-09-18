@@ -171,6 +171,33 @@ def cmd_bootstrap(args):
         json.dump(out, open(args.json, "w"), indent=1)
 
 
+def cmd_anchors(args):
+    c = load(args)
+    r = analysis.anchor_validation(c)
+    rule("ANCHOR VALIDATION  (Sec 4.3/4.7 - open reference set, provenance-aware)")
+    print(f"  {r['anchors_total']:,} anchors -> {r['usable_anchors']:,} usable "
+          f"({100 * r['coverage']:.1f}% coverage)")
+    print(f"  {r['excluded_self_root_claims']:,} claims excluded as self/same-root "
+          f"(would overstate independent validation if matched by dataset name instead)")
+    if r["uninterpretable_ground_truth_label"]:
+        print(f"  {r['uninterpretable_ground_truth_label']:,} usable anchors have a "
+              f"ground-truth label the taxonomy can't canonicalize")
+    print(f"\n  {'source':<20}{'n':>8}{'exact':>8}{'accuracy':>11}{'95% CI':>18}")
+    for src, v in sorted(r["per_source"].items(), key=lambda kv: -(kv[1]["n"] or 0)):
+        if not v["estimable"]:
+            print(f"  {src:<20}{'not estimable (n=0 independent claims)':>45}")
+            continue
+        print(f"  {src:<20}{v['n']:>8,}{v['exact']:>8,}{100*v['accuracy']:>10.1f}%"
+              f"   [{100*v['ci_low']:5.1f}, {100*v['ci_high']:5.1f}]")
+    if not r["estimable"]:
+        print(_c("\n  source-level accuracy is not estimable: no source has an "
+                 "independent (non-self-root) claim on any usable anchor", YEL))
+    print(textwrap.fill("\n" + r["limitations"], 76, subsequent_indent="  "))
+    if args.json:
+        json.dump(r, open(args.json, "w"), indent=1)
+        print(f"\nwritten {args.json}")
+
+
 def cmd_taxonomy(args):
     rule("RELIABILITY TAXONOMY")
     print("  tiers (ordered):")
@@ -278,6 +305,7 @@ def cmd_report(args):
     (JSON export, future UI) reads from."""
     c = load(args)
     res = _report.build_corpus_report(c, include_bootstrap=args.bootstrap,
+                                      include_anchors=args.anchors,
                                       input_path=args.observations)
     rule("THEMIS REPORT")
     ds = res["dataset_summary"]
@@ -327,10 +355,13 @@ def main(argv=None):
                         "not the canonical/paper path")
     b.set_defaults(fn=cmd_bootstrap)
 
+    sub.add_parser("anchors", help="provenance-aware validation against the open anchor set").set_defaults(fn=cmd_anchors)
+
     sub.add_parser("sources", help="print the source registry").set_defaults(fn=cmd_sources)
 
     r = sub.add_parser("report", help="canonical single-object report + audit trail")
     r.add_argument("--bootstrap", action="store_true", help="include cluster-bootstrap intervals")
+    r.add_argument("--anchors", action="store_true", help="include anchor validation (Sec 4.3/4.7)")
     r.add_argument("--out", help="write the report JSON here (same as --json)")
     r.set_defaults(fn=cmd_report)
 

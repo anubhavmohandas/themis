@@ -1,6 +1,6 @@
 """The four analyses: agreement, independence, drift, and the cluster bootstrap."""
 from __future__ import annotations
-import collections, random
+import collections, random, statistics
 from . import taxonomy, provenance, config_io
 from .trust import policy as trust_policy, drift as trust_drift
 from .tasks import ransomware_revenue as _revenue_task
@@ -321,6 +321,116 @@ def bootstrap(corpus, n_boot=None, seed=None, confidence_level=None, upper_bound
                 "corpus-wide rates omitted on the bundled sample; conditional "
                 "rates are exact. Use --observations with a full build to "
                 "reproduce the paper's multi-dataset-rate interval.")
+
+
+def _wilson_interval(successes: int, n: int, confidence_level: float) -> tuple[float, float]:
+    """Wilson score interval - defensible at any n (including the very small
+    per-source n an anchor set like this produces), unlike a normal
+    approximation. `z` is derived from `confidence_level` via the standard
+    normal quantile rather than a hardcoded 1.96, so a config change to the
+    confidence level doesn't require a matching code change."""
+    z = statistics.NormalDist().inv_cdf(1 - (1 - confidence_level) / 2)
+    p = successes / n
+    denom = 1 + z * z / n
+    center = (p + z * z / (2 * n)) / denom
+    margin = z * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5) / denom
+    return max(0.0, center - margin), min(1.0, center + margin)
+
+
+def anchor_validation(corpus, anchors=None, confidence_level=None) -> dict:
+    """Provenance-aware validation against the paper's open-anchor reference
+    set (Sec 4.3/4.7: `demo_data/ground_truth.csv`) - operationalizes what
+    that section previously only argued qualitatively.
+
+    `ground_truth_source` in that file records a provenance ROOT
+    (`ofac_sdn`, `watchyourback_manual`), not a corpus source id. A claim
+    can only validate an anchor if its own resolved root differs from the
+    anchor's declared root - matching by root, not by dataset name, is what
+    correctly excludes both literal self-validation (the same source that
+    produced the anchor) and same-root validation (a different-named source
+    whose claim descends from the same root the anchor came from, e.g. a
+    schnoering claim inherited from `ofac_sdn` "confirming" an OFAC anchor).
+    A naive name-based check misses the second case entirely.
+
+    A claim whose own raw label never canonicalized contributes no usable
+    opinion (same rule as `taxonomy.classify_address`) and is counted as
+    `incomparable`, not folded into a source's accuracy denominator.
+    """
+    anchors = anchors if anchors is not None else corpus.ground_truth()
+    confidence_level = (_BOOT_CFG.get("confidence_level", 0.95)
+                        if confidence_level is None else confidence_level)
+
+    usable_anchors = excluded_self_root_claims = uninterpretable_ground_truth = 0
+    root_counts = []
+    outcome_totals = collections.Counter()
+    per_source = collections.defaultdict(collections.Counter)
+
+    for addr, (label, anchor_root) in anchors.items():
+        claims = corpus.by_addr.get(addr, [])
+        self_claims = [c for c in claims if c["root"] == anchor_root]
+        indep_claims = [c for c in claims if c["root"] != anchor_root]
+        excluded_self_root_claims += len(self_claims)
+        if not indep_claims:
+            continue
+        usable_anchors += 1
+        root_counts.append(len({c["root"] for c in indep_claims
+                                if not provenance.is_unresolved(c["root"])}))
+
+        gt_canon = taxonomy.canonicalize_category(label)
+        if gt_canon is None:
+            uninterpretable_ground_truth += 1
+            continue
+        anchor_claim = dict(source="__anchor__", canon=gt_canon)
+        for c in indep_claims:
+            outcome = taxonomy.classify_address(
+                [anchor_claim, dict(source=c["source"], canon=c["canon"])])
+            outcome_totals[outcome] += 1
+            src = per_source[c["source"]]
+            if outcome == "incomparable":
+                src["incomparable"] += 1
+                continue
+            src["n"] += 1
+            src[outcome] += 1
+
+    per_source_report = {}
+    for src, counts in per_source.items():
+        n = counts["n"]
+        if n == 0:
+            per_source_report[src] = dict(
+                n=0, incomparable=counts["incomparable"],
+                accuracy=None, ci_low=None, ci_high=None, estimable=False)
+            continue
+        exact = counts["exact"]
+        ci_low, ci_high = _wilson_interval(exact, n, confidence_level)
+        per_source_report[src] = dict(
+            n=n, exact=exact,
+            hierarchical=counts["hierarchical refinement"],
+            conflicting=counts["entity-type conflict"] + counts["licit/illicit conflict"],
+            incomparable=counts["incomparable"],
+            accuracy=exact / n, ci_low=ci_low, ci_high=ci_high, estimable=True)
+
+    return dict(
+        anchors_total=len(anchors),
+        usable_anchors=usable_anchors,
+        coverage=usable_anchors / len(anchors) if anchors else None,
+        excluded_self_root_claims=excluded_self_root_claims,
+        uninterpretable_ground_truth_label=uninterpretable_ground_truth,
+        independent_provenance_roots=dict(sorted(collections.Counter(root_counts).items())),
+        outcome_totals=dict(outcome_totals),
+        per_source=per_source_report,
+        confidence_level=confidence_level,
+        estimable=any(v["estimable"] for v in per_source_report.values()),
+        limitations=(
+            "This reference set is small (see anchors_total) and concentrated in a "
+            "few sources; a per-source figure here measures agreement with this "
+            "open anchor set, not verified accuracy against ground truth for the "
+            "corpus as a whole. estimable=False (n=0) means either the source was "
+            "never seen on a usable anchor, or every claim it made there never "
+            "canonicalized - neither is an accuracy of zero. Root resolution can "
+            "only be as correct as the source registry's declared provenance - "
+            "see config/sources/"
+            "watchyourback.yml's confidence_semantics for a known case where a "
+            "source's declared root may itself be too coarse."))
 
 
 # ------------------------------------------------------------- STEP 13 freshness
