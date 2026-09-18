@@ -192,6 +192,57 @@ def analysis_summary(analysis_id: str):
     return dict(meta=ws.to_meta(), result=ws.result, audit_trail=ws.audit_trail)
 
 
+#: occam: page size is capped, not client-controlled, so a request can
+#: never pull the whole corpus through this endpoint regardless of what
+#: `limit` asks for.
+_MAX_CLAIMS_PAGE = 500
+
+
+@app.get("/api/analysis/{analysis_id}/claims")
+def analysis_claims(analysis_id: str, offset: int = 0, limit: int = 100,
+                    source: str | None = None, canon: str | None = None,
+                    evidence_tier: str | None = None, currency: str | None = None):
+    """STEP - a bounded, filterable claims page. Never the full claim list
+    (that's what /export/normalized_claims.csv is for) - a frontend table
+    must page through this, not render the whole corpus at once.
+
+    occam: filters here are per-*claim* fields only (cheap - a dict lookup
+    or one config call per row). Filtering by conflict type or provenance
+    status is a per-*address* property (needs the same claims-sharing-an-
+    address grouping analysis.agreement()/target_audit already do) and is
+    deliberately not built here - add it if/when this endpoint needs it,
+    as a second pass over just the current page's addresses rather than
+    the whole corpus.
+    """
+    ws = _get_workspace(analysis_id)
+    as_of = _as_of_date(ws)
+    claims = ws.claims
+    if source:
+        claims = [c for c in claims if c.get("source") == source]
+    if canon:
+        claims = [c for c in claims if c.get("canon") == canon]
+    if evidence_tier:
+        claims = [c for c in claims if taxonomy.tier_of(c) == evidence_tier]
+    if currency:
+        # currency_flags() returns [] for "current" (a date exists and
+        # isn't stale) - "current" is this endpoint's name for that, since
+        # an empty-list flag isn't itself a filterable string value.
+        def _currency_status(c):
+            flags = taxonomy.currency_flags(c, today=as_of)
+            return flags[0] if flags else "current"
+        claims = [c for c in claims if _currency_status(c) == currency]
+    total = len(claims)
+    limit = max(1, min(limit, _MAX_CLAIMS_PAGE))
+    offset = max(0, offset)
+    ordered = sorted(claims, key=lambda c: (c["address"], c.get("source", "")))
+    page = ordered[offset:offset + limit]
+    return dict(total=total, offset=offset, limit=limit, n_returned=len(page),
+               claims=[dict(address=c["address"], source=c["source"], raw_label=c.get("raw_label", ""),
+                            canon=c.get("canon"), polarity=c.get("polarity"),
+                            evidence_tier=taxonomy.tier_of(c), lastmod=c.get("lastmod", ""))
+                      for c in page])
+
+
 @app.get("/api/analysis/{analysis_id}/address/{address:path}")
 def analysis_address(analysis_id: str, address: str):
     ws = _get_workspace(analysis_id)

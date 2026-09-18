@@ -126,6 +126,48 @@ class TestUploadInputValidation(unittest.TestCase):
             r = self.client.get(f"/api/analysis/does-not-exist{path}")
             self.assertEqual(r.status_code, 404, path)
 
+    def test_claims_endpoint_paginates_and_never_returns_the_whole_corpus(self):
+        r = self.client.post("/api/analysis/paper")
+        aid = r.json()["analysis_id"]
+
+        page = self.client.get(f"/api/analysis/{aid}/claims", params={"offset": 0, "limit": 5})
+        self.assertEqual(page.status_code, 200)
+        body = page.json()
+        self.assertEqual(body["n_returned"], 5)
+        self.assertEqual(len(body["claims"]), 5)
+        self.assertGreater(body["total"], 5)   # the real corpus, not a stub
+
+        # a client asking for an enormous limit is still capped, not honored
+        huge = self.client.get(f"/api/analysis/{aid}/claims", params={"limit": 10_000_000})
+        self.assertLessEqual(huge.json()["n_returned"], 500)
+
+    def test_claims_endpoint_ordering_is_stable_across_requests(self):
+        r = self.client.post("/api/analysis/paper")
+        aid = r.json()["analysis_id"]
+        first = self.client.get(f"/api/analysis/{aid}/claims", params={"offset": 0, "limit": 10}).json()
+        second = self.client.get(f"/api/analysis/{aid}/claims", params={"offset": 0, "limit": 10}).json()
+        self.assertEqual(first["claims"], second["claims"])
+        # a later page's first row is not a page-1 row (no gap/overlap at the boundary)
+        next_page = self.client.get(f"/api/analysis/{aid}/claims", params={"offset": 10, "limit": 10}).json()
+        self.assertNotIn(next_page["claims"][0]["address"], {c["address"] for c in first["claims"]})
+
+    def test_claims_endpoint_filters_by_source_and_evidence_tier(self):
+        r = self.client.post("/api/analysis/paper")
+        aid = r.json()["analysis_id"]
+
+        by_source = self.client.get(f"/api/analysis/{aid}/claims",
+                                    params={"source": "watchyourback", "limit": 500}).json()
+        self.assertEqual(by_source["total"], 309)   # manifest.json's declared count for this source
+        self.assertTrue(all(c["source"] == "watchyourback" for c in by_source["claims"]))
+
+        by_tier = self.client.get(f"/api/analysis/{aid}/claims",
+                                  params={"evidence_tier": "verified", "limit": 5}).json()
+        self.assertTrue(all(c["evidence_tier"] == "verified" for c in by_tier["claims"]))
+
+        combined = self.client.get(f"/api/analysis/{aid}/claims",
+                                   params={"source": "watchyourback", "canon": "does-not-exist"}).json()
+        self.assertEqual(combined["total"], 0)
+
     def test_hostile_filenames_do_not_crash_and_never_reach_a_csv_cell(self):
         # Part J/G: the uploaded filename is never used to build a
         # filesystem path (tempfile.mkstemp ignores it entirely) and is
