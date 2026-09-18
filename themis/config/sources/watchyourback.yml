@@ -11,7 +11,24 @@ license: >
   repo currently has no LICENSE file of its own - a separate, smaller
   finding worth the author's attention alongside the Elliptic++ one. See
   HARDENING_LOG.md.
-confidence_semantics: "manually verified per source declaration"
+confidence_semantics: >
+  Manually verified per source declaration - accurate for most of this
+  source's claims. But 87 of 309 (28.2%, checked 2026-09-18 against
+  github.com/cybersec-code/watchyourback's real current data/tagging/
+  btc_resolv.csv - an exact 87/87 match, so this is upstream's own data,
+  not a THEMIS artifact) are marked with a leading "#" in that file and
+  cite a source external to WatchYourBack's own graph-exploration
+  methodology (US Treasury OFAC sanctions pages, a threat-intel blog, a
+  Telegram channel) rather than WatchYourBack's own research, which every
+  non-"#" line does. The convention is undocumented upstream (no README
+  mention, an uninformative single git commit), but this is strong
+  circumstantial evidence these 87 are a bolted-on reference batch, not
+  WatchYourBack's own verified output - "manually verified per source
+  declaration" likely credits the wrong methodology for them specifically.
+  Also: THEMIS currently ingests the literal "#" as part of the address
+  string for these 87, breaking cross-source address matching for them.
+  Neither issue is fixed here - see HARDENING_LOG.md "WatchYourBack's
+  #-prefixed addresses..." for full detail and recommendations.
 known_dependencies: []
 
 provenance:
