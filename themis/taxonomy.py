@@ -31,10 +31,50 @@ for _cat, _node in CATEGORIES.items():
         ALIASES[str(_a).lower()] = _cat
 
 
+#: separators that mark a "type:entity"-shaped structured label (STEP: see
+#: split_structured_label). Config-driven so a new source's own convention
+#: doesn't need a code change.
+STRUCTURED_LABEL_SEPARATORS = _cfg.thresholds.get("structured_label_separators", [":"])
+
+
+def split_structured_label(raw: str) -> tuple[str | None, str | None]:
+    """If `raw` doesn't canonicalize whole but looks like "type:entity" (or
+    another configured separator) and the type-shaped prefix *does*
+    canonicalize, return (category, entity). Otherwise (None, None) - a
+    structured-looking string whose prefix isn't a known alias stays
+    unmapped rather than guessed, exactly like a plain unmapped label
+    (e.g. `provenance.py`'s `_after_colon`, the same split THEMIS already
+    uses to decode `prov_family` values).
+
+    Only the first configured separator actually present in `raw` is tried,
+    and only the text before it - "a:b:c" is (category-of("a"), "b:c"), not
+    recursively re-split. A colon inside a URL or free text never matches
+    unless the text before it happens to itself be a declared alias, which
+    is the same protection whole-string lookup already has.
+    """
+    raw = (raw or "").strip()
+    if not raw or ALIASES.get(raw.lower()) is not None:
+        return None, None   # already handled by (or would be, in) whole-string lookup
+    for sep in STRUCTURED_LABEL_SEPARATORS:
+        if sep in raw:
+            prefix, entity = raw.split(sep, 1)
+            cat = ALIASES.get(prefix.strip().lower())
+            if cat is not None:
+                return cat, entity.strip()
+            return None, None
+    return None, None
+
+
 def canonicalize_category(raw: str) -> str | None:
     """Map free-text label text to a canonical category via the taxonomy's
-    declared aliases. Returns None - never a guess - when nothing matches."""
-    return ALIASES.get((raw or "").strip().lower())
+    declared aliases, falling back to a structured "type:entity" label's
+    type-shaped prefix (STEP: split_structured_label). Returns None - never
+    a guess - when nothing matches either way."""
+    hit = ALIASES.get((raw or "").strip().lower())
+    if hit is not None:
+        return hit
+    cat, _entity = split_structured_label(raw)
+    return cat
 
 
 def ancestors(cat: str) -> set:

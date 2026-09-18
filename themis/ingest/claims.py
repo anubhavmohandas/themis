@@ -42,8 +42,15 @@ def build_claim(row: dict, mapping: dict, source_id: str, default_heuristic: str
     # sitting right there. Category is tried first as the more deliberately-
     # classified field when both are mapped; label is the fallback, keeping
     # today's behavior unchanged for the common single-column case.
-    canon = (taxonomy.canonicalize_category(raw_category)
-            or taxonomy.canonicalize_category(raw_label) or "unknown")
+    cat_from_category = taxonomy.canonicalize_category(raw_category)
+    cat_from_label = None if cat_from_category else taxonomy.canonicalize_category(raw_label)
+    canon = cat_from_category or cat_from_label or "unknown"
+    # a "type:entity"-shaped label (STEP: taxonomy.split_structured_label)
+    # canonicalizes via its prefix; the entity half is real information
+    # (who, not what) that the category alone discards, so it's kept here
+    # rather than silently dropped.
+    winning_text = raw_category if cat_from_category else (raw_label if cat_from_label else "")
+    _, structured_entity = taxonomy.split_structured_label(winning_text)
     declared_source = (row.get(mapping.get("source")) or "").strip() if mapping.get("source") else ""
     return {
         "claim_id": uuid.uuid4().hex,
@@ -66,7 +73,7 @@ def build_claim(row: dict, mapping: dict, source_id: str, default_heuristic: str
         "confidence_normalized": None,
         "heuristic": default_heuristic,
         "subcat": (row.get(mapping.get("category")) or "").strip() if mapping.get("category") else "",
-        "notes": "",
+        "notes": f"structured_label_entity={structured_entity}" if structured_entity else "",
     }
 
 

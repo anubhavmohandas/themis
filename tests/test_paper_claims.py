@@ -468,6 +468,73 @@ class TestTaxonomy(unittest.TestCase):
         self.assertEqual(claim["polarity"], "illicit")
 
 
+class TestStructuredLabels(unittest.TestCase):
+    """Sec 3.2 - a "type:entity"-shaped raw label (watchyourback's own
+    `state-sponsored:lazarus`, `onlinewallet:flexcoin`, etc.) canonicalizes
+    via its type-shaped prefix when the whole string doesn't already match -
+    quantified safe in the reconciliation loop (+40 addresses out of
+    "incomparable", zero effect on the frozen bundled corpus)."""
+
+    def test_known_prefix_with_entity(self):
+        self.assertEqual(taxonomy.canonicalize_category("onlinewallet:flexcoin"), "wallet_service")
+        cat, entity = taxonomy.split_structured_label("onlinewallet:flexcoin")
+        self.assertEqual(cat, "wallet_service")
+        self.assertEqual(entity, "flexcoin")
+
+    def test_theft_prefix_needed_no_new_alias(self):
+        # "theft" already aliases to `hack` on its own; only the missing
+        # split step blocked "theft:flexcoin-hack" from ever reaching it.
+        self.assertEqual(taxonomy.canonicalize_category("theft:flexcoin-hack"), "hack")
+
+    def test_unknown_prefix_with_entity_stays_unmapped(self):
+        # the prefix itself must be a declared alias - never a guess just
+        # because the string has the right shape.
+        self.assertIsNone(taxonomy.canonicalize_category("cryptolocker:variant-9"))
+        self.assertEqual(taxonomy.split_structured_label("cryptolocker:variant-9"), (None, None))
+
+    def test_multiple_separators_only_first_segment_is_the_prefix(self):
+        # "a:b:c" is (category-of("a"), "b:c"), not recursively re-split.
+        cat, entity = taxonomy.split_structured_label("state-sponsored:lazarus:unit180")
+        self.assertEqual(cat, "illicit_unspec")
+        self.assertEqual(entity, "lazarus:unit180")
+
+    def test_malformed_strings_do_not_crash(self):
+        for raw in ("", ":", "::::", ":lazarus", "onlinewallet:"):
+            self.assertEqual(taxonomy.split_structured_label(raw), (None, None) if raw != "onlinewallet:"
+                             else ("wallet_service", ""))
+
+    def test_plain_label_with_no_prefix_is_unaffected(self):
+        self.assertEqual(taxonomy.canonicalize_category("mixer"), "mixer")
+        self.assertEqual(taxonomy.split_structured_label("mixer"), (None, None))
+
+    def test_colon_inside_a_url_does_not_spuriously_match(self):
+        self.assertIsNone(taxonomy.canonicalize_category("http://example.com/wallet"))
+
+    def test_colon_inside_unrelated_free_text_does_not_spuriously_match(self):
+        self.assertIsNone(taxonomy.canonicalize_category("see note: unrelated commentary"))
+
+    def test_structured_entity_is_preserved_on_the_claim_not_discarded(self):
+        from themis.ingest.claims import build_claim
+        row = {"address": "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2", "label": "onlinewallet:flexcoin"}
+        mapping = {"address": "address", "label": "label"}
+        claim = build_claim(row, mapping, "test_structured_upload")
+        self.assertEqual(claim["canon"], "wallet_service")
+        self.assertEqual(claim["raw_label"], "onlinewallet:flexcoin")   # unchanged
+        self.assertEqual(claim["notes"], "structured_label_entity=flexcoin")
+
+    def test_frozen_bundled_corpus_is_unaffected(self):
+        # same proof pattern as the Elliptic++/darknet-market alias fixes:
+        # observations_sample.csv.gz's canon column is pre-baked and never
+        # recomputed from taxonomy.yml on load, so this only reaches a
+        # fresh ingest. TestAgreement.test_outcome_counts (unchanged) is
+        # the real proof; this just confirms canonicalize_category itself
+        # isn't called anywhere in Corpus loading.
+        import inspect
+        from themis import corpus as corpus_mod
+        src = inspect.getsource(corpus_mod)
+        self.assertNotIn("canonicalize_category", src)
+
+
 class TestHierarchyAdversarial(unittest.TestCase):
     """Part N - the bundled taxonomy.yml is only ever 2 levels deep (every
     specific category's parent is directly illicit_unspec/licit_unspec), so

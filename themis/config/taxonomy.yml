@@ -24,7 +24,12 @@ categories:
     # (STEP 23), never retroactively for the frozen paper corpus. See
     # HARDENING_LOG.md "Elliptic++'s class_1/class_2..." for the full
     # before/after check and why the bundled numbers are untouched.
-    aliases: [illicit, illicit-unspecified, illicit_unknown, class_1]
+    # state-sponsored: an actor-type descriptor, unspecified activity - same
+    # shape as illicit-unspecified above. Found as the prefix of watchyourback's
+    # structured `state-sponsored:lazarus`-shaped labels (see taxonomy.py's
+    # split_structured_label); the entity half is preserved on the claim, not
+    # discarded, since "state-sponsored" alone says nothing about which actor.
+    aliases: [illicit, illicit-unspecified, illicit_unknown, class_1, state-sponsored]
 
   licit_unspec:
     polarity: licit
@@ -45,7 +50,7 @@ categories:
   darknet_market:
     polarity: illicit
     parent: illicit_unspec
-    aliases: [darknet, dnm, darknet-market, darknet market]
+    aliases: [darknet, dnm, darknet-market, darknet market, tormarket]
 
   ponzi:
     polarity: illicit
@@ -86,6 +91,7 @@ categories:
   trafficking:
     polarity: illicit
     parent: illicit_unspec
+    aliases: [drugtrafficking]
 
   exchange:
     polarity: licit
@@ -118,7 +124,7 @@ categories:
   wallet_service:
     polarity: licit
     parent: licit_unspec
-    aliases: [hosted wallet, custodial_wallet]
+    aliases: [hosted wallet, custodial_wallet, onlinewallet]
 
   marketplace_legal:
     polarity: licit

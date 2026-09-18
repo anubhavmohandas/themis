@@ -24,6 +24,13 @@ bootstrap:
 # this value; the raw figure and undefined/zero pairs are still reported.
 kappa_substantial_threshold: 0.4
 
+# A "type:entity"-shaped raw label (e.g. watchyourback's
+# "onlinewallet:flexcoin") whose whole string doesn't already match a
+# taxonomy alias gets its prefix tried against the taxonomy too, split on
+# whichever of these appears first - never a guess, only fires when the
+# prefix itself is a known alias. See taxonomy.split_structured_label.
+structured_label_separators: [":"]
+
 # STEP 8B - how many of a source's largest provenance-field value groups get
 # shown in the console report.
 decode_report_limit: 12
