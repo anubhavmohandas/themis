@@ -3,7 +3,18 @@ display_name: "GraphSense TagPack"
 chain: bitcoin
 citation: "GraphSense TagPack collection"
 license: "see publisher"
-confidence_semantics: "per-tagpack creator, declared not independently verified"
+confidence_semantics: >
+  Per-tagpack creator, declared not independently verified. GraphSense's own
+  TagPack schema additionally declares a separate, optional per-tag
+  "confidence" id (see confidence.csv in graphsense/graphsense-tagpack-tool,
+  retrieved 2026-09-18) on a 5-100 reliability scale - e.g. "forensic"
+  (level 50: "trusted reports, e.g. academic papers" - NOT the same id as
+  "forensic_investigation", level 70) vs. "authority_data" (level 60, e.g.
+  OFAC) vs. "web_crawl" (level 20). This raw id survives ingestion in each
+  claim's `subcat` field but THEMIS currently assigns every tagpack claim
+  the same flat "curated" heuristic/DERIVED tier regardless of it - see
+  HARDENING_LOG.md "PAPER MAY NEED UPDATE - TagPack confidence flattening"
+  for the observed distribution and why this was not silently changed.
 known_dependencies: [montreal_paquet_clouston_2019]
 
 # `prov_family` stores "tagpack:<creator>". Each declared creator is an
