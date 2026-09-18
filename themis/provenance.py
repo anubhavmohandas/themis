@@ -23,6 +23,21 @@ def _fill(template: str, value: str) -> str:
     return template.format(value=value, value_or_unknown=value or "unknown")
 
 
+def normalize_address(claim: dict, sources: dict | None = None) -> str:
+    """Strip a source-declared artifact off the raw address string, per that
+    source's own config/sources/<id>.yml (`address_normalization.strip_prefix`)
+    - never a blanket rule applied to every source. WatchYourBack's own
+    upstream data carries a literal "#" on 87 of 309 addresses (confirmed
+    against its real current file, not a THEMIS artifact); left as part of
+    the join key it silently breaks cross-source matching for addresses
+    that otherwise already exist elsewhere in the corpus. A source with no
+    declared rule is returned unchanged."""
+    sources = sources if sources is not None else _cfg.sources
+    raw = claim.get("address", "") or ""
+    prefix = ((sources.get(claim.get("source")) or {}).get("address_normalization") or {}).get("strip_prefix")
+    return raw[len(prefix):] if prefix and raw.startswith(prefix) else raw
+
+
 def resolve(claim: dict, sources: dict | None = None) -> dict:
     """Assign this claim's provenance root per its source's declared rule.
 

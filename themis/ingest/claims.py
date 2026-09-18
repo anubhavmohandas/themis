@@ -4,10 +4,10 @@ taxonomy's declared aliases (config/taxonomy.yml) - never guessed.
 """
 from __future__ import annotations
 import uuid
-from .. import taxonomy
+from .. import taxonomy, provenance
 
 #: the flat claim schema every analysis function in this package reads.
-CLAIM_FIELDS = ["address", "source", "raw_label", "canon", "polarity",
+CLAIM_FIELDS = ["address", "raw_address", "source", "raw_label", "canon", "polarity",
                 "prov_family", "lastmod", "heuristic", "subcat"]
 
 
@@ -52,11 +52,13 @@ def build_claim(row: dict, mapping: dict, source_id: str, default_heuristic: str
     winning_text = raw_category if cat_from_category else (raw_label if cat_from_label else "")
     _, structured_entity = taxonomy.split_structured_label(winning_text)
     declared_source = (row.get(mapping.get("source")) or "").strip() if mapping.get("source") else ""
+    raw_address = (row.get(mapping.get("address")) or "").strip()
     return {
         "claim_id": uuid.uuid4().hex,
         "record_id": record_id,
         "blockchain": blockchain,
-        "address": (row.get(mapping.get("address")) or "").strip(),
+        "address": provenance.normalize_address(dict(source=source_id, address=raw_address)),
+        "raw_address": raw_address,
         "source": source_id,
         "actor": (row.get(mapping.get("actor")) or "").strip() if mapping.get("actor") else "",
         "raw_label": raw_label,

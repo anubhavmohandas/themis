@@ -102,6 +102,19 @@ class TestCorpus(Base):
         self.assertEqual(self.indep["unresolved_addresses"], 853_583)
         self.assertAlmostEqual(self.indep["unresolved_addr_share"], 0.570, places=3)
 
+    def test_manifest_sample_address_count_matches_live_dedup(self):
+        # demo_data/manifest.json's "sample" section is a static, hand-
+        # regenerated figure (unlike n_addresses/n_claims, which read
+        # "full_corpus" for the paper's own 1,497,191 headline and are
+        # unaffected by any bundled-sample fix). It drifted stale once
+        # already: the WatchYourBack "#" address-key fix deduplicated 72
+        # addresses within the sample itself (228,847 -> 228,775) without
+        # anything catching that the note's stored count still said
+        # 228,847. This pins sample_note's number to the corpus's own live
+        # count so a future fix can't silently leave it stale again.
+        live = len(Corpus.demo().by_addr)
+        self.assertIn(f"{live:,} addresses", self.c.sample_note)
+
 
 class TestAgreement(Base):
     """Section 5.1."""
@@ -114,10 +127,22 @@ class TestAgreement(Base):
     def test_dataset_distribution_is_corpus_wide_and_closes(self):
         """The 1-dataset bucket must be the corpus figure, not the sample's, and
         the buckets above it must sum to the multi-dataset total."""
+        # d[2]/d[3] shifted 7,904/357 -> 7,832/429 (72 addresses moved from
+        # the 2-source to the 3-source bucket) after fixing WatchYourBack's
+        # "#"-prefixed address-key bug (config/sources/watchyourback.yml's
+        # address_normalization): those 72 addresses already existed under
+        # schnoering/tagpack, so restoring the join reveals watchyourback as
+        # a genuine 3rd source rather than an invisible, orphaned 4th
+        # address. The total (15,400) and single-dataset count (1,481,791)
+        # are unaffected - neither is published as a per-bucket breakdown in
+        # the paper, only as the 15,400/1.03% and 1,497,191 totals (both
+        # untouched: 1,497,191 is a fixed manifest figure, not recomputed
+        # from this join, and the 72 addresses were never separately counted
+        # there to begin with).
         d = self.agree["sources_per_address"]
         self.assertEqual(d[1], 1_481_791)
-        self.assertEqual(d[2], 7_904)
-        self.assertEqual(d[3], 357)
+        self.assertEqual(d[2], 7_832)
+        self.assertEqual(d[3], 429)
         self.assertEqual(d[4], 7_112)
         self.assertEqual(d[5], 26)
         self.assertEqual(d[6], 1)
@@ -233,10 +258,17 @@ class TestKappa(Base):
         cls.k = analysis.cohen_kappa(cls.c)
 
     def test_pair_tally_closes(self):
+        # n_zero 8 -> 7: the WatchYourBack address-key fix (see
+        # test_dataset_distribution_is_corpus_wide_and_closes) changes which
+        # watchyourback-involving pairs' shared region looks like by
+        # restoring 72 previously-invisible joins. The paper never
+        # publishes n_pairs/n_undefined/n_zero or any per-pair kappa value
+        # (confirmed: neither "kappa" nor "Cohen" appears in the final
+        # paper PDF at all), so this is zero paper-text impact.
         k = self.k
         self.assertEqual(k["n_pairs"], 17)
         self.assertEqual(k["n_undefined"], 4)
-        self.assertEqual(k["n_zero"], 8)
+        self.assertEqual(k["n_zero"], 7)
         self.assertLessEqual(k["n_undefined"] + k["n_zero"], k["n_pairs"])
 
     def test_largest_overlap_matches_containment_table(self):
@@ -246,12 +278,27 @@ class TestKappa(Base):
         self.assertAlmostEqual(100 * pair["percent_agreement"], 93.3, places=1)
         self.assertAlmostEqual(pair["cohen_kappa"], 0.655, places=3)
 
-    def test_three_pairs_are_substantial(self):
-        self.assertEqual(len(self.k["substantial"]), 3)
+    def test_substantial_pairs_after_watchyourback_address_fix(self):
+        # Before the "#" address-key fix: 3 substantial pairs, including
+        # schnoering-watchyourback (n=46, kappa=0.537). After: only 2 -
+        # restoring the 72 hidden joins drops schnoering-watchyourback's
+        # kappa to 0.233 (n grows to 117, but agreement among the newly-
+        # joined addresses is much lower, pulling kappa below the 0.4
+        # substantial-agreement threshold), while tagpack-watchyourback's
+        # own kappa *rises* (0.523 -> 0.613, n 138 -> 210) because most of
+        # the 72 newly-visible addresses are ones tagpack and watchyourback
+        # already agreed on. Not published in the paper (see
+        # test_pair_tally_closes) - a real, verified shift with zero
+        # paper-text impact.
+        self.assertEqual(len(self.k["substantial"]), 2)
         by = {r["pair"]: r["cohen_kappa"] for r in self.k["substantial"]}
         self.assertAlmostEqual(by["schnoering-tagpack"], 0.655, places=3)
-        self.assertAlmostEqual(by["schnoering-watchyourback"], 0.537, places=3)
-        self.assertAlmostEqual(by["tagpack-watchyourback"], 0.523, places=3)
+        self.assertAlmostEqual(by["tagpack-watchyourback"], 0.613, places=3)
+        self.assertNotIn("schnoering-watchyourback", by)
+        sw = next(r for r in self.k["pairs"]
+                  if {r["source_a"], r["source_b"]} == {"schnoering", "watchyourback"})
+        self.assertAlmostEqual(sw["cohen_kappa"], 0.233, places=3)
+        self.assertEqual(sw["n"], 117)
 
     def test_undefined_pairs_are_named_not_dropped(self):
         und = [r for r in self.k["pairs"] if r["cohen_kappa"] is None]
@@ -263,11 +310,15 @@ class TestKappa(Base):
     def test_substantial_threshold_is_read_from_config_not_hardcoded(self):
         # thresholds.yml documents kappa_substantial_threshold as exactly
         # this cutoff; raising it must actually change which pairs surface.
+        # tagpack-watchyourback's post-fix kappa (0.613, see
+        # test_substantial_pairs_after_watchyourback_address_fix) still
+        # clears 0.6, so it stays in the raised-threshold set too.
         original = analysis._cfg.thresholds.get("kappa_substantial_threshold")
         analysis._cfg.thresholds["kappa_substantial_threshold"] = 0.6
         try:
             k = analysis.cohen_kappa(self.c)
-            self.assertEqual({r["pair"] for r in k["substantial"]}, {"schnoering-tagpack"})
+            self.assertEqual({r["pair"] for r in k["substantial"]},
+                             {"schnoering-tagpack", "tagpack-watchyourback"})
         finally:
             if original is None:
                 analysis._cfg.thresholds.pop("kappa_substantial_threshold", None)
@@ -381,6 +432,48 @@ class TestDrift(Base):
 
     def test_double_counted_addresses(self):
         self.assertEqual(self.drift["shared_addresses"], 7_508)
+
+
+class TestAddressNormalization(unittest.TestCase):
+    """WatchYourBack's own upstream data carries a leading "#" on 87 of 309
+    addresses (confirmed against its real current file - not a THEMIS
+    artifact); left in place it silently broke cross-source matching for 72
+    that already exist elsewhere in the corpus. Fixed via a per-source
+    declared rule (config/sources/watchyourback.yml's address_normalization),
+    never a blanket strip applied to every source."""
+
+    def test_declared_prefix_is_stripped(self):
+        claim = {"source": "watchyourback", "address": "#1ABC"}
+        self.assertEqual(provenance.normalize_address(claim), "1ABC")
+
+    def test_source_with_no_declared_rule_is_unchanged(self):
+        claim = {"source": "tagpack", "address": "#1ABC"}
+        self.assertEqual(provenance.normalize_address(claim), "#1ABC")
+
+    def test_address_without_the_prefix_is_unchanged(self):
+        claim = {"source": "watchyourback", "address": "1ABC"}
+        self.assertEqual(provenance.normalize_address(claim), "1ABC")
+
+    def test_unknown_source_is_unchanged(self):
+        claim = {"source": "not_a_real_source", "address": "#1ABC"}
+        self.assertEqual(provenance.normalize_address(claim), "#1ABC")
+
+    def test_corpus_preserves_raw_address_and_normalizes_the_join_key(self):
+        claims = [{"address": "#1ABC", "source": "watchyourback", "raw_label": "x",
+                  "canon": "unknown", "polarity": "unknown", "prov_family": "",
+                  "lastmod": "", "heuristic": "manual_verified", "subcat": ""}]
+        c = Corpus(claims, full=True)
+        self.assertIn("1ABC", c.by_addr)
+        self.assertNotIn("#1ABC", c.by_addr)
+        self.assertEqual(c.by_addr["1ABC"][0]["raw_address"], "#1ABC")
+
+    def test_fresh_ingest_normalizes_and_preserves_raw_address(self):
+        from themis.ingest.claims import build_claim
+        row = {"address": "#1ABC", "label": "mixer"}
+        mapping = {"address": "address", "label": "label"}
+        claim = build_claim(row, mapping, "watchyourback")
+        self.assertEqual(claim["address"], "1ABC")
+        self.assertEqual(claim["raw_address"], "#1ABC")
 
 
 class TestTaxonomy(unittest.TestCase):

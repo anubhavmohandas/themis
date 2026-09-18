@@ -228,6 +228,9 @@ def cmd_sources(args):
         print(f"    citation           {src.get('citation', '(none declared)')}")
         print(f"    confidence         {src.get('confidence_semantics', '(none declared)')}")
         print(f"    provenance mode    {prov.get('mode', '(none - resolves UNRESOLVED)')}")
+        norm = src.get("address_normalization")
+        if norm:
+            print(f"    address normalize  strip {norm.get('strip_prefix')!r} (raw preserved as raw_address)")
         deps = src.get("known_dependencies") or []
         if deps:
             print(f"    known dependencies {', '.join(deps)}")

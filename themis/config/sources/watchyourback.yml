@@ -25,11 +25,29 @@ confidence_semantics: >
   circumstantial evidence these 87 are a bolted-on reference batch, not
   WatchYourBack's own verified output - "manually verified per source
   declaration" likely credits the wrong methodology for them specifically.
-  Also: THEMIS currently ingests the literal "#" as part of the address
-  string for these 87, breaking cross-source address matching for them.
-  Neither issue is fixed here - see HARDENING_LOG.md "WatchYourBack's
-  #-prefixed addresses..." for full detail and recommendations.
+  The address-key bug (see address_normalization below) is now fixed; the
+  provenance-root question for these 87 is not - they still resolve to
+  watchyourback_manual below, which is likely the wrong root for claims
+  that cite OFAC/a blog/Telegram rather than WatchYourBack's own research.
+  That reassignment needs a per-claim citation judgment THEMIS doesn't
+  have data to make generically and is deliberately left for the author -
+  see HARDENING_LOG.md "WatchYourBack's #-prefixed addresses..." for full
+  detail and recommendations.
 known_dependencies: []
+
+address_normalization:
+  strip_prefix: "#"
+  reason: >
+    87 of 309 rows in upstream's own data/tagging/btc_resolv.csv (the same
+    87 as confidence_semantics above) carry a leading "#" on the address
+    field itself - confirmed 2026-09-18 as an exact 87/87 match against
+    that live upstream file, so this is WatchYourBack's own convention,
+    not a THEMIS artifact. Left unstripped it silently broke cross-source
+    address matching for 72 of the 87 (82.8%) that already exist elsewhere
+    in the corpus under schnoering/tagpack. The raw value is preserved on
+    every claim as raw_address; only the working `address` field (used for
+    cross-source joining) is normalized. This does not change which
+    provenance root these claims resolve to - see confidence_semantics.
 
 provenance:
   mode: fixed_root
