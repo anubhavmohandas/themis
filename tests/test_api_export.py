@@ -83,5 +83,49 @@ class TestUploadStoppedIngestDoesNotCrash(unittest.TestCase):
         self.assertEqual(body["meta"]["n_claims"], 2)
 
 
+class TestUploadInputValidation(unittest.TestCase):
+    """API hardening: malformed request input must return a clean 4xx, never
+    an unhandled exception that reaches the client as a 500 or crashes the
+    worker."""
+    def setUp(self):
+        self.client = TestClient(app)
+
+    def _upload(self, content: bytes = BTC_CSV, **form):
+        data = {"source_id": "t", "use_reference": "false", **form}
+        return self.client.post("/api/analysis",
+                                files={"file": ("x.csv", content, "text/csv")}, data=data)
+
+    def test_malformed_mapping_json_is_a_clean_400(self):
+        r = self._upload(mapping="{not valid json")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("invalid mapping", r.json()["detail"])
+
+    def test_mapping_that_is_not_a_json_object_is_a_clean_400(self):
+        r = self._upload(mapping="[1, 2, 3]")
+        self.assertEqual(r.status_code, 400)
+
+    def test_non_utf8_upload_does_not_crash(self):
+        r = self._upload(content=b"\x00\x01\x02\xff\xfe not utf8 \x80\x81")
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["preflight"]["stopped"])
+
+    def test_zero_byte_upload_does_not_crash(self):
+        r = self._upload(content=b"")
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["preflight"]["stopped"])
+
+    def test_unknown_export_name_is_a_clean_404(self):
+        r = self.client.post("/api/analysis/paper")
+        aid = r.json()["analysis_id"]
+        r = self.client.get(f"/api/analysis/{aid}/export/nonexistent.json")
+        self.assertEqual(r.status_code, 404)
+
+    def test_unknown_analysis_id_is_a_clean_404_everywhere(self):
+        for path in ("", "/summary", "/address/1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2",
+                     "/export/normalized_claims.csv"):
+            r = self.client.get(f"/api/analysis/does-not-exist{path}")
+            self.assertEqual(r.status_code, 404, path)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

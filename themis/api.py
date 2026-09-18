@@ -120,7 +120,14 @@ async def create_analysis(file: UploadFile = File(...), source_id: str = Form("u
     a new UPLOADED_DATASET workspace and returns its analysis_id. Every
     other page-facing route reads through that id, never through a global
     default corpus."""
-    mapping_override = json.loads(mapping) if mapping else None
+    mapping_override = None
+    if mapping:
+        try:
+            mapping_override = json.loads(mapping)
+        except json.JSONDecodeError as e:
+            raise HTTPException(400, f"invalid mapping JSON: {e}") from e
+        if not isinstance(mapping_override, dict):
+            raise HTTPException(400, "mapping must be a JSON object of role -> column name")
     data = await file.read()
     suffix = ".csv.gz" if (file.filename or "").endswith(".gz") else ".csv"
     fd, tmp_path = tempfile.mkstemp(suffix=suffix)

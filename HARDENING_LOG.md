@@ -225,7 +225,7 @@ raising).
 
 ## Test suite state
 
-- Backend: **87/87 → 113/113** passing (26 new tests across 6 files, one new
+- Backend: **87/87 → 119/119** passing (32 new tests across 6 files, one new
   file `tests/test_api_export.py`).
 - Paper regression (`tests/test_paper_claims.py`): 42/42 → 49/49 passing.
 - `tests/test_target_audit.py`: 2/2 → 7/7 passing.
@@ -236,6 +236,45 @@ raising).
   explain, CSV export, and both upload-rejection flows (non-crypto,
   unsupported-chain) plus a valid-Bitcoin control upload — all exercised
   against the actual running FastAPI backend over HTTP, not just unit tests.
+
+### 10. Malformed `mapping` JSON crashed the upload endpoint
+**File:** `themis/api.py` (`create_analysis`)
+**Root cause:** `json.loads(mapping)` on the optional schema-mapping-override
+form field was uncaught. A request with invalid JSON, or valid JSON that
+wasn't an object (e.g. a bare array), raised an unhandled
+`JSONDecodeError`/`AttributeError` inside the request handler → 500.
+**Fix:** wrapped in try/except, `HTTPException(400, ...)` for invalid JSON
+and for JSON that isn't an object.
+**Tests:** `tests/test_api_export.py::TestUploadInputValidation::test_malformed_mapping_json_is_a_clean_400`,
+`test_mapping_that_is_not_a_json_object_is_a_clean_400`
+
+### 11. Non-UTF-8 upload crashed the ingest pipeline
+**File:** `themis/ingest/pipeline.py` (`load_csv`)
+**Root cause:** the CSV loader opened files with a fixed `utf-8-sig`
+encoding and no error handling; a file containing invalid UTF-8 byte
+sequences (binary content, or genuinely non-UTF-8 text) raised an
+unhandled `UnicodeDecodeError` deep inside `csv.DictReader` iteration —
+uncaught all the way to a 500 via the web API, and an unhandled traceback
+via the CLI.
+**Fix:** added `errors="replace"` — invalid bytes decode to U+FFFD instead
+of raising, so ingestion degrades to "no usable address column found"
+(correctly reported as such) instead of crashing outright.
+**Tests:** `tests/test_api_export.py::TestUploadInputValidation::test_non_utf8_upload_does_not_crash`,
+`test_zero_byte_upload_does_not_crash` (already worked, confirmed no
+regression)
+
+## API hardening sweep (also confirmed correct, no fix needed)
+
+Invalid/unknown `analysis_id` returns a clean 404 with no stack trace on
+every route that takes one (get, summary, address, export). Path-traversal
+strings in `analysis_id` and export filenames (`../../etc/passwd`,
+URL-encoded equivalents) 404 cleanly — Starlette's own path-segment routing
+rejects them before any handler runs, and the export endpoint never touches
+the filesystem based on the `name` parameter (it's compared against three
+literal constants). An invalid `use_reference` form value gets FastAPI's
+own built-in 422 validation error, not a crash. Tests:
+`tests/test_api_export.py::TestUploadInputValidation::test_unknown_export_name_is_a_clean_404`,
+`test_unknown_analysis_id_is_a_clean_404_everywhere`.
 
 ## Notable non-bug finding
 

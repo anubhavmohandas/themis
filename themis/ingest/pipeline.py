@@ -46,8 +46,12 @@ def load_csv(path: str) -> tuple[list[dict], list[str]]:
     # BOM-free file is unaffected; without it the BOM survives as part of
     # the first column's *name* (e.g. "﻿address"), breaking any exact
     # match against it (a --map override, a later schema round-trip).
+    # errors="replace" turns a genuinely non-UTF-8 upload (binary content,
+    # another encoding entirely) into a readable-if-garbled file instead of
+    # an unhandled UnicodeDecodeError - detection then correctly reports no
+    # usable address column rather than the request crashing outright.
     opener = gzip.open if str(path).endswith(".gz") else open
-    with opener(path, "rt", newline="", encoding="utf-8-sig") as f:
+    with opener(path, "rt", newline="", encoding="utf-8-sig", errors="replace") as f:
         reader = csv.DictReader(f)
         rows = list(reader)
         return rows, list(reader.fieldnames or [])
