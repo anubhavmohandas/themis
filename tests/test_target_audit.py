@@ -38,6 +38,25 @@ class TestTargetReferenceIsolation(unittest.TestCase):
         self.assertEqual(outcomes["exact"]["n"], 1)
         self.assertEqual(result["n_target_addresses"], 1)
 
+    def test_reference_sources_agreeing_with_each_other_on_untouched_addresses_do_not_leak(self):
+        # Part O's "reference sources share roots" isolation case - the
+        # mirror of the test above (agreement, not conflict) on addresses
+        # the target never mentions.
+        reference_claims = []
+        for i in range(15):
+            addr = f"ref_shared_root_{i}"
+            reference_claims.append(_claim(addr, "ref_a", "exchange"))
+            reference_claims.append(_claim(addr, "ref_b", "exchange"))
+
+        target_claims = [_claim("target_addr_2", "uploaded", "exchange")]
+        reference_claims_for_target = [_claim("target_addr_2", "ref_a", "exchange")]
+        reference = Corpus(reference_claims + reference_claims_for_target, full=True)
+
+        result = target_audit.audit_target_against_reference(target_claims, reference)
+        self.assertEqual(result["n_target_addresses"], 1)
+        self.assertEqual(result["profile"]["agreement"]["outcomes"]["exact"]["n"], 1)
+        self.assertEqual(result["profile"]["reference_comparability"]["comparable"], 1)
+
     def test_no_reference_match_is_unverifiable_not_incorrect(self):
         target_claims = [_claim("orphan_addr", "uploaded", "ransomware")]
         reference = Corpus([_claim("some_other_addr", "ref_a", "ransomware")], full=True)
@@ -67,6 +86,7 @@ class TestProvenanceIndependenceCases(unittest.TestCase):
         patched["src_x1"] = fixed("synthetic_root_x")
         patched["src_x2"] = fixed("synthetic_root_x")
         patched["src_y"] = fixed("synthetic_root_y")
+        patched["src_y2"] = fixed("synthetic_root_y")
         provenance._cfg.sources = patched
         provenance._EXACT_ROOTS, provenance._PREFIX_ROOTS = provenance._root_ledger(patched)
 
@@ -118,6 +138,36 @@ class TestProvenanceIndependenceCases(unittest.TestCase):
         reference = Corpus([_claim("a5", "an_unconfigured_source", "ransomware")], full=True)
         r = target_audit.audit_target_against_reference(target_claims, reference)
         self.assertEqual(r["address_comparability"]["a5"], target_audit.RELATIONSHIP_UNRESOLVED)
+
+    def test_many_reference_matches_any_one_shared_root_makes_it_same_provenance(self):
+        # Part O "target has many reference matches", mixed roots: one ref
+        # source shares the target's root, one has a different confirmed
+        # root, one is unresolved. Comparability is deliberately conservative
+        # - ANY shared root marks the relationship SAME_PROVENANCE, even
+        # though other matched sources are independently confirmed.
+        target_claims = [_claim("a6", "src_x1", "ransomware")]
+        reference = Corpus([_claim("a6", "src_x2", "ransomware"),   # same root as target
+                            _claim("a6", "src_y", "ransomware"),    # different confirmed root
+                            _claim("a6", "mystery_c", "ransomware")],  # unresolved
+                           full=True)
+        r = target_audit.audit_target_against_reference(target_claims, reference)
+        self.assertEqual(r["address_comparability"]["a6"], target_audit.SAME_PROVENANCE)
+        # independence is a separate, pooled question ("how many distinct
+        # confirmed roots touch this address at all") and is not
+        # contradicted by the target-specific SAME_PROVENANCE label above -
+        # root Y is still an independently-confirmed root regardless of
+        # whether the target's own source happens to share root X with src_x2.
+        self.assertEqual(r["profile"]["independence"]["confirmed_independent_multi_root"], 1)
+
+    def test_reference_sources_sharing_a_root_with_each_other_but_not_target_stays_distinct(self):
+        # Part O "reference sources share roots [with each other]": two ref
+        # sources agree on root Y; neither matches the target's root X. Their
+        # mutual agreement must not be mistaken for agreement with the target.
+        target_claims = [_claim("a7", "src_x1", "ransomware")]
+        reference = Corpus([_claim("a7", "src_y", "ransomware"),
+                            _claim("a7", "src_y2", "ransomware")], full=True)
+        r = target_audit.audit_target_against_reference(target_claims, reference)
+        self.assertEqual(r["address_comparability"]["a7"], target_audit.DISTINCT_PROVENANCE)
 
 
 if __name__ == "__main__":
