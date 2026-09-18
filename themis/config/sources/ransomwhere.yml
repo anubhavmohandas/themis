@@ -3,7 +3,20 @@ display_name: "Ransomwhere"
 chain: bitcoin
 citation: "Ransomwhere crowd-sourced ransomware tracker (ransomwhe.re; Zenodo DOI 10.5281/zenodo.6512122)"
 license: "CC BY - confirmed 2026-09-18 via the dataset's Zenodo record; redistribution/derivatives permitted with attribution."
-confidence_semantics: "crowd report - unverified per the paper's evidence taxonomy"
+confidence_semantics: >
+  Crowd report - unverified per the paper's evidence taxonomy. Confirmed
+  2026-09-18 against Ransomwhere's own published methodology: a submitter
+  must supply the Bitcoin address, the ransomware family, and evidence of
+  the ransom demand (e.g. a screenshot of the payment portal or an
+  infection message), and Ransomwhere's maintainers manually review every
+  report before publishing it (addresses are held private for 90 days
+  after submission). This is real editorial moderation - stronger than an
+  anonymous, unmoderated crowd feed - but it is the *platform's own*
+  review, not independent verification by a third party or by THEMIS, and
+  the evidence itself (a screenshot) establishes that a ransom was
+  demanded at that address, not that THEMIS can independently re-check the
+  incident. `UNVERIFIED_REPORT` remains the correct, conservative tier for
+  this reason, not because the source is unmoderated.
 known_dependencies: []
 
 # Ransomwhere is itself the origin of its addresses (crowd-submitted, not
