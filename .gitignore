@@ -26,6 +26,9 @@ npm-debug.log*
 # OS
 .DS_Store
 
+# Working notes
+HARDENING_LOG.md
+
 # Editors
 .vscode/
 .idea/
