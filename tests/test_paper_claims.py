@@ -439,6 +439,34 @@ class TestTaxonomy(unittest.TestCase):
         self.assertTrue(provenance.is_unresolved("rodwald_own_S"))
         self.assertFalse(provenance.is_unresolved("ofac_sdn"))
 
+    def test_elliptic_class_codes_map_to_their_documented_polarity(self):
+        # class-1=illicit, class-2=licit, class-3=unknown is Elliptic's own
+        # published scheme (Weber et al.), not an inference - class_3 must
+        # stay unmapped (genuinely unknown per the source itself), while
+        # class_1/class_2 have an unambiguous, externally-documented polarity.
+        self.assertEqual(taxonomy.canonicalize_category("class_1"), "illicit_unspec")
+        self.assertEqual(taxonomy.canonicalize_category("class_2"), "licit_unspec")
+        self.assertIsNone(taxonomy.canonicalize_category("class_3"))
+
+    def test_elliptic_class_alias_takes_effect_on_a_fresh_ingest_not_the_frozen_corpus(self):
+        # the paper snapshot's `canon` column is pre-baked into
+        # demo_data/observations_sample.csv.gz at data-preparation time and
+        # is never recomputed from taxonomy.yml on load (corpus.py's
+        # Corpus.demo() reads `canon` as a literal stored field) - so this
+        # alias only takes effect for a newly-ingested claim (STEP 23),
+        # never retroactively for the frozen paper corpus.
+        # TestAgreement.test_outcome_counts (this file) asserts the exact,
+        # unchanged bundled-corpus numbers - that test still passing after
+        # this alias was added is the real proof the paper corpus is
+        # untouched. This test instead confirms the alias *does* reach a
+        # fresh ingest, via the actual claim-building path a new upload uses.
+        from themis.ingest.claims import build_claim
+        row = {"address": "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2", "label": "class_1"}
+        mapping = {"address": "address", "label": "label"}
+        claim = build_claim(row, mapping, "test_elliptic_upload")
+        self.assertEqual(claim["canon"], "illicit_unspec")
+        self.assertEqual(claim["polarity"], "illicit")
+
 
 class TestHierarchyAdversarial(unittest.TestCase):
     """Part N - the bundled taxonomy.yml is only ever 2 levels deep (every

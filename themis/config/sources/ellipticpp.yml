@@ -14,7 +14,16 @@ license: >
   normalized derivative of this data in what is currently a public repo.
   Flagged for the authors to verify directly with the dataset's authors -
   not resolved by this pass.
-confidence_semantics: "heuristic-derived; methodology not publicly disclosed per-label"
+confidence_semantics: >
+  Heuristic-derived; methodology not publicly disclosed per-label - true
+  for the *provenance* (how each address was linked to its class), which
+  is why the root stays `elliptic_undisclosed`/unresolved below. The
+  *class codes themselves* are documented, though: this source's raw
+  labels are exactly `class_1`/`class_2`/`class_3`, matching Elliptic's own
+  published scheme (Weber et al.) of illicit/licit/unknown - confirmed
+  2026-09-18 and mapped in taxonomy.yml's `illicit_unspec`/`licit_unspec`
+  aliases (class_3 correctly stays unmapped: it's the source's own declared
+  "unknown", not an inference). See HARDENING_LOG.md bug #16.
 known_dependencies: []
 
 # The publisher does not disclose per-label methodology, so every claim from

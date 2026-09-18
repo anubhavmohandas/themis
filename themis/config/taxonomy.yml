@@ -12,11 +12,25 @@ categories:
 
   illicit_unspec:
     polarity: illicit
-    aliases: [illicit, illicit-unspecified, illicit_unknown]
+    # class_1: the Elliptic/Elliptic++ dataset's own published class code for
+    # "illicit" (Weber et al.; confirmed 2026-09-18 against the dataset's
+    # actual documentation - class-1=illicit, class-2=licit, class-3=unknown
+    # is the dataset's own declared scheme, not an inference). Confirmed via
+    # Corpus.demo() + analysis.agreement() that adding this alias does not
+    # change a single bundled-corpus number: the paper snapshot's `canon`
+    # values are pre-baked into demo_data/observations_sample.csv.gz at
+    # data-preparation time, not recomputed from this file on load - this
+    # only takes effect for a *newly ingested* Elliptic-shaped upload
+    # (STEP 23), never retroactively for the frozen paper corpus. See
+    # HARDENING_LOG.md "Elliptic++'s class_1/class_2..." for the full
+    # before/after check and why the bundled numbers are untouched.
+    aliases: [illicit, illicit-unspecified, illicit_unknown, class_1]
 
   licit_unspec:
     polarity: licit
-    aliases: [licit, licit-unspecified, licit_unknown]
+    # class_2: see illicit_unspec's class_1 comment above - same source,
+    # same verification, same "paper corpus is unaffected" guarantee.
+    aliases: [licit, licit-unspecified, licit_unknown, class_2]
 
   ransomware:
     polarity: illicit
