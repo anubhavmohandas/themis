@@ -125,19 +125,31 @@ class TestAgreement(Base):
         self.assertEqual(sum(d.values()), 1_497_191)
 
     def test_outcome_counts(self):
+        # NOTE: these differ from the currently-published paper draft
+        # (13,673 / 342 / 109 / 23) - see HARDENING_LOG.md's "PAPER MAY
+        # NEED UPDATE" section. classify_address() used to report "exact
+        # agreement" whenever only ONE source's claim had an interpretable
+        # canonical category and every other source's claim was unmapped
+        # (canon == "unknown", e.g. Elliptic++'s undocumented "class_3"
+        # code) - that's not agreement, it's one opinion with nothing to
+        # compare it against. Fixed to require >= 2 sources with a known
+        # canon before returning anything but "incomparable"; these are the
+        # corrected, implementation-verified counts.
         o = self.agree["outcomes"]
-        self.assertEqual(o["exact"]["n"], 13_673)
+        self.assertEqual(o["exact"]["n"], 10_515)
         self.assertEqual(o["hierarchical refinement"]["n"], 1_253)
-        self.assertEqual(o["entity-type conflict"]["n"], 342)
-        self.assertEqual(o["licit/illicit conflict"]["n"], 109)
-        self.assertEqual(o["incomparable"]["n"], 23)
+        self.assertEqual(o["entity-type conflict"]["n"], 340)
+        self.assertEqual(o["licit/illicit conflict"]["n"], 108)
+        self.assertEqual(o["incomparable"]["n"], 3_184)
+        self.assertEqual(sum(o[k]["n"] for k in o), 15_400)
 
     def test_outcome_shares(self):
         o = self.agree["outcomes"]
-        self.assertAlmostEqual(100 * o["exact"]["share"], 88.79, places=2)
+        self.assertAlmostEqual(100 * o["exact"]["share"], 68.28, places=2)
         self.assertAlmostEqual(100 * o["hierarchical refinement"]["share"], 8.14, places=2)
-        self.assertAlmostEqual(100 * o["entity-type conflict"]["share"], 2.22, places=2)
-        self.assertAlmostEqual(100 * o["licit/illicit conflict"]["share"], 0.71, places=2)
+        self.assertAlmostEqual(100 * o["entity-type conflict"]["share"], 2.21, places=2)
+        self.assertAlmostEqual(100 * o["licit/illicit conflict"]["share"], 0.70, places=2)
+        self.assertAlmostEqual(100 * o["incomparable"]["share"], 20.68, places=2)
 
     def test_named_conflict_pairs(self):
         pairs = {(p["source_a"], p["label_a"], p["source_b"], p["label_b"]): p["n"]
@@ -324,6 +336,24 @@ class TestTaxonomy(unittest.TestCase):
                   {"source": "b", "canon": "ransomware"}]
         self.assertEqual(taxonomy.classify_address(claims), "hierarchical refinement")
 
+    def test_one_known_source_plus_unknown_sources_is_incomparable_not_exact(self):
+        # a source whose raw label never mapped to a canonical category
+        # (canon == "unknown", e.g. Elliptic++'s undocumented "class_3"
+        # code) contributed no usable opinion. With only one source's claim
+        # actually interpreted, there is nothing to compare it against -
+        # this must not report "exact agreement" with itself.
+        claims = [{"source": "ellipticpp", "canon": "unknown"},
+                 {"source": "schnoering", "canon": "individual"}]
+        self.assertEqual(taxonomy.classify_address(claims), "incomparable")
+
+    def test_two_known_sources_plus_a_third_unknown_source_still_compares(self):
+        # the unknown source is simply excluded, not disqualifying - two
+        # *other* sources genuinely agreeing is still real agreement.
+        claims = [{"source": "a", "canon": "ransomware"},
+                 {"source": "b", "canon": "ransomware"},
+                 {"source": "c", "canon": "unknown"}]
+        self.assertEqual(taxonomy.classify_address(claims), "exact")
+
     def test_opposed_polarity_is_conflict(self):
         claims = [{"source": "a", "canon": "exchange"},
                   {"source": "b", "canon": "ransomware"}]
@@ -414,9 +444,11 @@ class TestBootstrap(Base):
     """Section 5.4 - the interval must widen, not narrow, when clustered."""
 
     def test_conditional_rates_have_intervals(self):
+        # 0.70%, not the paper's published 0.71% - see the classify_address
+        # fix note on TestAgreement.test_outcome_counts (108 vs 109 conflicts).
         b = analysis.bootstrap(self.c, n_boot=200)
         s = b["stats"]["licit/illicit conflict"]
-        self.assertAlmostEqual(100 * s["point"], 0.71, places=2)
+        self.assertAlmostEqual(100 * s["point"], 0.70, places=2)
         self.assertLess(s["ci_low"], s["point"])
         self.assertGreater(s["ci_high"], s["point"])
 

@@ -125,9 +125,20 @@ def classify_address(claims: list[dict]) -> str:
     generic placeholder *or* one category is a taxonomy-declared ancestor of
     the other (STEP 6's "service vs exchange" case), not only in the
     two-level case this corpus happens to use.
+
+    Comparing what sources say requires at least two of them to have said
+    something interpretable. A source whose raw label never mapped to a
+    canonical category (canon == "unknown" - e.g. Elliptic++'s undocumented
+    numeric class codes) contributed no usable opinion; if only one source's
+    claim is left after removing those, there is nothing to compare it
+    against, and this must be `incomparable`, not "exact agreement" with
+    itself. Excluding the unknown claim from `cats` but not from the source
+    count would silently launder "we don't know what source B said" into
+    "source B agrees with source A".
     """
+    known_sources = {c["source"] for c in claims if c["canon"] != "unknown"}
     cats = {c["canon"] for c in claims if c["canon"] != "unknown"}
-    if not cats:
+    if len(known_sources) < 2:
         return "incomparable"
     if len(cats) == 1:
         return "exact"

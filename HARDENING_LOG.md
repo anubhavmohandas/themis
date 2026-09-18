@@ -19,11 +19,17 @@ several paper drafts in the parent folder — treated as canonical over
 Reproduced via `themis audit`, `themis drift`, `themis explain`,
 `themis bootstrap --both` against the bundled corpus. Exact matches:
 corpus size (1,545,710 claims / 1,497,191 addresses), per-source counts,
-corroboration (15,400 multi-dataset / 1.03%), agreement outcomes
-(13,673 exact / 1,253 hierarchical / 342 entity-type / 109 licit-illicit),
-Rodwald↔Ransomwhere circularity (7,508 addresses, 67.12% / 14.92%),
-Montréal four-corpus reappearance (7,222 → 7,208 / 7,208 / 7,122), and
-unresolved provenance (853,583 addresses, 57.0%).
+corroboration (15,400 multi-dataset / 1.03%), Rodwald↔Ransomwhere
+circularity (7,508 addresses, 67.12% / 14.92%), Montréal four-corpus
+reappearance (7,222 → 7,208 / 7,208 / 7,122), and unresolved provenance
+(853,583 addresses, 57.0%).
+
+**Not an exact match, and not a data-snapshot artifact like the revenue
+table below**: the 5-way agreement-outcome breakdown (exact / hierarchical
+refinement / entity-type conflict / licit-illicit conflict / incomparable)
+reproduces the paper's published 13,673 / 1,253 / 342 / 109 / 23 only
+*before* bug #13 below is fixed. See that entry — the corrected,
+implementation-verified breakdown is 10,515 / 1,253 / 340 / 108 / 3,184.
 
 One known, non-bug discrepancy: the ransomware-revenue drift table (A–D)
 comes out $1–3 off Table 2 on totals around $1B–$1.4B. Verified independently
@@ -225,7 +231,7 @@ raising).
 
 ## Test suite state
 
-- Backend: **87/87 → 122/122** passing (35 new tests across 7 files, one new
+- Backend: **87/87 → 124/124** passing (37 new tests across 7 files, one new
   file `tests/test_api_export.py`). `numpy` is now installed in the venv,
   so this count includes the bootstrap suite running against both backends.
 - Paper regression (`tests/test_paper_claims.py`): 42/42 → 49/49 passing.
@@ -292,6 +298,159 @@ only guarantees reproducibility *within* one backend, not bit-identical
 results across both. Both intervals bracket the point estimate sensibly
 and both show the upper bound's interval narrower than the lower bound's,
 as the paper's methodology requires.
+
+### 13. PAPER MAY NEED UPDATE — "exact agreement" counted one source's opinion as two sources agreeing
+
+**Severity: highest of everything found this session — directly affects a
+headline published number.**
+
+**How found:** not from reading the bundled corpus. Downloaded a real
+external dataset (UCI's BitcoinHeist ransomware address dataset, CC BY 4.0,
+2,916,697 rows) specifically to test THEMIS's "audit a dataset THEMIS has
+never seen" (STEP 23) feature against genuinely unfamiliar data, per PART
+D/E of the task brief. See the "External dataset testing" section below for
+the full ingest results. Running it with `--reference` (cross-source
+comparison against the bundled corpus) reported 99.9% "exact agreement"
+between the external file and the reference corpus — despite every single
+one of the external dataset's 30,834 claims having failed to map to any
+canonical category (`canon: "unknown"`, entirely expected: BitcoinHeist's
+labels are `princetonCerber`, `montrealCryptoLocker`, `white`, etc. — none
+match THEMIS's generic taxonomy aliases). That result made no sense on its
+face and led directly to the bug below.
+
+**File:** `themis/taxonomy.py` (`classify_address`)
+
+**Root cause:** `cats = {c["canon"] for c in claims if c["canon"] != "unknown"}`
+excludes unmapped claims from the *comparison set*, but nothing excluded
+them from being outnumbered. If an address has claims from 2+ datasets and
+only ONE of those datasets' labels ever mapped to a real category — every
+other dataset's claim being `canon == "unknown"` (an opaque/undocumented
+code, an unrecognized brand name, anything the taxonomy's aliases don't
+cover) — `cats` ends up with exactly one entry, and `if len(cats) == 1:
+return "exact"` reports this as two sources agreeing. In truth, only one
+source's opinion was ever understood; the other source said *something*,
+just nothing THEMIS's taxonomy could interpret. This directly launders "we
+don't know what source B said" into "source B agrees with source A" — the
+exact inversion of the paper's own stated principle that agreement must
+mean something was actually compared (§3.2), and of the task brief's
+"AGREEMENT ≠ INDEPENDENT CORROBORATION" / "UNVERIFIABLE ≠ FALSE" rules (the
+inverse failure mode: here an unverifiable claim was silently treated as a
+confirming one, not a false one, which is just as wrong).
+
+**Impact on the bundled paper corpus:** checked directly — this is not
+only a risk for arbitrary external uploads. Among the bundled corpus's own
+15,400 multi-dataset addresses, **3,184 (20.7%)** have this exact shape:
+2,950 involve Elliptic++'s undocumented `class_3` code (Elliptic++'s
+provenance is declared "Not disclosed" in Table 1 — its per-label
+methodology was never published, so `class_3` was correctly left
+unmapped), and a long tail (253) involve TagPack entity/brand names
+(`Antpool`, `Poolin`, `Lazarus group`, `Bitfury`, ...) and WatchYourBack
+compound labels (`state-sponsored:lazarus`, `onlinewallet:flexcoin`) that
+the taxonomy's generic category aliases were never meant to recognize —
+correctly so; inventing brand-name-to-category mappings would be its own
+form of forced classification the paper's methodology explicitly
+prohibits.
+
+**Fix:** require at least 2 distinct *sources* to have contributed an
+interpretable canonical category before returning anything but
+`incomparable`:
+```python
+known_sources = {c["source"] for c in claims if c["canon"] != "unknown"}
+cats = {c["canon"] for c in claims if c["canon"] != "unknown"}
+if len(known_sources) < 2:
+    return "incomparable"
+```
+This also correctly catches a second, related shape: a single source
+asserting two *different* claims about the same address (its own internal
+inconsistency, not a second source's independent opinion) was previously
+able to trigger `entity-type conflict`/`licit/illicit conflict` against
+itself if every other source's claim was unmapped; that's now
+`incomparable` too, for the same reason.
+
+**Effect on the paper's published §5.1 breakdown** (Table/Fig. 1(b) area,
+page 3 — "13,673 of the 15,400 multi-dataset addresses (88.79%) agree
+exactly and 1,253 (8.14%) are hierarchical refinements... 342 entity-type
+conflicts (2.22%) and 109 licit/illicit conflicts (0.71%)"):
+
+| outcome | published | corrected (this fix) |
+|---|---|---|
+| exact | 13,673 (88.79%) | **10,515 (68.28%)** |
+| hierarchical refinement | 1,253 (8.14%) | 1,253 (8.14%) — unchanged |
+| entity-type conflict | 342 (2.22%) | 340 (2.21%) |
+| licit/illicit conflict | 109 (0.71%) | 108 (0.70%) |
+| incomparable | 23 (0.15%) | **3,184 (20.68%)** |
+
+The 15,400 multi-dataset denominator itself, the 7,508/853,583/kappa/
+independence/circularity findings, and the two explicitly-named
+polarity-conflict pairs the paper cites (schnoering-exchange/tagpack-
+sanctioned = 23, ellipticpp-licit_unspec/rodwald_mixers-mixer = 30) are
+**all unaffected** — `top_polarity_conflicts` in `analysis.agreement()` was
+already computed as a direct pairwise comparison over only known-canon
+claims and never had this bug.
+
+**What I did NOT do:** edit the paper. Per the task brief's explicit
+instruction, a paper snapshot is not casually rewritten from a code change
+— this is reported for author review, not silently applied. The paper's
+own §5.4 "Threats to validity" already acknowledges "category normalisation
+requires judgement" in the polarity-vs-entity-type context; the corrected
+numbers arguably *strengthen* the paper's central argument (agreement is
+even more overstated by naive dataset-counting than the published figures
+already show), but that is an editorial judgment call for the authors, not
+this pass.
+
+**Tests:** `tests/test_paper_claims.py::TestTaxonomy::test_one_known_source_plus_unknown_sources_is_incomparable_not_exact`,
+`test_two_known_sources_plus_a_third_unknown_source_still_compares` (direct,
+minimal repro of the bug and its boundary); `TestAgreement::test_outcome_counts`/
+`test_outcome_shares` and `TestBootstrap::test_conditional_rates_have_intervals`
+updated to the corrected, implementation-verified figures with inline notes
+explaining the discrepancy from the published draft.
+
+## External dataset testing
+
+**UCI BitcoinHeist Ransomware Address Dataset**
+([archive.ics.uci.edu/dataset/526](https://archive.ics.uci.edu/dataset/526/bitcoinheistransomwareaddressdataset),
+CC BY 4.0, retrieved 2026-09-18, DOI 10.24432/C5BG8V). 2,916,697 rows,
+columns `address,year,day,length,weight,count,looped,neighbors,income,label`
+— a per-address *feature* dataset for ML classification (Chainalysis-style
+graph features per address per time window), not a simple one-row-per-claim
+attribution file, and genuinely external: never bundled with or referenced
+by THEMIS's config. Built a manageable, label-diverse sample (all 41,413
+non-"white" rows + a random 10,000 of the 2,875,284 "white" rows, seed 42,
+51,413 rows total) rather than running the full 2.9M-row file.
+
+Results against `themis ingest`:
+- **Crypto detection: HIGH confidence, Bitcoin** — correct.
+- **Schema mapping**: `address`→address, `label`→label inferred correctly;
+  the seven numeric feature columns (`year`/`day`/`length`/`weight`/`count`/
+  `looped`/`neighbors`/`income`, including scientific-notation values like
+  `1e+08`) were correctly left unmapped rather than misassigned to any role.
+- **Validation**: 51,413 rows → 30,834 valid claims, 20,579 rejected and
+  explicitly reported as `duplicate claim` (the same address+label pair
+  recurs across multiple day-window feature rows — correctly deduplicated
+  to one claim per address+label+source, not silently dropped one row at a
+  time nor double-counted).
+- **Taxonomy**: every one of the 30,834 claims' raw labels (`white`,
+  `princetonCerber`, `montrealCryptoLocker`, 26 other family names) mapped
+  to `canon: "unknown"` — none forced into a category. This is correct,
+  intended behavior (PART L: "If a label cannot be safely mapped: UNKNOWN /
+  unmapped, not forced classification") and is exactly what led to finding
+  bug #13 above.
+- **Evidence tier**: 100% `TIER_UNKNOWN` (no declared heuristic for an
+  unconfigured source) — correct per STEP 9's "an arbitrary upload with no
+  declared methodology must land here, never silently become DERIVED."
+- **Cross-source comparison**: 67.7% of the 30,834 target addresses (20,871)
+  matched an address in the bundled reference corpus — a large, genuine
+  overlap, consistent with BitcoinHeist drawing from the same Princeton/
+  Montreal/Padua academic ground truth already named in THEMIS's own
+  provenance config (`princeton_huang_2018`, `montreal_paquet_clouston_2019`,
+  `padua_conti_2018`). 32.3% had no reference match at all, reported as such
+  rather than guessed.
+- Not misclassified as non-crypto, not misclassified as an unsupported
+  chain, no crash on the 225MB source file or the sample.
+
+This is the one external-dataset test completed this session (PART D/E of
+the brief expects several, across multiple categories — see "Explicitly
+not yet covered" for what wasn't reached).
 
 ## API hardening sweep (also confirmed correct, no fix needed)
 
