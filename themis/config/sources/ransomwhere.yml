@@ -1,8 +1,8 @@
 id: ransomwhere
 display_name: "Ransomwhere"
 chain: bitcoin
-citation: "Ransomwhere crowd-sourced ransomware tracker"
-license: "public, crowd-submitted"
+citation: "Ransomwhere crowd-sourced ransomware tracker (ransomwhe.re; Zenodo DOI 10.5281/zenodo.6512122)"
+license: "CC BY - confirmed 2026-09-18 via the dataset's Zenodo record; redistribution/derivatives permitted with attribution."
 confidence_semantics: "crowd report - unverified per the paper's evidence taxonomy"
 known_dependencies: []
 

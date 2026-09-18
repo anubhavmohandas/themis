@@ -1,8 +1,16 @@
 id: watchyourback
 display_name: "WatchYourBack"
 chain: bitcoin
-citation: "WatchYourBack manual curation"
-license: "see publisher"
+citation: "\"Watch Your Back: Identifying Cybercrime Financial Relationships in Bitcoin through Back-and-Forth Exploration\" (CCS'22); github.com/cybersec-code/watchyourback"
+license: >
+  GPL-3.0 (confirmed 2026-09-18, the tool repository's own LICENCE file) -
+  governs the analysis code; whether it also extends to the address/tag
+  data specifically is not separately confirmed. Lower individual risk
+  than the other sources here (309 of 1,497,191 corpus addresses, 0.02%),
+  but GPL-3.0 is copyleft (derivative works must also be GPL-3.0), and this
+  repo currently has no LICENSE file of its own - a separate, smaller
+  finding worth the author's attention alongside the Elliptic++ one. See
+  HARDENING_LOG.md.
 confidence_semantics: "manually verified per source declaration"
 known_dependencies: []
 

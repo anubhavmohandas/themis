@@ -1,8 +1,13 @@
 id: rodwald_mixers
 display_name: "Rodwald mixer corpus"
 chain: bitcoin
-citation: "Rodwald"
-license: "see publisher"
+citation: "Rodwald, \"Preparing a Dataset of Mixers BTC Addresses for Machine Learning Purpose\" (Springer, 978-3-031-92734-8_19)"
+license: >
+  UNCONFIRMED - checked 2026-09-18: the paper is paywalled (Springer),
+  preventing access to any data-availability statement; the author's own
+  data-hosting site (sydeus.rodwald.pl) shows a terms link but no license
+  text was retrievable. Same "flag, don't act" treatment as Elliptic++ - see
+  HARDENING_LOG.md.
 confidence_semantics: "compiled from multiple named inputs, encoded as source letters"
 known_dependencies: [walletexplorer]
 

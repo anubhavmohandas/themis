@@ -1,8 +1,8 @@
 id: tagpack
 display_name: "GraphSense TagPack"
 chain: bitcoin
-citation: "GraphSense TagPack collection"
-license: "see publisher"
+citation: "GraphSense TagPack collection (github.com/graphsense/graphsense-tagpacks)"
+license: "MIT (confirmed 2026-09-18 via the repository's own LICENSE file) - redistribution/derivatives permitted."
 confidence_semantics: >
   Per-tagpack creator, declared not independently verified. GraphSense's own
   TagPack schema additionally declares a separate, optional per-tag
