@@ -45,7 +45,7 @@ categories:
   darknet_market:
     polarity: illicit
     parent: illicit_unspec
-    aliases: [darknet, dnm, darknet-market]
+    aliases: [darknet, dnm, darknet-market, darknet market]
 
   ponzi:
     polarity: illicit
