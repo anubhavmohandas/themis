@@ -1,5 +1,5 @@
 address,ground_truth_label,ground_truth_source,ground_truth_evidence_type,ground_truth_date,ground_truth_independent,notes
-#1E6qZkzbGZHh9hWF4dQcTUdbmsYkvBYPrR,sextortion,watchyourback_manual,academic_verified,,yes,
+1E6qZkzbGZHh9hWF4dQcTUdbmsYkvBYPrR,sextortion,watchyourback_manual,academic_verified,,yes,
 115p7UMMngoj1pMvkpHijcRdfJNXj6LrLn,ransomware,watchyourback_manual,academic_verified,,yes,
 123WBUDmSJv4GctdVEz6Qq6z8nXSKrJ4KX,darknet market,ofac_sdn,official_sanction,,yes,
 12VrYZgS1nmf9KHHped24xBb1aLLRpV2cT,darknet market,ofac_sdn,official_sanction,,yes,

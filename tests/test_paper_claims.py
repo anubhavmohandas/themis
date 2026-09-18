@@ -913,5 +913,30 @@ class TestAnchorValidation(unittest.TestCase):
         self.assertGreater(v["ci_high"], v["accuracy"])
 
 
+class TestAnchorValidationRealCorpus(Base):
+    """`ground_truth.csv` is curated directly against corpus join keys
+    (Corpus.by_addr), not ingested through a source adapter - so unlike a
+    raw source file, nothing normalizes it on load. A raw upstream address
+    (e.g. WatchYourBack's own "#" convention, see watchyourback.yml's
+    address_normalization) left in this file is invisible to
+    corpus.by_addr.get(addr) and silently drops out of every anchor count
+    instead of being correctly excluded as self-root."""
+
+    def test_no_ground_truth_address_carries_an_unnormalized_source_prefix(self):
+        prefixes = [cfg.get("address_normalization", {}).get("strip_prefix")
+                    for cfg in provenance._cfg.sources.values()]
+        prefixes = [p for p in prefixes if p]
+        offenders = [a for a in self.c.ground_truth()
+                     if any(a.startswith(p) for p in prefixes)]
+        self.assertEqual(offenders, [])
+
+    def test_real_anchor_numbers(self):
+        r = analysis.anchor_validation(self.c)
+        self.assertEqual(r["anchors_total"], 289)
+        self.assertEqual(r["usable_anchors"], 268)
+        self.assertEqual(r["excluded_self_root_claims"], 290)
+        self.assertEqual(r["uninterpretable_ground_truth_label"], 0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
