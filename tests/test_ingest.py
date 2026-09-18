@@ -46,6 +46,32 @@ SHORT_ACCOUNT_ID_ROWS = [{"account_id": "ACC-0001-USER", "plan": "premium"},
                          {"account_id": "ACC-0003-USER", "plan": "premium"}]
 SHORT_ACCOUNT_ID_FIELDS = ["account_id", "plan"]
 
+# Crypto-but-not-attribution shape (Part H): a price/market row naming a
+# recognized asset, no address column anywhere.
+CRYPTO_OHLC_ROWS = [
+    {"Date": "2024-01-01", "Symbol": "BTC-USD", "Open": "42000", "Close": "43000"},
+    {"Date": "2024-01-02", "Symbol": "BTC-USD", "Open": "43000", "Close": "44000"},
+    {"Date": "2024-01-03", "Symbol": "BTC-USD", "Open": "44000", "Close": "41000"},
+]
+CRYPTO_OHLC_FIELDS = ["Date", "Symbol", "Open", "Close"]
+
+# Identically-shaped, but the asset itself isn't a known chain - must not be
+# swept into "crypto data detected" just because the column is named Symbol.
+STOCK_OHLC_ROWS = [
+    {"Date": "2024-01-01", "Symbol": "AAPL", "Open": "180", "Close": "182"},
+    {"Date": "2024-01-02", "Symbol": "AAPL", "Open": "182", "Close": "179"},
+    {"Date": "2024-01-03", "Symbol": "AAPL", "Open": "179", "Close": "185"},
+]
+STOCK_OHLC_FIELDS = ["Date", "Symbol", "Open", "Close"]
+
+# Real shape of external_data/non_crypto/btc_ohlc_real.csv: a bare price
+# series with no column stating what asset it even is. No content signal
+# exists here for THEMIS to find - correctly stays "not crypto", not a bug.
+BARE_PRICE_ROWS = [{"Date": "2010-07-18", "Price": "0.09"},
+                   {"Date": "2010-07-19", "Price": "0.08"},
+                   {"Date": "2010-07-20", "Price": "0.07"}]
+BARE_PRICE_FIELDS = ["Date", "Price"]
+
 
 class TestDetection(unittest.TestCase):
     def test_crypto_dataset_detected_with_confidence(self):
@@ -81,6 +107,24 @@ class TestDetection(unittest.TestCase):
     def test_non_crypto_dataset_has_no_unsupported_chain_field(self):
         d = detect.detect(NON_CRYPTO_ROWS, NON_CRYPTO_FIELDS)
         self.assertIsNone(d["unsupported_chain_field"])
+
+    def test_crypto_symbol_column_is_recognized_as_crypto_non_attribution(self):
+        d = detect.detect(CRYPTO_OHLC_ROWS, CRYPTO_OHLC_FIELDS)
+        self.assertEqual(d["confidence"], detect.NONE)
+        self.assertIsNone(d["unsupported_chain_field"])
+        self.assertEqual(d["crypto_asset_field"], "Symbol")
+
+    def test_stock_symbol_is_not_mistaken_for_a_crypto_asset(self):
+        d = detect.detect(STOCK_OHLC_ROWS, STOCK_OHLC_FIELDS)
+        self.assertIsNone(d["crypto_asset_field"])
+
+    def test_bare_price_series_with_no_asset_identity_has_no_crypto_signal(self):
+        d = detect.detect(BARE_PRICE_ROWS, BARE_PRICE_FIELDS)
+        self.assertIsNone(d["crypto_asset_field"])
+
+    def test_non_crypto_dataset_has_no_crypto_asset_field(self):
+        d = detect.detect(NON_CRYPTO_ROWS, NON_CRYPTO_FIELDS)
+        self.assertIsNone(d["crypto_asset_field"])
 
 
 class TestSchemaMapping(unittest.TestCase):
@@ -250,6 +294,28 @@ class TestPipeline(unittest.TestCase):
             self.assertTrue(r["stopped"])
             self.assertIn("not currently supported", r["message"])
             self.assertNotIn("does not appear to contain cryptocurrency", r["message"])
+        finally:
+            os.remove(path)
+
+    def test_crypto_asset_data_gets_a_distinct_message_from_non_crypto_and_unsupported_chain(self):
+        path = _write_csv(CRYPTO_OHLC_ROWS, CRYPTO_OHLC_FIELDS)
+        try:
+            r = pipeline.ingest(path, "test_ohlc")
+            self.assertTrue(r["stopped"])
+            self.assertIn("no usable attribution-label structure", r["message"])
+            self.assertNotIn("does not appear to contain cryptocurrency", r["message"])
+            self.assertNotIn("not currently supported", r["message"])
+        finally:
+            os.remove(path)
+
+    def test_bare_price_series_still_gets_the_generic_not_crypto_message(self):
+        # No symbol/ticker column at all (the real external_data shape) - no
+        # content signal exists, so THEMIS must not guess it's crypto.
+        path = _write_csv(BARE_PRICE_ROWS, BARE_PRICE_FIELDS)
+        try:
+            r = pipeline.ingest(path, "test_bare_price")
+            self.assertTrue(r["stopped"])
+            self.assertIn("does not appear to contain cryptocurrency", r["message"])
         finally:
             os.remove(path)
 

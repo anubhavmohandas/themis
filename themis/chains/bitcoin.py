@@ -115,6 +115,7 @@ def _validate_segwit(address: str) -> bool:
 class BitcoinAdapter(BlockchainAdapter):
     id = "bitcoin"
     display_name = "Bitcoin"
+    symbol_aliases = ("btc", "xbt", "bitcoin")
 
     def validate_address(self, value: str) -> bool:
         if not value:

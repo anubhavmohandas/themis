@@ -21,6 +21,36 @@ ADDRESS_NAME_HINTS = ("address", "wallet", "addr", "acct", "account")
 # address-shaped at all (Iris, Titanic, OHLC price rows, ...).
 _OPAQUE_TOKEN_RE = re.compile(r"^[0-9a-zA-Z]+$")
 
+# Distinguishes "crypto data, but not an attribution dataset" (a price/
+# market-data column that names a known chain, e.g. Symbol="BTC-USD") from
+# "no crypto signal at all" (Iris, Titanic, a bare Date/Price series with no
+# asset identity anywhere in it - see external_data/non_crypto/btc_ohlc_real.csv,
+# which THEMIS correctly still can't call crypto: no column states what asset
+# it is). Content-gated on each adapter's own `symbol_aliases`, never on
+# filename - adding a chain only ever means adding an adapter (base.py).
+ASSET_NAME_HINTS = ("symbol", "ticker", "pair", "coin", "currency", "asset", "market")
+_ASSET_TOKEN_RE = re.compile(r"[a-zA-Z]+")
+
+
+def _known_symbol_aliases() -> set[str]:
+    return {a.lower() for adapter in chains.all_adapters().values() for a in adapter.symbol_aliases}
+
+
+def _crypto_asset_field(rows: list[dict], fieldnames: list[str], sample_size: int) -> str | None:
+    """Only consulted once every adapter and the unsupported-chain fallback
+    have both already failed to find any address-shaped column."""
+    aliases = _known_symbol_aliases()
+    if not aliases:
+        return None
+    for field in fieldnames:
+        if not any(h in field.lower() for h in ASSET_NAME_HINTS):
+            continue
+        sample = sample_values(rows, field, sample_size)
+        tokens = {t.lower() for v in sample for t in _ASSET_TOKEN_RE.findall(v)}
+        if tokens & aliases:
+            return field
+    return None
+
 
 def _looks_like_unrecognized_address(sample: list[str]) -> bool:
     if len(sample) < 3:
@@ -74,16 +104,19 @@ def detect(rows: list[dict], fieldnames: list[str], sample_size: int = 500) -> d
 
     if best is None:
         unsupported = _unsupported_chain_field(rows, fieldnames, sample_size)
+        crypto_asset = None if unsupported else _crypto_asset_field(rows, fieldnames, sample_size)
         return dict(confidence=NONE, blockchain=None, address_field=None,
-                    unsupported_chain_field=unsupported,
+                    unsupported_chain_field=unsupported, crypto_asset_field=crypto_asset,
                     sample_hit_rate=0.0, sampled=0, total_rows=len(rows), per_field={})
 
     rate = best["rate"]
     confidence = HIGH if rate >= 0.8 else MEDIUM if rate >= 0.3 else LOW if rate >= 0.05 else NONE
     unsupported = None if confidence != NONE else _unsupported_chain_field(rows, fieldnames, sample_size)
+    crypto_asset = (None if (confidence != NONE or unsupported)
+                    else _crypto_asset_field(rows, fieldnames, sample_size))
     return dict(confidence=confidence,
                 blockchain=best["chain"] if confidence != NONE else None,
                 address_field=best["field"] if confidence != NONE else None,
-                unsupported_chain_field=unsupported,
+                unsupported_chain_field=unsupported, crypto_asset_field=crypto_asset,
                 sample_hit_rate=rate, sampled=best["n_sampled"], total_rows=len(rows),
                 per_field=per_field)

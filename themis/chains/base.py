@@ -8,6 +8,12 @@ class BlockchainAdapter(abc.ABC):
     #: short id used in config and reports, e.g. "bitcoin"
     id: str = ""
     display_name: str = ""
+    #: lowercase ticker/name aliases, used only by ingest/detect.py to tell
+    #: "this chain's data, but not an attribution dataset" (e.g. a price
+    #: history CSV with a "symbol" column of "BTC-USD") apart from data with
+    #: no crypto signal at all. Never consulted for address validation or
+    #: any forensic analysis.
+    symbol_aliases: tuple[str, ...] = ()
 
     @abc.abstractmethod
     def validate_address(self, value: str) -> bool:

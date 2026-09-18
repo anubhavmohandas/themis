@@ -39,6 +39,15 @@ UNSUPPORTED_CHAIN_MESSAGE = (
     "Basic structural data-quality checks can still be performed."
 )
 
+CRYPTO_NON_ATTRIBUTION_MESSAGE = (
+    "Cryptocurrency data was detected (column '{field}' references a recognized "
+    "cryptocurrency), but no usable attribution-label structure was identified.\n\n"
+    "This looks like price, market, or transaction data rather than an attribution "
+    "dataset (addresses linked to entities or categories). THEMIS's forensic "
+    "reliability methodology audits attribution claims, not raw market data.\n\n"
+    "Basic structural data-quality checks can still be performed."
+)
+
 
 def load_csv(path: str) -> tuple[list[dict], list[str]]:
     # utf-8-sig strips a leading UTF-8 BOM if present (common from
@@ -67,9 +76,12 @@ def ingest(path: str, source_id: str, mapping_override: dict | None = None,
 
     if detection["confidence"] == _detect.NONE and not mapping_override:
         unsupported_field = detection.get("unsupported_chain_field")
+        crypto_asset_field = detection.get("crypto_asset_field")
         if unsupported_field:
             supported = ", ".join(sorted(chains.all_adapters())) or "none registered"
             message = UNSUPPORTED_CHAIN_MESSAGE.format(field=unsupported_field, supported=supported)
+        elif crypto_asset_field:
+            message = CRYPTO_NON_ATTRIBUTION_MESSAGE.format(field=crypto_asset_field)
         else:
             message = NOT_CRYPTO_MESSAGE
         return dict(source_id=source_id, stopped=True, message=message,
