@@ -29,6 +29,9 @@ npm-debug.log*
 # Working notes
 HARDENING_LOG.md
 
+# Downloaded external datasets used for compatibility verification
+external_data/
+
 # Editors
 .vscode/
 .idea/

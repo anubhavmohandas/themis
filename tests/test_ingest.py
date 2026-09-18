@@ -135,6 +135,26 @@ class TestClaimNormalization(unittest.TestCase):
         c = claim_mod.build_claim(row, dict(address="wallet_address", label="entity_type"), "test_src")
         self.assertEqual(c["canon"], "unknown")
 
+    def test_dedicated_category_column_drives_canon_when_label_is_a_name(self):
+        # a real shape (OFAC SDN export): "label" role lands on a free-text
+        # entity name (never canonicalizable), while a separate, correctly
+        # schema-inferred "category" column holds the actual classification.
+        row = {"address": "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2",
+              "entity_name": "MESRI Behzad", "category": "sanctioned"}
+        c = claim_mod.build_claim(
+            row, dict(address="address", label="entity_name", category="category"), "test_src")
+        self.assertEqual(c["raw_label"], "MESRI Behzad")
+        self.assertEqual(c["canon"], "sanctioned")
+        self.assertEqual(c["polarity"], "illicit")
+        self.assertEqual(c["subcat"], "sanctioned")   # still preserved raw, unchanged
+
+    def test_label_still_wins_when_category_does_not_canonicalize(self):
+        row = {"address": "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2",
+              "entity_type": "ransomware-wallet", "category": "tier-2-internal-code"}
+        c = claim_mod.build_claim(
+            row, dict(address="address", label="entity_type", category="category"), "test_src")
+        self.assertEqual(c["canon"], "ransomware")
+
 
 class TestUnknownEvidenceTier(unittest.TestCase):
     """Loop 2 STEP 9/28 - an upload with no declared methodology must land

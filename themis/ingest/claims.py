@@ -30,7 +30,20 @@ def build_claim(row: dict, mapping: dict, source_id: str, default_heuristic: str
     not described - which is a stronger claim than "we don't know").
     """
     raw_label = (row.get(mapping.get("label")) or "").strip() if mapping.get("label") else ""
-    canon = taxonomy.canonicalize_category(raw_label) or "unknown"
+    raw_category = (row.get(mapping.get("category")) or "").strip() if mapping.get("category") else ""
+    # A dataset can carry a free-text label/name column (label role - might
+    # be an entity name, not a category word at all) alongside a distinct,
+    # dedicated classification column (category role). Schema inference
+    # already tells them apart (schema.py's CATEGORY_HINTS); canonicalizing
+    # only ever tried `label`, so a mapped `category` column's value was
+    # silently ignored for classification (though still preserved as
+    # `subcat`) - a real dataset shaped like address/entity_name/category
+    # would stay "unknown" forever even with an unambiguous category value
+    # sitting right there. Category is tried first as the more deliberately-
+    # classified field when both are mapped; label is the fallback, keeping
+    # today's behavior unchanged for the common single-column case.
+    canon = (taxonomy.canonicalize_category(raw_category)
+            or taxonomy.canonicalize_category(raw_label) or "unknown")
     declared_source = (row.get(mapping.get("source")) or "").strip() if mapping.get("source") else ""
     return {
         "claim_id": uuid.uuid4().hex,
