@@ -308,6 +308,36 @@ class TestPipeline(unittest.TestCase):
         finally:
             os.remove(path)
 
+    def test_hostile_label_content_does_not_crash_ingestion_and_survives_verbatim(self):
+        # Part J: formula/DDE-injection strings, HTML/JS, SQL-looking text,
+        # path traversal, JSON, very long fields, Unicode/emoji/RTL - none
+        # of this is THEMIS's to sanitize at ingestion (STEP 23 requires
+        # raw evidence preserved verbatim; escaping is an export/render-time
+        # concern, already covered separately: CSV formula-injection guard
+        # in api.py, React's automatic JSX escaping in the frontend). This
+        # only checks ingestion itself never crashes and never mutates the
+        # raw value.
+        addr = "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2"
+        hostile_labels = [
+            "=SUM(A1:A10)", "+CMD|'/C calc'!A0", "-2+3+cmd|' /C calc'!A0", "@SUM(1+1)",
+            "<script>alert(1)</script>", "<img src=x onerror=alert(1)>",
+            "'; DROP TABLE users; --", "../../../../etc/passwd",
+            '{"nested": [1, 2, {"a": "b"}]}', "A" * 10000,
+            "比特币交易所 🚀💰", "‮gnp.exe", "line1\nline2\r\nline3", "",
+        ]
+        rows = [{"address": addr, "label": lbl} for lbl in hostile_labels]
+        path = _write_csv(rows, ["address", "label"])
+        try:
+            r = pipeline.ingest(path, "test_hostile")
+            self.assertFalse(r["stopped"])
+            got = {c["raw_label"] for c in r["claims"]}
+            expected_nonempty = {lbl for lbl in hostile_labels if lbl.strip()}
+            self.assertEqual(got, expected_nonempty)
+            for c in r["claims"]:
+                self.assertEqual(c["canon"], "unknown")  # none are real taxonomy terms
+        finally:
+            os.remove(path)
+
     def test_bare_price_series_still_gets_the_generic_not_crypto_message(self):
         # No symbol/ticker column at all (the real external_data shape) - no
         # content signal exists, so THEMIS must not guess it's crypto.
