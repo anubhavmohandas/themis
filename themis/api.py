@@ -53,11 +53,24 @@ def _get_workspace(analysis_id: str) -> _workspace.AnalysisWorkspace:
     return ws
 
 
+# CSV-injection guard (OWASP): a cell whose raw text starts with one of these
+# opens as a formula/DDE call in Excel/Sheets. Export renders raw, attacker-
+# controlled upload content (raw_label, ...) verbatim by design (STEP 23
+# preserves raw evidence), so the leading character is neutralized here, at
+# the one shared writer, rather than in every caller.
+_FORMULA_LEAD_CHARS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_safe_cell(v) -> str:
+    s = "" if v is None else str(v)
+    return "'" + s if s.startswith(_FORMULA_LEAD_CHARS) else s
+
+
 def _csv_response(rows: list[list], header: list[str], filename: str) -> StreamingResponse:
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(header)
-    w.writerows(rows)
+    w.writerows([[_csv_safe_cell(cell) for cell in row] for row in rows])
     buf.seek(0)
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv",
                              headers={"Content-Disposition": f'attachment; filename="{filename}"'})
@@ -126,7 +139,7 @@ async def create_analysis(file: UploadFile = File(...), source_id: str = Form("u
         dataset_name=file.filename or source_id, created_at=_workspace.now_iso(),
         analysis_as_of_date=str(today), reference_corpus=reference,
         input_file_hash=_hash_bytes(data), blockchain=result["detection"].get("blockchain"),
-        schema_mapping=result["schema_mapping"], claims=result.get("claims", []),
+        schema_mapping=result.get("schema_mapping"), claims=result.get("claims", []),
         reference_corpus_version=("bundled_sample" if reference is not None else None),
         warnings=result.get("limitations", []), result=result,
         audit_trail=_report.audit_trail(parameters=dict(source_id=source_id, use_reference=use_reference),
@@ -176,7 +189,7 @@ def analysis_summary(analysis_id: str):
 def analysis_address(analysis_id: str, address: str):
     ws = _get_workspace(analysis_id)
     if ws.mode == _workspace.MODE_PAPER:
-        return analysis.explain(ws.reference_corpus, address)
+        return analysis.explain(ws.reference_corpus, address, as_of=_as_of_date(ws))
     return _explain_in_workspace(ws, address)
 
 
@@ -221,10 +234,24 @@ def analysis_export(analysis_id: str, name: str):
     raise HTTPException(404, f"unknown export {name!r}")
 
 
+def _as_of_date(ws: _workspace.AnalysisWorkspace) -> datetime.date | None:
+    """The date this analysis's own aggregate report was frozen to - every
+    other view of the same analysis (address inspector included) must use
+    this, not the live wall clock, or its stale/currency flags drift out of
+    step with the summary the moment you view them on a different day."""
+    if not ws.analysis_as_of_date:
+        return None
+    try:
+        return datetime.date.fromisoformat(ws.analysis_as_of_date[:10])
+    except ValueError:
+        return None
+
+
 def _explain_in_workspace(ws: _workspace.AnalysisWorkspace, address: str) -> dict:
     """STEP 21 - address inspector scoped to one uploaded-dataset workspace:
     the target's own claim(s) plus only the reference claims that land on
     this same address, never the reference corpus's unrelated agreement."""
+    as_of = _as_of_date(ws)
     target_claims = [c for c in ws.claims if c["address"] == address]
     ref_claims = ws.reference_corpus.by_addr.get(address, []) if ws.reference_corpus else []
     if not target_claims and not ref_claims:
@@ -239,7 +266,7 @@ def _explain_in_workspace(ws: _workspace.AnalysisWorkspace, address: str) -> dic
         return dict(source=c["source"], label=c["canon"], raw=c["raw_label"],
                    root=c.get("root", provenance.root_of(c)),
                    root_kind=c.get("prov_kind", "UNKNOWN"), tier=taxonomy.tier_of(c),
-                   lastmod=c.get("lastmod") or None, flags=taxonomy.currency_flags(c))
+                   lastmod=c.get("lastmod") or None, flags=taxonomy.currency_flags(c, today=as_of))
 
     return dict(
         address=address, found=True,

@@ -97,7 +97,8 @@ def cohen_kappa(corpus) -> dict:
             out.append(dict(source_a=s1, source_b=s2, n=n,
                             percent_agreement=agree, cohen_kappa=k, note=note))
     out.sort(key=lambda r: -r["n"])
-    usable = [r for r in out if r["cohen_kappa"] is not None and r["cohen_kappa"] > 0.4]
+    kappa_threshold = _cfg.thresholds.get("kappa_substantial_threshold", 0.4)
+    usable = [r for r in out if r["cohen_kappa"] is not None and r["cohen_kappa"] > kappa_threshold]
     return dict(pairs=out, n_pairs=len(out),
                 n_undefined=sum(1 for r in out if r["cohen_kappa"] is None),
                 n_zero=sum(1 for r in out if r["cohen_kappa"] is not None
@@ -317,7 +318,13 @@ def freshness(claims: list[dict], as_of=None) -> dict:
 
 
 # --------------------------------------------------------- per-address report
-def explain(corpus, address: str) -> dict:
+def explain(corpus, address: str, as_of=None) -> dict:
+    """`as_of` (Loop 2 STEP 16) defaults to the corpus's own `snapshot_date`,
+    same as `report.build_report` - a single address's stale/currency-unknown
+    flags must agree with the corpus-wide freshness figures for the same
+    archived corpus, not drift against them because this view recomputed
+    against the live wall clock instead of the frozen snapshot."""
+    as_of = as_of or getattr(corpus, "snapshot_date", None)
     claims = corpus.by_addr.get(address)
     if not claims:
         return dict(address=address, found=False)
@@ -331,7 +338,7 @@ def explain(corpus, address: str) -> dict:
                      root=c["root"], root_kind=c.get("prov_kind", "UNKNOWN"),
                      tier=taxonomy.tier_of(c),
                      lastmod=c["lastmod"] or None,
-                     flags=taxonomy.currency_flags(c)) for c in claims],
+                     flags=taxonomy.currency_flags(c, today=as_of)) for c in claims],
         datasets=srcs, roots=roots,
         # apparent = distinct datasets; actual/confirmed = distinct *resolved*
         # roots only - an unresolved root is an unknown relationship, never a
@@ -342,5 +349,5 @@ def explain(corpus, address: str) -> dict:
         independence=indep,
         outcome=outcome,
         tier=taxonomy.best_tier(claims),
-        flags=taxonomy.flags_for_address(claims),
+        flags=taxonomy.flags_for_address(claims, today=as_of),
     )

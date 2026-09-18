@@ -31,6 +31,21 @@ NON_CRYPTO_ROWS = [{"name": "Alice", "age": "30", "city": "Springfield"},
                    {"name": "Bob", "age": "25", "city": "Shelbyville"}]
 NON_CRYPTO_FIELDS = ["name", "age", "city"]
 
+# Ethereum-shaped addresses - no registered adapter validates these (THEMIS
+# V1 is Bitcoin-only), but they are still opaque, address-named, fixed-shape
+# tokens, unlike ordinary tabular data.
+UNSUPPORTED_CHAIN_ROWS = [
+    {"address": "0x28C6c06298d514Db089934071355E5743bf21d60", "label": "Binance"},
+    {"address": "0xDFd5293D8e347dFe59E90eFd55b2956a1343963d", "label": "Kraken"},
+    {"address": "0x21a31Ee1afC51d94C2eFcCAa2092aD1028285549", "label": "Bitfinex"},
+]
+UNSUPPORTED_CHAIN_FIELDS = ["address", "label"]
+
+SHORT_ACCOUNT_ID_ROWS = [{"account_id": "ACC-0001-USER", "plan": "premium"},
+                         {"account_id": "ACC-0002-USER", "plan": "free"},
+                         {"account_id": "ACC-0003-USER", "plan": "premium"}]
+SHORT_ACCOUNT_ID_FIELDS = ["account_id", "plan"]
+
 
 class TestDetection(unittest.TestCase):
     def test_crypto_dataset_detected_with_confidence(self):
@@ -49,6 +64,23 @@ class TestDetection(unittest.TestCase):
     def test_no_columns_no_rows_does_not_crash(self):
         d = detect.detect([], [])
         self.assertEqual(d["confidence"], detect.NONE)
+
+    def test_unsupported_chain_address_shape_is_flagged_not_treated_as_non_crypto(self):
+        # crypto data on a chain THEMIS has no adapter for must not collapse
+        # into the same NONE-confidence bucket as genuinely non-crypto data.
+        d = detect.detect(UNSUPPORTED_CHAIN_ROWS, UNSUPPORTED_CHAIN_FIELDS)
+        self.assertEqual(d["confidence"], detect.NONE)
+        self.assertIsNone(d["blockchain"])
+        self.assertEqual(d["unsupported_chain_field"], "address")
+
+    def test_short_account_ids_are_not_mistaken_for_an_unsupported_chain(self):
+        d = detect.detect(SHORT_ACCOUNT_ID_ROWS, SHORT_ACCOUNT_ID_FIELDS)
+        self.assertEqual(d["confidence"], detect.NONE)
+        self.assertIsNone(d["unsupported_chain_field"])
+
+    def test_non_crypto_dataset_has_no_unsupported_chain_field(self):
+        d = detect.detect(NON_CRYPTO_ROWS, NON_CRYPTO_FIELDS)
+        self.assertIsNone(d["unsupported_chain_field"])
 
 
 class TestSchemaMapping(unittest.TestCase):
@@ -172,6 +204,32 @@ class TestPipeline(unittest.TestCase):
         try:
             r = pipeline.ingest(path, "test_missing_cols")
             self.assertTrue(r["stopped"])
+        finally:
+            os.remove(path)
+
+    def test_utf8_bom_does_not_leak_into_the_address_column_name(self):
+        # Excel commonly exports UTF-8 CSVs with a leading BOM; unstripped,
+        # it becomes part of the *first column's name* ("﻿address"),
+        # breaking exact-name matching (a --map override, a mapping echoed
+        # back to the caller) even though detection still works by luck.
+        fd, path = tempfile.mkstemp(suffix=".csv")
+        with os.fdopen(fd, "wb") as f:
+            f.write(b"\xef\xbb\xbfaddress,label\n"
+                    b"1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2,ransomware\n")
+        try:
+            rows, fieldnames = pipeline.load_csv(path)
+            self.assertEqual(fieldnames, ["address", "label"])
+            self.assertEqual(rows[0]["address"], "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2")
+        finally:
+            os.remove(path)
+
+    def test_unsupported_chain_file_gets_a_distinct_message_from_non_crypto(self):
+        path = _write_csv(UNSUPPORTED_CHAIN_ROWS, UNSUPPORTED_CHAIN_FIELDS)
+        try:
+            r = pipeline.ingest(path, "test_eth")
+            self.assertTrue(r["stopped"])
+            self.assertIn("not currently supported", r["message"])
+            self.assertNotIn("does not appear to contain cryptocurrency", r["message"])
         finally:
             os.remove(path)
 

@@ -12,8 +12,11 @@ FIELDS = ["address", "source", "raw_label", "canon", "polarity",
 
 
 def _open(path):
+    # utf-8-sig: strip a leading UTF-8 BOM if a full local build was
+    # exported from Excel; identical to utf-8 when there is none.
     path = str(path)
-    return gzip.open(path, "rt", newline="") if path.endswith(".gz") else open(path, newline="")
+    return (gzip.open(path, "rt", newline="", encoding="utf-8-sig") if path.endswith(".gz")
+            else open(path, newline="", encoding="utf-8-sig"))
 
 
 class Corpus:

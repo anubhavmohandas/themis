@@ -281,24 +281,34 @@ def address_independence(claims: list[dict]) -> dict:
     sources sharing one resolved root count once (`shared_root_count` is the
     excess, i.e. the circular/inherited restatements).
 
+    A source can assert more than one claim about the same address (e.g.
+    two TagPack records naming different creators), and those claims can
+    resolve to different roots. Collapsing to one root per source would
+    silently drop one of them - the same premature merge Sec 3.1 rules out
+    at the claim level - so roots are collected per distinct (source, root)
+    pair, not per source.
+
     independence_min/max: the range consistent with the evidence. min is
     what's already proven (the confirmed count, or 1 if there's any claim at
     all and nothing is confirmed yet - the worst case being every unresolved
     source secretly shares the same unknown origin). max is the best case:
     every unresolved source turns out to be an additional distinct origin.
     """
-    by_source: dict[str, str] = {}
-    for c in claims:
-        by_source[c["source"]] = c.get("root", root_of(c))
-    apparent = len(by_source)
+    apparent = len({c["source"] for c in claims})
 
-    resolved_roots, unresolved_sources = [], []
-    for src, root in by_source.items():
-        (unresolved_sources if is_unresolved(root) else resolved_roots).append((src, root))
+    seen_pairs: set[tuple[str, str]] = set()
+    pairs: list[tuple[str, str]] = []
+    for c in claims:
+        pair = (c["source"], c.get("root", root_of(c)))
+        if pair not in seen_pairs:
+            seen_pairs.add(pair)
+            pairs.append(pair)
+
+    resolved_roots = [(s, r) for s, r in pairs if not is_unresolved(r)]
+    unresolved_n = len({s for s, r in pairs if is_unresolved(r)})
 
     distinct_resolved = sorted({r for _, r in resolved_roots})
     confirmed = len(distinct_resolved)
-    unresolved_n = len(unresolved_sources)
     shared = len(resolved_roots) - confirmed
 
     # which sources collapsed onto an already-represented root (all but the

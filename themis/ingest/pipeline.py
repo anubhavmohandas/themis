@@ -18,7 +18,7 @@ reference relationships the target never touched leak into its numbers.
 from __future__ import annotations
 import csv, gzip
 
-from .. import corpus as _corpus, analysis, target_audit
+from .. import corpus as _corpus, analysis, target_audit, chains
 from . import detect as _detect, schema as _schema, validate as _validate, claims as _claims
 
 NOT_CRYPTO_MESSAGE = (
@@ -29,10 +29,25 @@ NOT_CRYPTO_MESSAGE = (
     "provenance-aware cryptocurrency attribution analysis is not applicable."
 )
 
+UNSUPPORTED_CHAIN_MESSAGE = (
+    "Cryptocurrency attribution data appears to be present, but this blockchain "
+    "is not currently supported for full forensic reliability analysis.\n\n"
+    "Column '{field}' contains address-shaped identifiers that no registered "
+    "chain adapter ({supported}) validates. THEMIS V1 only ships full address "
+    "validation, provenance resolution and cross-source comparison for the "
+    "chains it has an adapter for.\n\n"
+    "Basic structural data-quality checks can still be performed."
+)
+
 
 def load_csv(path: str) -> tuple[list[dict], list[str]]:
+    # utf-8-sig strips a leading UTF-8 BOM if present (common from
+    # Excel-exported CSVs) and is otherwise identical to utf-8, so a
+    # BOM-free file is unaffected; without it the BOM survives as part of
+    # the first column's *name* (e.g. "﻿address"), breaking any exact
+    # match against it (a --map override, a later schema round-trip).
     opener = gzip.open if str(path).endswith(".gz") else open
-    with opener(path, "rt", newline="") as f:
+    with opener(path, "rt", newline="", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         rows = list(reader)
         return rows, list(reader.fieldnames or [])
@@ -47,7 +62,13 @@ def ingest(path: str, source_id: str, mapping_override: dict | None = None,
     detection = inferred["detection"]
 
     if detection["confidence"] == _detect.NONE and not mapping_override:
-        return dict(source_id=source_id, stopped=True, message=NOT_CRYPTO_MESSAGE,
+        unsupported_field = detection.get("unsupported_chain_field")
+        if unsupported_field:
+            supported = ", ".join(sorted(chains.all_adapters())) or "none registered"
+            message = UNSUPPORTED_CHAIN_MESSAGE.format(field=unsupported_field, supported=supported)
+        else:
+            message = NOT_CRYPTO_MESSAGE
+        return dict(source_id=source_id, stopped=True, message=message,
                     detection=detection,
                     basic_quality=dict(rows=len(rows), columns=fieldnames,
                                        empty_rows=sum(1 for r in rows if not any(r.values()))))

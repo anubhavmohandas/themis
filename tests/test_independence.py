@@ -50,6 +50,19 @@ class TestAddressIndependence(unittest.TestCase):
         self.assertEqual(r["independence_max"], 3)
         self.assertEqual(r["confirmed_independent_root_count"], 1)
 
+    def test_one_source_two_claims_different_roots_both_count(self):
+        # a single dataset can assert two claims about the same address
+        # (e.g. two TagPack records from different creators); collapsing to
+        # the last claim per source would silently drop a confirmed root.
+        claims = [_claim("schnoering", "montreal_paquet_clouston_2019"),
+                 _claim("tagpack", "tagpack_GraphSense Core Team"),
+                 _claim("tagpack", "montreal_paquet_clouston_2019")]
+        r = provenance.address_independence(claims)
+        self.assertEqual(r["apparent_dataset_count"], 2)
+        self.assertEqual(r["confirmed_independent_root_count"], 2)
+        self.assertEqual(r["shared_root_count"], 1)
+        self.assertTrue(r["circular"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

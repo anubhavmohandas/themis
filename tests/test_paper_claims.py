@@ -38,6 +38,24 @@ class TestAsOfDate(Base):
         flags = taxonomy.currency_flags({"lastmod": ""}, today=self.c.snapshot_date)
         self.assertEqual(flags, ["currency-unknown"])
 
+    def test_explain_freezes_currency_flags_to_snapshot_date_by_default(self):
+        # explain() must default to the corpus's snapshot date, not
+        # datetime.date.today(), or the same archived address flips "stale"
+        # as real time passes even though the corpus itself never changed.
+        dated = next(c for c in self.c.claims if (c.get("lastmod") or "").strip())
+        r = analysis.explain(self.c, dated["address"])
+        expected = {f for cl in self.c.by_addr[dated["address"]]
+                    for f in taxonomy.currency_flags(cl, today=self.c.snapshot_date)}
+        got = {f for cl in r["claims"] for f in cl["flags"]}
+        self.assertEqual(got, expected)
+
+    def test_explain_honors_an_explicit_as_of_override(self):
+        dated = next(c for c in self.c.claims if (c.get("lastmod") or "").strip())
+        far_future = datetime.date.fromisoformat(dated["lastmod"][:10]) + datetime.timedelta(days=365 * 10)
+        r = analysis.explain(self.c, dated["address"], as_of=far_future)
+        flags = {f for cl in r["claims"] if cl["source"] == dated["source"] for f in cl["flags"]}
+        self.assertIn("stale", flags)
+
 
 class TestCorpus(Base):
     def test_totals(self):
@@ -203,6 +221,20 @@ class TestKappa(Base):
         for r in und:
             self.assertIsNotNone(r["note"])
             self.assertAlmostEqual(r["percent_agreement"], 1.0, places=6)
+
+    def test_substantial_threshold_is_read_from_config_not_hardcoded(self):
+        # thresholds.yml documents kappa_substantial_threshold as exactly
+        # this cutoff; raising it must actually change which pairs surface.
+        original = analysis._cfg.thresholds.get("kappa_substantial_threshold")
+        analysis._cfg.thresholds["kappa_substantial_threshold"] = 0.6
+        try:
+            k = analysis.cohen_kappa(self.c)
+            self.assertEqual({r["pair"] for r in k["substantial"]}, {"schnoering-tagpack"})
+        finally:
+            if original is None:
+                analysis._cfg.thresholds.pop("kappa_substantial_threshold", None)
+            else:
+                analysis._cfg.thresholds["kappa_substantial_threshold"] = original
 
 
 class TestDrift(Base):
