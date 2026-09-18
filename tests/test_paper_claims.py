@@ -509,6 +509,40 @@ class TestExplain(Base):
         r = analysis.explain(self.c, "1NotARealBitcoinAddressAtAll00000")
         self.assertFalse(r["found"])
 
+    def test_address_prefix_is_not_fuzzy_matched(self):
+        # "Never fuzzy-correct a crypto address" - a truncated prefix of a
+        # real address in the corpus must report not-found, not silently
+        # resolve to the full address it's a prefix of.
+        full = "14BWrn1evbyvBGGxFzUCVQ61ntNtRjRdm7"
+        prefix = full[:10]
+        self.assertIn(full, self.c.by_addr)   # sanity: the full address is real
+        r = analysis.explain(self.c, prefix)
+        self.assertFalse(r["found"])
+
+    def test_malformed_address_is_not_found_not_a_crash(self):
+        for garbage in ("not-an-address", "", "0x1234", "🚀" * 5, "'; DROP TABLE addresses; --"):
+            r = analysis.explain(self.c, garbage)
+            self.assertFalse(r["found"])
+
+    def test_single_source_address_outcome_is_labeled_single_source(self):
+        # explain() only calls classify_address (exact/conflict/...) once
+        # 2+ sources are present - a single-source address must report its
+        # own distinct outcome, never one of the multi-source labels.
+        addr = "1EMtepyCPLuK7feDsPdfs9NxqKWcRBFy9o"
+        r = analysis.explain(self.c, addr)
+        self.assertTrue(r["found"])
+        self.assertEqual(len(r["datasets"]), 1)
+        self.assertEqual(r["outcome"], "single-source")
+
+    def test_unresolved_provenance_address_is_not_reported_as_resolved(self):
+        addr = "3MfbfHYeWYUiPLUzXapFN1hfhwDJPxTgry"
+        r = analysis.explain(self.c, addr)
+        self.assertTrue(r["found"])
+        self.assertTrue(all(provenance.is_unresolved(root) for root in r["roots"]))
+        # an unresolved root is never independently confirmed corroboration,
+        # regardless of how many datasets apparently mention the address
+        self.assertEqual(r["actual_corroboration"], 0)
+
 
 class TestBootstrap(Base):
     """Section 5.4 - the interval must widen, not narrow, when clustered."""
