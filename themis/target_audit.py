@@ -97,6 +97,21 @@ def _address_status(target_claims_here, ref_claims_here, inheritance):
     flagged = {s for s in ref_sources if inheritance.get(s, {}).get("status") == "INFERRED"}
     if ref_sources and flagged == ref_sources:
         return SAME_PROVENANCE, "resolved"
+    # A target claim and a reference claim can resolve to the identical
+    # declared root directly (e.g. both trace to the same fixed_root),
+    # without the corpus-wide containment heuristic above ever firing - that
+    # heuristic needs a large enough address overlap to trigger at all, so a
+    # single shared address would otherwise fall through to "unresolved"
+    # despite the relationship being directly proven. Checked as a root
+    # *intersection* between target and reference specifically, not via
+    # address_independence's combined circular/shared_root_count, which
+    # would also fire on sharing that is entirely internal to the target's
+    # own claims and says nothing about the reference relationship.
+    target_roots = {c.get("root", provenance.root_of(c)) for c in target_claims_here}
+    ref_roots = {c.get("root", provenance.root_of(c)) for c in ref_claims_here}
+    shared_roots = {r for r in target_roots & ref_roots if not provenance.is_unresolved(r)}
+    if shared_roots:
+        return SAME_PROVENANCE, "resolved"
     combo_indep = provenance.address_independence(target_claims_here + ref_claims_here)
     if combo_indep["confirmed_independent_root_count"] >= 2:
         return DISTINCT_PROVENANCE, "resolved"

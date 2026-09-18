@@ -151,11 +151,60 @@ identical to utf-8 otherwise) in both the ingest loader and the corpus
 loader.
 **Test:** `tests/test_ingest.py::test_utf8_bom_does_not_leak_into_the_address_column_name`
 
+### 8. Target-vs-reference audit mislabeled a directly-confirmed shared root as "unresolved"
+**File:** `themis/target_audit.py` (`_address_status`)
+**Root cause:** the per-address comparability status only ever assigned
+`SAME_PROVENANCE` when the *corpus-wide containment heuristic*
+(`discover_inheritance_candidates`) flagged every reference source as
+`INFERRED` — a coarse signal that needs a large enough address overlap to
+fire at all. It never checked whether the target's claim and the
+reference's claim resolve to the identical *declared* root directly (e.g.
+both configured as the same `fixed_root`), which `provenance.resolve()`
+already establishes per claim with full confidence. A single shared address
+with a directly-confirmed common root fell all the way through to
+`RELATIONSHIP_UNRESOLVED` — actively misrepresenting a *known* relationship
+as unknown.
+**Impact:** Part P's canonical case "A → Root X, B → Root X" (apparent=2,
+confirmed roots=1) produced the correct aggregate independence counters
+(`shared_or_inherited_only`) but the wrong per-address status label,
+which is what the Address Inspector / provenance UI actually shows.
+**Fix:** added a direct root-intersection check —
+`target_roots & ref_roots` minus unresolved roots — before falling through
+to the distinct/unresolved branches. Deliberately *not* implemented via
+`address_independence()`'s combined `circular`/`shared_root_count` fields:
+those mix target-internal root sharing (the target asserting two claims
+that happen to share a root, with no reference relationship at all) with
+target↔reference sharing; a synthetic test confirms the chosen fix
+correctly ignores target-internal-only sharing while the naive
+`combo_indep["circular"]` approach would have false-positived on it.
+**Tests:** `tests/test_target_audit.py::TestProvenanceIndependenceCases` — the
+four canonical Part P cases (same root / different roots / one unresolved /
+both unresolved) plus the target-internal-sharing false-positive guard,
+run through the real `audit_target_against_reference()` using synthetic
+`fixed_root` sources patched into both `provenance._cfg.sources` and the
+derived `_EXACT_ROOTS`/`_PREFIX_ROOTS` ledger (patching the config dict
+alone is not enough — `is_unresolved()`'s ledger is built once at import
+time and does not observe later config changes; harmless in production
+since config never changes post-startup, but a real trap for tests).
+
+### Also: generic multi-level taxonomy hierarchy walk had no adversarial coverage
+`themis/taxonomy.py`'s `classify_address`/`ancestors()` is written to walk
+an arbitrary-depth category tree, but the bundled `taxonomy.yml` is only
+ever 2 levels deep, so that code path was only ever exercised by the
+incidental 2-level case. Added `tests/test_paper_claims.py::TestHierarchyAdversarial`
+with a synthetic 3-level tree (monkeypatching `CATEGORIES`/`POLARITY`/`GENERIC`
+together) proving: a genuine grandparent/grandchild pair reads as
+refinement, but siblings under a shared non-root parent, and categories in
+unrelated branches, do not — the check is structural (via `parent:` links)
+rather than name-based. No code change was needed; this was a coverage gap,
+not a bug.
+
 ## Test suite state
 
-- Backend: **87/87 → 102/102** passing (15 new tests across 4 files, one new
+- Backend: **87/87 → 110/110** passing (23 new tests across 6 files, one new
   file `tests/test_api_export.py`).
-- Paper regression (`tests/test_paper_claims.py`): 42/42 → 47/47 passing.
+- Paper regression (`tests/test_paper_claims.py`): 42/42 → 48/48 passing.
+- `tests/test_target_audit.py`: 2/2 → 7/7 passing.
 - Frontend production build: clean (one pre-existing bundle-size advisory,
   not a defect — not touched).
 - Live API smoke test: paper-reproduction workspace creation, address
