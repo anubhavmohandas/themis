@@ -275,6 +275,76 @@ class TestKappa(Base):
                 analysis._cfg.thresholds["kappa_substantial_threshold"] = original
 
 
+class TestKappaSyntheticEdgeCases(unittest.TestCase):
+    """Part W - synthetic corpora with independently hand-computable expected
+    values, rather than only reproducing the bundled corpus's own numbers.
+    Targets division-by-zero, single-class kappa, empty overlap, and tiny
+    overlap - the shapes most likely to produce NaN/crash if the formula's
+    guards ever regress.
+    """
+
+    @staticmethod
+    def _claim(address, source, canon):
+        return {"address": address, "source": source, "raw_label": canon, "canon": canon,
+               "polarity": taxonomy.POLARITY.get(canon, "unknown"),
+               "prov_family": "", "lastmod": "", "heuristic": "unknown", "subcat": ""}
+
+    def test_textbook_two_by_two_matches_hand_computed_kappa(self):
+        # Classic 2x2 rater-agreement table (20/5/10/15 over n=50): po=0.70,
+        # pe=0.50, kappa=(0.70-0.50)/(1-0.50)=0.40 - computed independently
+        # of THEMIS's implementation, to check the formula itself, not just
+        # that it reproduces its own past output.
+        claims = []
+        i = 0
+        for _ in range(20):
+            claims += [self._claim(f"a{i}", "s1", "cat_yes"), self._claim(f"a{i}", "s2", "cat_yes")]; i += 1
+        for _ in range(5):
+            claims += [self._claim(f"a{i}", "s1", "cat_yes"), self._claim(f"a{i}", "s2", "cat_no")]; i += 1
+        for _ in range(10):
+            claims += [self._claim(f"a{i}", "s1", "cat_no"), self._claim(f"a{i}", "s2", "cat_yes")]; i += 1
+        for _ in range(15):
+            claims += [self._claim(f"a{i}", "s1", "cat_no"), self._claim(f"a{i}", "s2", "cat_no")]; i += 1
+        k = analysis.cohen_kappa(Corpus(claims, full=True))
+        pair = next(r for r in k["pairs"] if {r["source_a"], r["source_b"]} == {"s1", "s2"})
+        self.assertEqual(pair["n"], 50)
+        self.assertAlmostEqual(pair["percent_agreement"], 0.70, places=9)
+        self.assertAlmostEqual(pair["cohen_kappa"], 0.40, places=9)
+
+    def test_single_class_overlap_is_undefined_not_a_crash(self):
+        # Every shared address gets the same category from both sources:
+        # pe=1 exactly (denominator 1-pe=0) - must be reported as undefined,
+        # never raise ZeroDivisionError or return NaN.
+        claims = [self._claim(f"a{i}", s, "ransomware") for i in range(10) for s in ("s1", "s2")]
+        k = analysis.cohen_kappa(Corpus(claims, full=True))
+        pair = next(r for r in k["pairs"] if {r["source_a"], r["source_b"]} == {"s1", "s2"})
+        self.assertIsNone(pair["cohen_kappa"])
+        self.assertIn("undefined", pair["note"])
+        self.assertAlmostEqual(pair["percent_agreement"], 1.0, places=9)
+
+    def test_zero_overlap_pair_is_absent_not_nan(self):
+        # s1 and s2 never share an address at all - must not appear in the
+        # pair list (as NaN or otherwise), not be silently invented as n=0.
+        claims = [self._claim("a1", "s1", "ransomware"), self._claim("a2", "s2", "exchange")]
+        k = analysis.cohen_kappa(Corpus(claims, full=True))
+        self.assertFalse(any({r["source_a"], r["source_b"]} == {"s1", "s2"} for r in k["pairs"]))
+
+    def test_tiny_overlap_of_one_disagreeing_address_is_zero_not_nan(self):
+        # n=1, x != y: agree=0, and each label is unique to its rater so
+        # pe's sum-over-intersection is 0/1 = 0 too - kappa is well-defined
+        # (0.0) even at the smallest possible non-empty overlap.
+        claims = [self._claim("a1", "s1", "ransomware"), self._claim("a1", "s2", "exchange")]
+        k = analysis.cohen_kappa(Corpus(claims, full=True))
+        pair = next(r for r in k["pairs"] if {r["source_a"], r["source_b"]} == {"s1", "s2"})
+        self.assertEqual(pair["n"], 1)
+        self.assertAlmostEqual(pair["cohen_kappa"], 0.0, places=9)
+
+    def test_empty_corpus_produces_no_pairs_not_a_crash(self):
+        k = analysis.cohen_kappa(Corpus([], full=True))
+        self.assertEqual(k["n_pairs"], 0)
+        self.assertEqual(k["pairs"], [])
+        self.assertEqual(k["substantial"], [])
+
+
 class TestDrift(Base):
     """Section 5.3 - the headline. Cent-level tolerance: the bundled revenue
     file stores USD rounded to two decimals."""
