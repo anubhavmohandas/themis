@@ -1,8 +1,19 @@
 id: ellipticpp
 display_name: "Elliptic++"
 chain: bitcoin
-citation: "Elliptic++ dataset"
-license: "see publisher"
+citation: "Elmougy & Liu, \"Elliptic++: A Graph Network of Bitcoin Blockchain Transactions and Wallet Addresses\" (arXiv:2306.06108); dataset at github.com/git-disl/EllipticPlusPlus"
+license: >
+  UNCONFIRMED - checked 2026-09-18: the dataset's own GitHub repo
+  (git-disl/EllipticPlusPlus) states no explicit license, only a citation
+  request; the underlying original Elliptic transaction dataset it extends
+  is separately published under CC BY-NC-ND 4.0 (non-commercial, no
+  derivatives) elsewhere, but that is not confirmed to also govern
+  Elliptic++'s own wallet-address data. See HARDENING_LOG.md "PAPER MAY
+  NEED UPDATE - Elliptic++ license status" for why this matters: this
+  repo's bundled demo_data/observations_sample.csv.gz is a git-tracked,
+  normalized derivative of this data in what is currently a public repo.
+  Flagged for the authors to verify directly with the dataset's authors -
+  not resolved by this pass.
 confidence_semantics: "heuristic-derived; methodology not publicly disclosed per-label"
 known_dependencies: []
 
