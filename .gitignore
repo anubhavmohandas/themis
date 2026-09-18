@@ -28,6 +28,8 @@ npm-debug.log*
 
 # Working notes
 HARDENING_LOG.md
+RECONCILIATION_REPORT.md
+results/
 
 # Downloaded external datasets used for compatibility verification
 external_data/
