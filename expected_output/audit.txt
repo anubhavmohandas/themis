@@ -1,0 +1,66 @@
+note: bundled sample: 268,891 claims over 228,775 addresses, including every one of the 15,400 multi-dataset addresses. Agreement, conflict and circularity figures are exact; corpus-wide rates use full-corpus counts from the manifest.
+
+────────────────────────────────────────────────────────────────────────
+CORPUS
+  1,545,710 claims over 1,497,191 addresses, 25 distinct provenance roots (21 identified, 4 unresolved)
+    ellipticpp           822,937
+    tagpack              483,296
+    schnoering           101,387
+    rodwald_mixers        57,817
+    rodwald_ransom        50,322
+    ransomwhere           11,186
+    watchyourback            309
+
+────────────────────────────────────────────────────────────────────────
+CORROBORATION  (RQ2)
+  single-dataset        1,481,791   98.97%
+  two or more              15,400    1.03%
+  counts datasets, not independent sources - see INDEPENDENCE below
+
+────────────────────────────────────────────────────────────────────────
+AGREEMENT  (among multi-dataset addresses)
+  exact                       10,515   68.28%
+  hierarchical refinement      1,253    8.14%
+  entity-type conflict           340    2.21%
+  licit/illicit conflict         108    0.70%
+  incomparable                 3,184   20.68%
+  chance-corrected: 17 overlapping pairs, 4 undefined, 7 at zero
+    schnoering-tagpack          n= 8,139  raw  93.3%   kappa 0.655
+      interpretable pairs only: n= 7,808  raw  97.3%   kappa 0.780   (0 both-unknown pairs counted as agreement above)
+    tagpack-watchyourback       n=   210  raw  73.3%   kappa 0.613
+      interpretable pairs only: n=    74  raw  94.6%   kappa 0.916   (84 both-unknown pairs counted as agreement above)
+  largest licit/illicit conflicts:
+       30  ellipticpp:licit_unspec vs rodwald_mixers:mixer
+       23  schnoering:exchange vs tagpack:sanctioned
+       15  ellipticpp:licit_unspec vs schnoering:ponzi
+       11  schnoering:exchange vs tagpack:hack
+
+────────────────────────────────────────────────────────────────────────
+INDEPENDENCE  (RQ2)
+  decoding rodwald_ransom.prov_family against ransomwhere: CLEAN SPLIT
+    group S      n= 28,684     0.0% inside  independent
+    group H      n= 11,738     0.0% inside  independent
+    group RSH    n=  6,546   100.0% inside  inherited
+    group SH     n=  2,367     0.0% inside  independent
+    group RS     n=    494   100.0% inside  inherited
+    group R      n=    400   100.0% inside  inherited
+    group RH     n=     33   100.0% inside  inherited
+    group HS     n=     25     0.0% inside  independent
+    group HRS    n=     23   100.0% inside  inherited
+    group HR     n=     10   100.0% inside  inherited
+    group H,S    n=      1   100.0% inside  malformed
+    group SR     n=      1   100.0% inside  insufficient
+  -> 7,508 addresses inherited from ransomwhere
+  naming residue in rodwald_ransom: 11,796 of 50,322 (23.44%) name their upstream study
+  Montreal 2019 ground-truth set (7,222 addresses) also appears in:
+    ransomwhere         7,208   99.81%
+    tagpack             7,208   99.81%
+    rodwald_ransom      7,122   98.62%
+    watchyourback          27    0.37%
+    ellipticpp              6    0.08%
+  unresolved provenance: 853,583 addresses (57.0% of the corpus)
+  concentration:
+    elliptic_undisclosed               53.24% of all claims
+    tagpack_GraphSense Core Team       24.75% of all claims
+    bitcointalk_forum                   5.79% of all claims
+  unresolved is not 'shared' - see `themis bootstrap --both`

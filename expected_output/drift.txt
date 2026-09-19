@@ -1,0 +1,16 @@
+
+────────────────────────────────────────────────────────────────────────
+CONCLUSION DRIFT  (RQ3)
+  same corpus, same estimation procedure; only the trust rule changes
+
+    condition                                           obs  addresses     revenue USD   vs B
+  A naive union, sources summed as independent     61,508     54,000   1,367,997,317   1.24
+  B address-level deduplication                    54,000     54,000   1,101,304,942   1.00
+  C circular inheritance collapsed to its root     42,237     42,237   1,045,637,066   0.95
+  D highest-declared-confidence tier only           7,457      7,457     112,426,899   0.10
+
+  7,508 addresses are shared between the two sources and counted twice in A
+  spread B/D = 9.8x   A/D = 12.2x
+  D retains only 13.8% of addresses, so its figure is a lower bound at low
+  coverage, not a corrected estimate. The point is that the trust rule moves
+  the answer by an order of magnitude.

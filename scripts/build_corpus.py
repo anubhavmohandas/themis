@@ -82,16 +82,24 @@ def _open(path):
 
 
 class Builder:
-    def __init__(self):
+    def __init__(self, taxonomy_fill=False):
         self.rows, self.dropped, self.warnings = [], collections.Counter(), []
+        self.taxonomy_fill, self.filled = taxonomy_fill, 0
         from themis import taxonomy          # polarity comes from config, not a second table
-        self.polarity = taxonomy.POLARITY
+        self.polarity, self._canonicalize = taxonomy.POLARITY, taxonomy.canonicalize_category
 
     def emit(self, address, source, raw_label, canon, prov_family, lastmod="", heuristic="", subcat=""):
         a = norm_addr(address)
         if not a or len(a) < MIN_ADDRESS_LEN:
             self.dropped[source] += 1
             return
+        if canon == "unknown" and self.taxonomy_fill:
+            # a label the source's own map could not place, re-derived through the
+            # current taxonomy + structured-label parser. Never touches a label the
+            # adapter already placed - those come from source-specific meaning.
+            filled = self._canonicalize(raw_label)
+            if filled:
+                canon, self.filled = filled, self.filled + 1
         self.rows.append(dict(address=a, source=source, raw_label=raw_label, canon=canon,
                               polarity=self.polarity.get(canon, "unknown"), prov_family=prov_family,
                               lastmod=lastmod or "", heuristic=heuristic or "", subcat=subcat or ""))
@@ -252,13 +260,17 @@ def main(argv=None):
     ap.add_argument("--rodwald-ransom"); ap.add_argument("--rodwald-mixers")
     ap.add_argument("--ransomwhere"); ap.add_argument("--tagpack", help="root of a graphsense-tagpacks checkout")
     ap.add_argument("--watchyourback")
+    ap.add_argument("--taxonomy-fill", action="store_true",
+                    help="CORRECTED-CANDIDATE build: claims the paper-era adapters left `unknown` are "
+                         "re-derived through the current taxonomy and structured-label parser. Default "
+                         "off = the paper snapshot's own behaviour; the two are never mixed silently")
     ap.add_argument("--retrieved", action="append", default=[], metavar="SOURCE=YYYY-MM-DD",
                     help="when you retrieved that source (recorded, not checked)")
     a = ap.parse_args(argv)
 
     retrieved = dict(x.split("=", 1) for x in a.retrieved)
     from themis import __version__, taxonomy, config_io
-    b = Builder()
+    b = Builder(taxonomy_fill=a.taxonomy_fill)
     plan = [("ellipticpp", a.elliptic_classes, lambda p: b.elliptic(p)),
             ("schnoering", a.schnoering, lambda p: b.schnoering(p)),
             ("rodwald_ransom", a.rodwald_ransom, lambda p: b.rodwald(p, "rodwald_ransom", "ransomware", ";")),
@@ -310,7 +322,9 @@ def main(argv=None):
         per[r["source"]]["claims"] += 1; per[r["source"]]["addresses"].add(r["address"])
     manifest = dict(
         builder=dict(script="scripts/build_corpus.py", adapter_version=ADAPTER_VERSION,
-                     normalization_version=NORMALIZATION_VERSION, themis_version=__version__,
+                     normalization_version=NORMALIZATION_VERSION + ("+taxonomy-fill" if a.taxonomy_fill else ""),
+                     taxonomy_fill=a.taxonomy_fill, claims_rederived_by_taxonomy_fill=b.filled,
+                     themis_version=__version__,
                      python=sys.version.split()[0],
                      taxonomy_sha256=sha256_file(config_io.config_dir() / "taxonomy.yml"),
                      script_sha256=sha256_file(__file__)),

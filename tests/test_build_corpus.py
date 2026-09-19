@@ -110,6 +110,23 @@ class TestBuildCorpus(unittest.TestCase):
         self.assertIn(A[9], c.by_addr)                 # "#" normalized by config, raw preserved
         self.assertEqual(c.by_addr[A[9]][0]["raw_address"], "#" + A[9])
 
+    def test_taxonomy_fill_is_opt_in_and_only_touches_unknown_labels(self):
+        bc.main(self.args)
+        plain = {(r["source"], r["address"]): r["canon"] for r in self._rows()}
+        bc.main(self.args + ["--taxonomy-fill"])
+        filled = {(r["source"], r["address"]): r["canon"] for r in self._rows()}
+        # WatchYourBack's "tormarket:hydra-market" was `unknown` in the paper snapshot
+        self.assertEqual(plain[("watchyourback", "#" + A[9])], "unknown")
+        self.assertEqual(filled[("watchyourback", "#" + A[9])], "darknet_market")
+        # Elliptic++ class_3 has no taxonomy alias: stays unknown; placed labels never change
+        self.assertEqual(filled[("ellipticpp", A[2])], "unknown")
+        self.assertEqual({k: v for k, v in filled.items() if plain[k] != "unknown"},
+                         {k: v for k, v in plain.items() if v != "unknown"})
+        m = json.loads((self.d / "out" / "build_manifest.json").read_text())
+        self.assertTrue(m["builder"]["taxonomy_fill"])
+        self.assertEqual(m["builder"]["claims_rederived_by_taxonomy_fill"], 1)
+        self.assertIn("taxonomy-fill", m["builder"]["normalization_version"])
+
     def test_nonexistent_input_stops_with_a_clear_message(self):
         with self.assertRaises(SystemExit) as cm:
             bc.main(["--out", str(self.d / "o3"), "--schnoering", str(self.d / "nope.csv")])

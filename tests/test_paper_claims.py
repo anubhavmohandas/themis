@@ -762,6 +762,26 @@ class TestBootstrap(Base):
         self.assertLess(s["ci_low"], s["point"])
         self.assertGreater(s["ci_high"], s["point"])
 
+    def test_canonical_lower_bound_intervals_are_frozen(self):
+        # Phase 8 freeze: the exact intervals `themis bootstrap --both` prints
+        # for the lower (unresolved-pooled) bound at the config defaults
+        # (2,000 resamples, seed 42, 95%). Environment-independent by
+        # construction (stdlib random.Random). The paper's published
+        # 88.786% / [66.208, 98.982] etc. describe the pre-fix agreement
+        # classifier and a different RNG path; these are the accepted values.
+        # Upper bound (50,748 clusters) is frozen in expected_output/ - too
+        # slow to recompute on every test run.
+        b = analysis.bootstrap(self.c)
+        self.assertEqual((b["n_boot"], b["seed"], b["confidence_level"], b["n_clusters"]),
+                         (2000, 42, 0.95, 24))
+        want = {"exact": (68.279, 6.012, 97.808),
+                "hierarchical refinement": (8.136, 0.000, 25.373),
+                "licit/illicit conflict": (0.701, 0.119, 2.785)}
+        for k, (pt, lo, hi) in want.items():
+            s = b["stats"][k]
+            self.assertEqual((round(100 * s["point"], 3), round(100 * s["ci_low"], 3),
+                              round(100 * s["ci_high"], 3)), (pt, lo, hi), k)
+
     def test_corpus_wide_rate_withheld_on_sample(self):
         b = analysis.bootstrap(self.c, n_boot=50)
         self.assertNotIn("multi_source_rate", b["stats"])
@@ -1085,6 +1105,49 @@ class TestStructuredLabelEdgeCases(unittest.TestCase):
                      and x["raw_label"] == "tormarket:hydra-market")
         self.assertEqual(claim["canon"], "unknown")
         self.assertEqual(taxonomy.canonicalize_category(claim["raw_label"]), "darknet_market")
+
+
+class TestWatchYourBackPerRecordProvenance(Base):
+    """Phase 2B: WatchYourBack is a cited compilation, not a provenance root.
+    The 71 hydra-market records cite Treasury's OFAC page and sit at OFAC-SDN
+    addresses; the rest keep the source's own root and are not VERIFIED."""
+
+    def _wyb(self):
+        return [x for x in self.c.claims if x["source"] == "watchyourback"]
+
+    def test_hydra_records_root_at_ofac_and_are_verified(self):
+        hydra = [x for x in self._wyb() if x["subcat"] == "hydra-market"]
+        self.assertEqual(len(hydra), 71)
+        for x in hydra:
+            self.assertEqual((x["root"], x["prov_native"], taxonomy.tier_of(x)),
+                             ("ofac_sdn", False, taxonomy.TIER_VERIFIED))
+
+    def test_every_other_record_keeps_the_sources_root_and_is_not_verified(self):
+        rest = [x for x in self._wyb() if x["subcat"] != "hydra-market"]
+        self.assertEqual(len(rest), 238)
+        for x in rest:
+            self.assertEqual((x["root"], x["prov_kind"], taxonomy.tier_of(x)),
+                             ("watchyourback_manual", "DECLARED", taxonomy.TIER_DERIVED))
+
+    def test_a_hydra_address_is_circular_with_schnoerings_ofac_claim(self):
+        addr = next(x["address"] for x in self._wyb() if x["subcat"] == "hydra-market")
+        r = analysis.explain(self.c, addr)
+        self.assertTrue(r["circular"])
+        # (TagPack itself names two creators here, so the confirmed-root count can
+        # equal the dataset count while one root is still restated twice)
+        self.assertGreaterEqual(r["independence"]["shared_root_count"], 1)
+        self.assertIn("ofac_sdn", {c["root"] for c in r["claims"] if c["source"] == "watchyourback"})
+
+    def test_root_inventory_is_unchanged_by_the_rerooting(self):
+        # the paper's 25 roots / 21 identified / 4 unresolved (manifest) - the
+        # 71 records moved into an existing root, none were added or removed
+        ind = analysis.independence(self.c)
+        self.assertEqual((ind["n_roots_total"], ind["n_roots_identified"]), (25, 21))
+        self.assertEqual(sum(1 for r in self.c.roots() if r == "watchyourback_manual"), 1)
+
+    def test_declared_manually_verified_alone_is_not_the_verified_tier(self):
+        claim = dict(heuristic="manual_verified", root="some_unlisted_root", prov_verified=False)
+        self.assertEqual(taxonomy.tier_of(claim), taxonomy.TIER_DERIVED)
 
 
 if __name__ == "__main__":

@@ -1,56 +1,76 @@
 # Third-party data
 
-THEMIS's own code license is a separate question, tracked in `LICENSE` (not
-yet added — see README §11). This document covers only the seven public
-datasets `demo_data/` derives from.
+THEMIS's own code license is a separate question (see `README.md` §11: no
+`LICENSE` file has been chosen yet). This document covers only the public
+datasets the bundled sample derives from, and the one government list the
+anchor file draws on.
 
-**What's actually bundled**: `demo_data/observations_sample.csv.gz` and
-`ground_truth.csv` contain *normalized, derived* rows (address, canonical
-category, provenance fields) produced by THEMIS's own ingestion pipeline —
-never the source's original file verbatim, and never anything beyond what
-each source itself publishes as address/label pairs (no transaction graphs,
-no raw text beyond the label field). All license findings below were
-confirmed 2026-09-18 directly against each source's own repository, Zenodo
-record, or publication — not assumed from a source's general reputation.
+**What is bundled** (all under `demo_data/`, all *derived*, none a source's
+original file):
 
-**No legal conclusion is drawn here.** Where a source's redistribution terms
-are not directly confirmed, that is stated plainly as `UNCONFIRMED`, and the
-conservative action (verify with the source's authors before further
-redistribution) is the author's to take, not this document's to decide.
+| file | contents | derived from |
+|---|---|---|
+| `observations_sample.csv.gz` | 268,891 normalized claims: address, canonical category, raw label, provenance fields | all seven sources (Elliptic++ and TagPack sampled; the other five complete) |
+| `verified_anchors.txt.gz` | 146,243 bare addresses — Condition D's anchor set | TagPack tags with `confidence: forensic` **∪** WatchYourBack's ransomware addresses (rebuilt and confirmed identical with `scripts/build_corpus.py`) |
+| `revenue.csv.gz` | 61,508 rows: address, USD received, family | Rodwald ransomware + Ransomwhere |
+| `ground_truth.csv` | the 289-address open anchor set | WatchYourBack manual annotations + OFAC SDN |
+| `manifest.json` | full-corpus counts recorded when the corpus was built | — |
 
-| Source | Citation | License | Retrieval date | Redistribution status | Raw data included? | Transformed data included? | Notes |
-|---|---|---|---|---|---|---|---|
-| GraphSense TagPack | GraphSense TagPack collection (github.com/graphsense/graphsense-tagpacks) | MIT (repo's own LICENSE file) | 2026-09-18 | **CONFIRMED** — MIT permits redistribution/derivatives | No | Yes | 32.30% of corpus claims. Per-tag GraphSense `confidence` id survives in `subcat` but isn't yet used to re-tier evidence (see README §13). |
-| Schnöring et al. | Schnoering & Vazirgiannis, Bitcoin transaction-graph dataset with entity labels (Zenodo DOI 10.5281/zenodo.22239038) | CC BY 4.0 (Zenodo record) | 2026-09-18 | **CONFIRMED** — CC BY permits redistribution/derivatives with attribution | No | Yes | 6.72% of corpus claims. |
-| Ransomwhere | Crowd-sourced ransomware tracker (ransomwhe.re; Zenodo DOI 10.5281/zenodo.6512122) | CC BY (Zenodo record) | 2026-09-18 | **CONFIRMED** — CC BY permits redistribution/derivatives with attribution | No | Yes | 0.72% of corpus claims. Manually reviewed submissions, but platform-level review, not independent re-verification — see `config/sources/ransomwhere.yml`. |
-| Elliptic++ | Elmougy & Liu, "Elliptic++: A Graph Network of Bitcoin Blockchain Transactions and Wallet Addresses" (arXiv:2306.06108); github.com/git-disl/EllipticPlusPlus | **UNCONFIRMED** — the dataset's own repo states no explicit license, only a citation request; the base Elliptic dataset it extends is separately CC BY-NC-ND 4.0 elsewhere, not confirmed to also cover Elliptic++'s own address data | 2026-09-18 | **UNCONFIRMED** | No | Yes | **Largest single source: 53.24% of all corpus claims.** Verify directly with the dataset's authors before further redistribution. |
-| Rodwald (ransomware corpus) | Rodwald, "Preparing a Dataset of Ransomware BTC Addresses for Machine Learning Purpose" (Springer, 978-3-031-61857-4_22) | **UNCONFIRMED** — paper is paywalled (Springer); no license text retrievable from the author's data-hosting site | 2026-09-18 | **UNCONFIRMED** | No | Yes | 3.26% of corpus claims. |
-| Rodwald (mixer corpus) | Rodwald, "Preparing a Dataset of Mixers BTC Addresses for Machine Learning Purpose" (Springer, 978-3-031-92734-8_19) | **UNCONFIRMED** — same as above | 2026-09-18 | **UNCONFIRMED** | No | Yes | 3.74% of corpus claims. |
-| WatchYourBack | "Watch Your Back: Identifying Cybercrime Financial Relationships in Bitcoin through Back-and-Forth Exploration" (CCS'22); github.com/cybersec-code/watchyourback | GPL-3.0 confirmed for the **analysis code**; not separately confirmed for the address/tag **data** specifically | 2026-09-18 | **PARTIALLY CONFIRMED** (code only) | No | Yes | Smallest source (0.02% of corpus claims, 309 addresses) — lowest individual risk by volume, but GPL-3.0 is copyleft. |
+No transaction graph, no feature file, and no source's raw file is included.
+All license findings below were re-checked on **2026-09-19** directly against
+each source's own repository, Zenodo record or page — not assumed.
 
-## Summary
+**No legal conclusion is drawn here.** Where redistribution terms are not
+confirmed, that is stated as `UNCONFIRMED`; the decision is the author's.
 
-- **Confirmed permissive**: TagPack, Schnöring, Ransomwhere — together 39.74%
-  of the corpus's claims (32.30% + 6.72% + 0.72%).
-- **Unconfirmed, largest exposure**: Elliptic++ (53.24% of claims) and both
-  Rodwald corpora (7.00% combined). These should be verified directly with
-  their authors before the bundled sample is redistributed further.
-- **Partially confirmed, immaterial size**: WatchYourBack (0.02% of claims;
-  code license confirmed, data license not separately confirmed).
+## Per-source status
 
-## Recommended conservative release strategy
+| # | Source | Official location | Cited in paper as | Retrieval date (corpus / license check) | License | License evidence | Raw bundled? | Derived bundled? | Redistribution |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | GraphSense TagPack | github.com/graphsense/graphsense-tagpacks | [1] Haslhofer et al., arXiv:2102.13613 | corpus: paper build (Sep 2026) / check: 2026-09-19 | **MIT** | `LICENSE` in repo root, © Iknaio Cryptoasset Analytics GmbH and AIT (read 2026-09-19) | No | Yes (25,362 sampled claims + the `forensic` half of the anchor file) | **CONFIRMED** (MIT; keep the copyright + permission notice with the derived rows) |
+| 2 | Schnöring et al. | Zenodo doi:10.5281/zenodo.22239038, "Bitcoin transaction graphs: training, labelled entities, and CoinJoins" | [2] Schnoering & Vazirgiannis, Sci. Data 12, 404 (2025) | corpus: paper build / check: 2026-09-19 | **CC BY 4.0** | Zenodo API `metadata.license.id = cc-by-4.0` (2026-09-19) | No | Yes (103,812 claims, complete) | **CONFIRMED** with attribution. Note the record is dated 2026-09-01: the author should confirm it is the version the corpus was built from |
+| 3 | Ransomwhere | ransomwhe.re; Zenodo doi:10.5281/zenodo.13999026 | [17] export retrieved 15 Sep 2026 | corpus: 2026-09-15 live export / check: 2026-09-19 | **CC BY 4.0** (Zenodo dataset) | Zenodo API `cc-by-4.0` (2026-09-19). The live API returned HTTP 502 on 2026-09-19, so the live export's own terms were not re-read | No | Yes (11,186 claims, complete; revenue rows) | **CONFIRMED** for the Zenodo-published dataset; the live export the paper used is presumed the same dataset but was not separately checked |
+| 4 | Elliptic++ | github.com/git-disl/EllipticPlusPlus | [14] Elmougy & Liu, KDD '23 | corpus: paper build / check: 2026-09-19 | **NONE STATED** | GitHub API `license: null`; the repository's README asks for citation and states no terms. The base Elliptic dataset it extends is separately CC BY-NC-ND 4.0 elsewhere; whether that covers Elliptic++'s own address data is unconfirmed | No | Yes (20,083 sampled claims; **53.24% of all corpus claims**) | **UNCONFIRMED** |
+| 5 | Rodwald — ransomware | sydeus.rodwald.pl/datasets (`BTC_Ransom.csv`) | [15] Rodwald, DepCoS-RELCOMEX 2024 (Springer) | corpus: paper build / check: 2026-09-19 | **NONE STATED** | The dataset page (read 2026-09-19) carries no license or terms text and its legend documents feature columns only, not the `source` letter code; the paper is paywalled | No | Yes (50,322 claims, complete; revenue rows) | **UNCONFIRMED** |
+| 6 | Rodwald — mixers | sydeus.rodwald.pl/datasets (`BTC_Mixers.csv`) | [16] Rodwald, DepCoS-RELCOMEX 2025 (Springer) | corpus: paper build / check: 2026-09-19 | **NONE STATED** | Same page, same finding | No | Yes (57,817 claims, complete) | **UNCONFIRMED** |
+| 7 | WatchYourBack | github.com/cybersec-code/watchyourback | [6] Gomez, Moreno-Sanchez & Caballero, ACM CCS 2022 | corpus: paper build / check: 2026-09-19 (data file re-fetched, 309 rows identical to the bundle) | **GPL-3.0** for the repository | GitHub API `spdx_id: GPL-3.0` (2026-09-19). Whether it extends to `data/tagging/btc_resolv.csv` specifically is not stated | No | Yes (309 claims, complete; the ransomware half of the anchor file; 104 of the 289 ground-truth anchors) | **PARTIALLY CONFIRMED** — code license only; GPL-3.0 is copyleft |
+| — | OFAC SDN list | treasury.gov/ofac/downloads/sanctions/1.0/sdn_advanced.xml | — | fetched 2026-09-18 | US government work (public domain) | — | No | Yes (185 of the 289 ground-truth anchors; used to verify WatchYourBack's Treasury-cited records) | **CONFIRMED** |
 
-Until Elliptic++ and Rodwald's status is confirmed, a public release
-artifact should either:
+## What this means for a release
 
-1. Obtain explicit confirmation from those authors and record it here, or
-2. Replace those rows in the bundled sample with download/reconstruction
-   instructions (source URL, retrieval steps, expected row counts) plus
-   checksums, rather than shipping the derived rows directly, or
-3. Ship a smaller synthetic/demo substitute for those two sources and keep
-   the full sample available only to reviewers who've separately confirmed
-   licensing for themselves.
+- **Confirmed permissive** — TagPack, Schnöring, Ransomwhere, OFAC: 39.74% of
+  corpus claims (32.30 + 6.72 + 0.72; OFAC adds none).
+- **Unconfirmed** — Elliptic++ (53.24%) and both Rodwald releases (7.00%
+  combined): **60.24% of corpus claims** are derived from sources with no
+  stated redistribution terms.
+- **Partially confirmed** — WatchYourBack (0.02%): code license only.
 
-This document does not choose between these — that is the author's decision
-per the repository's actual release plan, not something to apply
-unilaterally.
+The repository is already public (github.com/anubhavmohandas/themis) and has
+contained `observations_sample.csv.gz` since its first commit; nothing here
+rewrites that history — that would be a separate decision.
+
+### Conservative release options (the author's choice; none has been applied)
+
+1. **Confirm** with the Elliptic++ and Rodwald authors and record the answer
+   here; ship the bundle as is.
+2. **Rebuild instead of ship.** Replace the unconfirmed sources' rows with
+   download instructions plus checksums and let a reviewer run
+   `scripts/build_corpus.py` on files they fetched themselves. This is now a
+   real option: today's TagPack repository rebuilds to exactly the paper's
+   499,327 claims / 483,296 addresses; WatchYourBack's 309 rows and Condition
+   D's 146,243-address anchor set rebuild identically; only the sampling of
+   Elliptic++ and TagPack in the bundled sample is not itself reproducible.
+3. **Substitute** a small synthetic demo for those sources.
+
+The release candidate built for this submission (`release/themis/`, ZIP
+recorded in `results/final_freeze/`) is the **full-reproduction package**
+(option "ship as is"). It is a *candidate*: it must not be distributed
+outside the review process until options 1–3 are settled for the sources
+marked UNCONFIRMED above.
+
+## Attribution
+
+If the bundle is redistributed, keep with it: the MIT notice for GraphSense
+TagPack (© Iknaio Cryptoasset Analytics GmbH; © AIT Austrian Institute of
+Technology), the CC BY 4.0 attributions for Schnöring et al. and Ransomwhere,
+and the citations in the table above.

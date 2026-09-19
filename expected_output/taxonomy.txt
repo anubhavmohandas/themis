@@ -1,0 +1,25 @@
+
+────────────────────────────────────────────────────────────────────────
+RELIABILITY TAXONOMY
+  tiers (ordered):
+    verified
+    derived
+    unverified-report
+    unknown
+
+  flags (orthogonal, downgrade within tier):
+    currency-unknown
+    stale
+    conflicting
+    circular
+
+  stale threshold: 3.0 years since last revision
+  a claim with no revision field is currency-unknown, never stale
+
+  category polarities:
+illicit: darknet_market, extremism, hack, illicit_unspec, malware, mixer,
+    ponzi, ransomware, sanctioned, scam, sextortion, terrorism, trafficking
+licit:   bridge, exchange, faucet, gambling, individual, licit_unspec,
+    marketplace_legal, mining, payment_proc, wallet_service
+
+  71 raw-label aliases declared (config/taxonomy.yml) across 24 categories

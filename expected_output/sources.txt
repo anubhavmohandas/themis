@@ -1,0 +1,54 @@
+
+────────────────────────────────────────────────────────────────────────
+SOURCE REGISTRY
+
+  ellipticpp  (Elliptic++)
+    chain              bitcoin
+    citation           Elmougy & Liu, "Elliptic++: A Graph Network of Bitcoin Blockchain Transactions and Wallet Addresses" (arXiv:2306.06108); dataset at github.com/git-disl/EllipticPlusPlus
+    confidence         Heuristic-derived; methodology not publicly disclosed per-label - true for the *provenance* (how each address was linked to its class), which is why the root stays `elliptic_undisclosed`/unresolved below. The *class codes themselves* are documented, though: this source's raw labels are exactly `class_1`/`class_2`/`class_3`, matching Elliptic's own published scheme (Weber et al.) of illicit/licit/unknown - confirmed 2026-09-18 and mapped in taxonomy.yml's `illicit_unspec`/`licit_unspec` aliases (class_3 correctly stays unmapped: it's the source's own declared "unknown", not an inference). See HARDENING_LOG.md bug #16.
+
+    provenance mode    fixed_root
+
+  ransomwhere  (Ransomwhere)
+    chain              bitcoin
+    citation           Ransomwhere crowd-sourced ransomware tracker (ransomwhe.re; Zenodo DOI 10.5281/zenodo.6512122)
+    confidence         Crowd report - unverified per the paper's evidence taxonomy. Confirmed 2026-09-18 against Ransomwhere's own published methodology: a submitter must supply the Bitcoin address, the ransomware family, and evidence of the ransom demand (e.g. a screenshot of the payment portal or an infection message), and Ransomwhere's maintainers manually review every report before publishing it (addresses are held private for 90 days after submission). This is real editorial moderation - stronger than an anonymous, unmoderated crowd feed - but it is the *platform's own* review, not independent verification by a third party or by THEMIS, and the evidence itself (a screenshot) establishes that a ransom was demanded at that address, not that THEMIS can independently re-check the incident. `UNVERIFIED_REPORT` remains the correct, conservative tier for this reason, not because the source is unmoderated.
+
+    provenance mode    fixed_root
+
+  rodwald_mixers  (Rodwald mixer corpus)
+    chain              bitcoin
+    citation           Rodwald, "Preparing a Dataset of Mixers BTC Addresses for Machine Learning Purpose" (Springer, 978-3-031-92734-8_19)
+    confidence         compiled from multiple named inputs, encoded as source letters
+    provenance mode    contains_rules
+    known dependencies walletexplorer
+
+  rodwald_ransom  (Rodwald ransomware corpus)
+    chain              bitcoin
+    citation           Rodwald, "Preparing a Dataset of Ransomware BTC Addresses for Machine Learning Purpose" (Springer, 978-3-031-61857-4_22)
+    confidence         compiled from multiple named inputs, encoded as source letters
+    provenance mode    contains_rules
+    known dependencies ransomwhere_crowd, princeton_huang_2018, padua_conti_2018, montreal_paquet_clouston_2019
+
+  schnoering  (Schnoering et al. corpus)
+    chain              bitcoin
+    citation           Schnoering & Vazirgiannis, Bitcoin transaction-graph dataset with entity labels (Zenodo DOI 10.5281/zenodo.22239038)
+    confidence         multi-input curation across named sub-corpora
+    provenance mode    field_map
+    known dependencies ofac_sdn, coinbase_messages, exchange_self_disclosure
+
+  tagpack  (GraphSense TagPack)
+    chain              bitcoin
+    citation           GraphSense TagPack collection (github.com/graphsense/graphsense-tagpacks)
+    confidence         Two different things share the word "confidence" here, and THEMIS keeps them apart. (1) GraphSense's own per-tag `confidence` id (see confidence.csv in graphsense/graphsense-tagpack-tool, retrieved 2026-09-18): a tag creator's declared reliability class on a 5-100 scale - web_crawl 20, forensic 50 ("trusted reports, e.g. academic papers"), authority_data 60 (e.g. OFAC), forensic_investigation 70 (a different id from forensic) - which survives per claim, unmodified, in `subcat`. (2) THEMIS's evidence tier (verified / derived / unverified-report / unknown), which describes whether the evidence behind a claim can be re-checked by a third party. No GraphSense value is mapped onto a THEMIS tier: forensic is a creator's declaration about a report, not re-checkable evidence, and there is no defensible 1:1 mapping between the two vocabularies. Every tagpack claim is therefore tiered DERIVED (creator-declared, curated) whatever its id. FINAL DECISION (scientific freeze): SOURCE-NATIVE CONFIDENCE PRESERVED, NOT EQUATED WITH THE THEMIS VERIFICATION TIER; no confidence_normalized field exists. It is descriptive for every THEMIS statistic EXCEPT ONE, and that one is material: the paper's Condition D (`themis drift`, "highest declared confidence") is the revenue at addresses in demo_data/verified_anchors.txt.gz, an anchor set assembled outside THEMIS as TagPack tags whose confidence is `forensic` united with WatchYourBack's ransomware annotations. In the bundled sample every one of Condition D's 7,457 addresses carries a `forensic` TagPack tag (WatchYourBack alone would give 31 addresses); and at ransomware-revenue addresses no tag has a higher id (authority_data or forensic_investigation), so choosing a level above forensic would empty Condition D. "Highest declared confidence" is therefore accurate only among the ids actually present at those addresses, not on GraphSense's own scale, where forensic sits below authority_data and forensic_investigation. Observed distribution of the raw id over the bundled sample's 25,362 tagpack claims: forensic 69.9%, service_data 27.3%, blank 1.6%, authority_data 0.7%, web_crawl 0.4%.
+
+    provenance mode    substring_map
+    known dependencies montreal_paquet_clouston_2019
+
+  watchyourback  (WatchYourBack)
+    chain              bitcoin
+    citation           "Watch Your Back: Identifying Cybercrime Financial Relationships in Bitcoin through Back-and-Forth Exploration" (CCS'22); github.com/cybersec-code/watchyourback
+    confidence         Curated, cited annotation: EVERY record in upstream's data/tagging/ btc_resolv.csv (309 of 309, re-checked 2026-09-19) carries an external reference URL, so the dataset is not itself a provenance root - what each record's citation points to varies, and a claim's root is resolved per record below, not per dataset. Declared "manually verified" is a claim about WatchYourBack's process, not the paper's verified tier (Sec 4.2: its annotations are open anchors that do not themselves reach that tier) - so its own records are tiered DERIVED, and only a record whose root terminates in re-checkable evidence is VERIFIED. Per-record citation analysis (results/final_freeze/analysis/wyb_provenance_*): 71 of the 87 records upstream marks with a leading "#" - all entity "hydra-market" - cite Treasury's OFAC recent-actions page (20220405), every one of those addresses is in OFAC's current SDN list, and the SDN entity is "Hydra Market" for all 71. That is RESOLVED_TO_OFAC and is mapped below to root ofac_sdn (non-native: WatchYourBack restates OFAC's designation, so it can no longer confirm an OFAC-rooted anchor or Schnoering's own OFAC claims as independent). The other 16 "#" records are NOT reassigned: 14 (entity apt29) cite a news article about an OFAC action and their addresses are in the SDN list, but the SDN entities (Secondeye Solution, RAZA Mujtaba Ali, SOUTHFRONT) are not "apt29" - the designation is OFAC's, the attribution is not shown to be; 2 (mrpr0gr4mmer) cite a threat-intel blog and a Telegram channel mirror. Those 16 stay under watchyourback_manual, where they are still credited as WatchYourBack's own finding - AUTHOR DECISION: an unresolved root for them would change the paper's root inventory (25 roots / 21 identified / 4 unresolved). The same Treasury-citation pattern also holds for 31 non-"#" records (20 lazarus, 11 drug-trafficking), and 171 non-"#" records cite other external sites; none is reassigned because the bundled observation schema carries no per-record reference URL, and `lazarus` mixes OFAC and non-OFAC citations so an entity-keyed rule cannot separate them.
+
+    provenance mode    field_map
+    address normalize  strip '#' (raw preserved as raw_address)

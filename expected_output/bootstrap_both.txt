@@ -1,0 +1,19 @@
+
+────────────────────────────────────────────────────────────────────────
+CLUSTER BOOTSTRAP  (resampling unit = provenance root)
+  2,000 resamples, seed 42, 95% percentile interval, engine python_canonical
+
+  lower bound (unresolved pooled): 24 clusters
+    corpus-wide rates omitted on the bundled sample; conditional rates are exact. Use --observations with a full build to reproduce the paper's multi-dataset-rate interval.
+    exact                      68.279%  [ 6.012, 97.808]
+    hierarchical refinement     8.136%  [ 0.000, 25.373]
+    licit/illicit conflict      0.701%  [ 0.119,  2.785]
+
+  upper bound (unresolved independent): 50,748 clusters
+    corpus-wide rates omitted on the bundled sample; conditional rates are exact. Use --observations with a full build to reproduce the paper's multi-dataset-rate interval.
+    exact                      68.279%  [ 7.182, 85.130]
+    hierarchical refinement     8.136%  [ 3.682, 24.611]
+    licit/illicit conflict      0.701%  [ 0.299,  2.176]
+
+  a row-level bootstrap would report far tighter intervals and would be wrong to:
+  republished claims from one ancestor are not independent observations.

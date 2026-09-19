@@ -1,0 +1,17 @@
+
+────────────────────────────────────────────────────────────────────────
+ADDRESS  14BWrn1evbyvBGGxFzUCVQ61ntNtRjRdm7
+  outcome            exact
+  tier               derived
+  flags              circular, currency-unknown
+
+  apparent corroboration   4 dataset(s)
+  actual corroboration     3 provenance root(s)
+  -> agreement here is circular: the datasets share an ancestor
+
+  claims:
+    schnoering      ransomware        root=montreal_paquet_clouston_2019     derived           currency-unknown
+    rodwald_ransom  ransomware        root=ransomwhere_crowd                 derived           currency-unknown
+    ransomwhere     ransomware        root=ransomwhere_crowd                 unverified-report 
+    tagpack         ransomware        root=tagpack_GraphSense Core Team      derived           
+    tagpack         ransomware        root=montreal_paquet_clouston_2019     derived           
