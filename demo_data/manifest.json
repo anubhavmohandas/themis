@@ -87,6 +87,12 @@
   {
    "date": "2026-09-19",
    "change": "full_corpus.root_claims: ofac_sdn 186->257 and watchyourback_manual 309->238. 71 WatchYourBack hydra-market records cite Treasury/OFAC and are re-rooted to ofac_sdn per-record (config/sources/watchyourback.yml). roots_total/identified/unresolved and every other count are unchanged."
+  },
+  {
+   "date": "2026-09-19",
+   "change": "added analysis_as_of_date (2026-09-15). Corpus.snapshot_date now prefers it over the newest revision date present in the claims; with the latter, TagPack's dated claims were 5.2% stale in the sample against the paper's 99.9% over three years old (99.1% with this date)."
   }
- ]
+ ],
+ "analysis_as_of_date": "2026-09-15",
+ "analysis_as_of_date_note": "The date staleness is judged against: the Ransomwhere export retrieval date the paper reports (reference [17]) and the cut pipeline/e3.py applied. Deliberately NOT the newest revision date in the claims (2024-10-29), which is not when the corpus was retrieved."
 }

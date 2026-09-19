@@ -16,9 +16,10 @@ def _c(s, col):
 
 
 def load(args) -> Corpus:
-    if getattr(args, "observations", None):
-        return Corpus.from_file(args.observations)
-    return Corpus.demo()
+    c = Corpus.from_file(args.observations) if getattr(args, "observations", None) else Corpus.demo()
+    if getattr(args, "as_of", None):
+        c.manifest["analysis_as_of_date"] = args.as_of   # Corpus.snapshot_date reads it
+    return c
 
 
 def rule(t=""):
@@ -360,6 +361,10 @@ def main(argv=None):
                     "their effect on a forensic figure.")
     p.add_argument("--observations", help="full observations.csv(.gz); omit to use "
                                           "the bundled sample")
+    p.add_argument("--as-of", metavar="YYYY-MM-DD",
+                   help="the date staleness is judged against (default: the bundled sample's "
+                        "declared analysis date; for --observations, the newest revision date in "
+                        "the claims - pass the real retrieval date here)")
     p.add_argument("--json", help="also write the result to this JSON file")
     sub = p.add_subparsers(dest="cmd", required=True)
 

@@ -117,11 +117,24 @@ class Corpus:
 
     @property
     def snapshot_date(self):
-        """Loop 2 STEP 16 - the fixed date a paper-reproduction run treats
-        as "today": the latest revision date actually present in this
-        corpus's own claims, derived from the immutable bundled data rather
-        than the wall clock, so the same archived corpus reproduces the
-        same freshness figures regardless of when it's re-run."""
+        """The fixed date a reproduction run treats as "today" when judging
+        staleness: the analysis date the corpus's manifest declares (the
+        retrieval date the paper reports), else - for a build with no
+        manifest - the newest revision date actually present in its claims.
+        Never the wall clock, so the same archived corpus reproduces the same
+        freshness figures whenever it is re-run.
+
+        The fallback is a lower bound on the real retrieval date, not the date
+        itself: a corpus whose newest record is two years old would be judged
+        two years too fresh. That is why the bundled sample declares its date
+        rather than relying on it, and why `--as-of` exists for a full build.
+        """
+        declared = self.manifest.get("analysis_as_of_date")
+        if declared:
+            try:
+                return datetime.date.fromisoformat(str(declared)[:10])
+            except ValueError:
+                pass
         dates = [(c.get("lastmod") or "").strip()[:10] for c in self.claims if (c.get("lastmod") or "").strip()]
         if not dates:
             return None

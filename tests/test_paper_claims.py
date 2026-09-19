@@ -34,6 +34,34 @@ class TestAsOfDate(Base):
         self.assertEqual(r1["freshness"], r2["freshness"])
         self.assertEqual(r1["analysis_as_of_date"], str(self.c.snapshot_date))
 
+    def test_bundled_sample_declares_the_papers_analysis_date(self):
+        # the paper judges staleness at its retrieval date (2026-09-15), not at
+        # the newest revision in the claims (2024-10-29, which would call a
+        # corpus retrieved two years later "fresh")
+        self.assertEqual(self.c.snapshot_date, datetime.date(2026, 9, 15))
+        newest = max(c["lastmod"] for c in self.c.claims if c["lastmod"])
+        self.assertLess(newest[:10], "2026-09-15")
+
+    def test_paper_staleness_statement_direction_reproduces(self):
+        # Sec 5.1: "within TagPack 99.9% of dated claims are over three years
+        # old". The sample over-represents multi-dataset addresses so it gives
+        # 99.1%, not 99.9% (needs the full build); under the newest-revision
+        # date it was 5.2%, which contradicted the paper outright.
+        tp = [c for c in self.c.claims if c["source"] == "tagpack" and (c["lastmod"] or "").strip()]
+        stale = sum(1 for c in tp if "stale" in taxonomy.currency_flags(c, today=self.c.snapshot_date))
+        self.assertGreater(stale / len(tp), 0.99)
+
+    def test_without_a_declared_date_the_newest_revision_is_the_fallback(self):
+        claims = [dict(address="1" * 26, source="tagpack", raw_label="x", canon="mixer", polarity="illicit",
+                       prov_family="tagpack:t", lastmod=d, heuristic="curated", subcat="")
+                  for d in ("2020-01-02", "2022-03-04", "")]
+        c = Corpus(claims, full=True)
+        self.assertEqual(c.snapshot_date, datetime.date(2022, 3, 4))
+        c.manifest["analysis_as_of_date"] = "2026-09-15"
+        self.assertEqual(c.snapshot_date, datetime.date(2026, 9, 15))
+        c.manifest["analysis_as_of_date"] = "not-a-date"      # malformed: falls back, never raises
+        self.assertEqual(c.snapshot_date, datetime.date(2022, 3, 4))
+
     def test_missing_date_claim_is_currency_unknown_regardless_of_as_of(self):
         flags = taxonomy.currency_flags({"lastmod": ""}, today=self.c.snapshot_date)
         self.assertEqual(flags, ["currency-unknown"])
