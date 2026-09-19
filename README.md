@@ -2,383 +2,310 @@
 
 **T**rust and **E**vidence-based **H**euristic **M**ethod for **I**nvestigative
 **S**ource Assessment — provenance-aware auditing of public Bitcoin attribution
-labels, and the runnable counterpart to *Provenance Before Precision: Auditing
-Public Bitcoin Attribution Labels and Their Effect on Forensic Conclusions*
-(submitted, ICISHCT 2026).
+labels, built alongside the paper *Provenance Before Precision: Auditing Public
+Bitcoin Attribution Labels and Their Effect on Forensic Conclusions* (ICISHCT
+2026, under review).
 
 ## 1. What THEMIS is
 
-A blockchain records transfers, not identities. Everything an investigator says
-about *who* controlled an address is a claim layered on top, and in practice
-those claims come from a short list of public corpora that get reused across
-research and forensic workflows without much scrutiny of where they actually
-came from. THEMIS audits them: what corroborates what, which agreement is
-inherited rather than independent, how much of the corpus has no public
-cross-source comparison at all, and what the choice of trust rule does to a
-downstream forensic figure.
+A blockchain records transfers, not identities. Everything said about *who*
+controlled an address is a claim layered on top, and those claims come from a
+short list of public corpora reused without much scrutiny of where they came
+from. THEMIS audits them: what corroborates what, which agreement is inherited
+rather than independent, how much has no cross-source comparison at all, and
+what the choice of trust rule does to a downstream forensic figure.
 
-It is a measurement tool, not a labeling tool. It does not decide whether any
-address is "really" a scam, a mixer, or an exchange — it measures how well the
-*public evidence for that decision* holds up: its provenance, its
-independence, its currency, and its sensitivity to what you're willing to
-trust.
+It is a measurement tool, not a labeling tool. It does not decide whether an
+address is "really" a scam, a mixer or an exchange; it measures how well the
+*public evidence for that decision* holds up — its provenance, independence,
+currency, and sensitivity to what you are willing to trust.
 
-THEMIS generalizes beyond the one paper it was built to reproduce: the
-analysis engine (`themis/taxonomy.py`, `provenance.py`, `analysis.py`,
-`trust/`) carries no dataset-specific logic at all. Every source's provenance
-rule, every category, every trust-rule policy lives in `themis/config/`
-(YAML). Reproducing the paper's exact figures is one configuration of that
-engine, not a special case of it.
+The analysis engine (`themis/taxonomy.py`, `provenance.py`, `analysis.py`,
+`trust/`) carries no dataset-specific logic. Every source's provenance rule,
+category and trust policy lives in `themis/config/` (YAML). Reproducing the
+paper is one configuration of that engine.
 
 ## 2. Research question
 
-The paper (and this tool) is organized around three questions:
+> How reliable is publicly available cryptocurrency attribution data for
+> forensic investigation and blockchain tracing?
 
-- **RQ1** — Can public attribution claims be classified using reproducible,
-  evidence-quality rules rather than an unstated notion of "trustworthy"?
-- **RQ2** — How much do major open sources actually overlap, how often do
-  their labels conflict, and how much of that overlap is genuinely
-  independent rather than one source restating another's finding?
-- **RQ3** — How much does a downstream forensic conclusion (this paper uses a
-  ransomware revenue estimate) change depending on which label-trust rule is
-  applied to the same corpus?
+- **RQ1** — can a public label be classified by reproducible evidence-quality
+  rules rather than an unstated notion of "trustworthy"? (`themis taxonomy`, `explain`)
+- **RQ2** — how much do the major open sources overlap, how often do they
+  conflict, and how much of the agreement is independent? (`themis audit`)
+- **RQ3** — how far does a forensic conclusion move under different trust
+  rules, and at what coverage? (`themis drift`)
 
-`themis audit` answers RQ1/RQ2. `themis drift` answers RQ3. `themis
-bootstrap`/`themis anchors` quantify how much confidence either answer can
-actually support.
+`themis bootstrap` and `themis anchors` quantify how much confidence either
+answer can support.
 
 ## 3. What THEMIS does not claim
 
-- **Public ≠ reliable.** A label being published somewhere says nothing about
-  its accuracy.
-- **Supported ≠ true.** An address passing a trust condition means the
-  evidence for it meets that condition's bar, not that the label is correct.
-- **Agreement ≠ independent corroboration.** Two datasets naming the same
-  category can both be restating one upstream source (paper §5.2; see §10
-  below — "circular" is a real, measured flag, not an edge case).
-- **Multiple datasets ≠ multiple independent sources**, and **unknown
-  provenance ≠ independent** — an unresolved root is a genuinely unknown
-  relationship, never scored as if it were a distinct, additional source.
-- **Unverifiable ≠ false**, and **no date ≠ stale** — a claim with no revision
-  field is `currency-unknown`, never silently treated as either current or
-  outdated.
-- **High overlap ≠ proof of copying**, and **a reference corpus (the open
-  anchor set `themis anchors` checks against) ≠ ground truth** for the corpus
-  as a whole.
-- **Coverage ≠ accuracy.** Condition D in `themis drift` retains only 13.8% of
-  addresses at its strictest trust rule; that is a coverage trade-off, not a
-  more accurate estimate of the other 86.2%.
-- **Declared confidence ≠ verified ground truth.** A source calling its own
-  output "manually verified" is a claim about that source's process, not an
-  independent check THEMIS has performed.
-- THEMIS does not estimate absolute source-level accuracy against
-  ground truth from the bundled open anchor set — `themis anchors` measures
-  and reports exactly why that estimate isn't currently defensible (small,
-  non-random reference set; most of it isn't independent of the sources
-  being checked) rather than publishing one anyway.
+- **Public ≠ reliable.** Being published says nothing about accuracy.
+- **Supported ≠ true.** Passing a trust condition means the evidence meets that
+  condition's bar, not that the label is correct.
+- **Agreement ≠ independent corroboration**; **multiple datasets ≠ multiple
+  independent sources**; **high overlap ≠ proof of copying.**
+- **Unknown ≠ independent, unknown ≠ shared.** An unresolved provenance root is
+  an unknown relationship, never counted as a distinct additional source and
+  never as a shared one.
+- **Unverifiable ≠ false; no date ≠ stale.** A claim with no revision date is
+  `currency-unknown`.
+- **Coverage ≠ accuracy.** `themis drift`'s strictest rule keeps 13.8% of
+  addresses; that is a coverage trade-off, not a more accurate estimate of the rest.
+- **Declared confidence ≠ verified ground truth.** A source calling its output
+  "manually verified", or GraphSense tagging a claim `forensic`, is a statement
+  about that source's process, not a check THEMIS has performed. Source-native
+  confidence is preserved and never mapped onto a THEMIS tier.
+- **A reference corpus ≠ ground truth.** `themis anchors` reports *agreement with
+  a small open anchor set*, not source accuracy, and refuses to estimate a source
+  that rests on fewer than two independent provenance roots.
 
-A forensic result without its trust rule and coverage stated alongside it is
-an incomplete result — every number this tool prints is reported with both.
+A forensic result without its trust rule and coverage is incomplete; every
+figure this tool prints carries both.
 
 ## 4. Architecture
 
 ```
-frontend/   React + Vite dashboard, talks to the API over HTTP
-themis/api.py   thin FastAPI JSON layer (the `ui` extra) - no analysis logic
-                of its own, a pass-through to themis.report/analysis/graph
-themis/*.py     the Python analysis core - CLI and API both call the same
-                functions, so they can never disagree
+frontend/        React 18 + Vite dashboard; talks to the API over HTTP
+themis/api.py    FastAPI JSON layer - request parsing and serialization only
+themis/*.py      Python analysis core - the CLI and the API call the same functions
+scripts/         build_corpus.py (from-source rebuild), result-set generators
 ```
 
-The API contains no analysis logic: every number it returns comes from the
-same `themis.report`/`analysis`/`graph` functions the CLI calls directly, so
-`themis audit` and the web dashboard cannot silently diverge.
+The API and the frontend contain no analysis: every number comes from the same
+`themis.report` / `analysis` / `graph` functions the CLI calls, so the dashboard
+and `themis audit` cannot diverge. (The React pages only format backend values.)
 
 ## 5. Installation
 
 ```
-git clone <repo>
-cd themis
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[test,ui]"
+git clone <repo> && cd themis
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[test]"          # add ,ui to run the web backend: pip install -e ".[test,ui]"
 ```
 
-One required dependency: PyYAML, for the config files under `themis/config/`.
-`fastapi`/`uvicorn`/`python-multipart` (the `ui` extra) are only needed to run
-the web dashboard's backend; `pytest`/`httpx` (the `test` extra) only to run
-the test suite. NumPy is never required: the cluster bootstrap's canonical,
-reproducible path is pure-Python `random.Random` regardless of whether numpy
-is installed (see §15) — numpy is only used if you explicitly opt into
-`bootstrap(fast=True)` / `themis bootstrap --fast` for a much larger corpus
-build, and that path is marked non-canonical in its own output.
+Python ≥ 3.10 (developed and tested on 3.14.6; the 3.10 floor is from inspection,
+not a test run). One required dependency, PyYAML. NumPy is optional and never
+changes a canonical result (see §16). Node ≥ 18 for the dashboard.
 
 ## 6. Paper reproduction
 
+The reference corpus is **not shipped with a release** (the paper's data
+statement: the derived observation table is not redistributed; see §13). Build
+it from the sources, then point THEMIS at it:
+
 ```
-themis audit                                            # RQ1/RQ2 - §5.1-5.2
-themis drift                                             # RQ3 - §5.3
-themis bootstrap --both                                  # §5.4
-themis anchors                                           # §4.3/§4.7
-themis explain 14BWrn1evbyvBGGxFzUCVQ61ntNtRjRdm7
-themis taxonomy
-themis sources
-themis --json report.json report --bootstrap --anchors
+python scripts/build_corpus.py --out build/ --tagpack ... --schnoering ... (see REPRODUCE.md)
+themis --observations build/observations.csv.gz --data-dir build/ --as-of 2026-09-15 audit
+themis --observations build/observations.csv.gz --data-dir build/ --as-of 2026-09-15 drift
+themis --observations build/observations.csv.gz --as-of 2026-09-15 bootstrap --both
 ```
 
-Every command takes a global `--json FILE` (before the subcommand) to write
-its result, and a global `--observations FILE` to run against a full local
-build instead of the bundled sample; `report` additionally accepts its own
-`--out FILE` after the subcommand, equivalent to the global `--json`. See
-`REPRODUCE.md` for exact commands and expected headline output.
+A development checkout also carries a 268,891-claim sample in `demo_data/`, so
+plain `themis audit | drift | bootstrap --both | anchors | explain <address>` work
+there and match `expected_output/` byte for byte. `REPRODUCE.md` has exact
+commands, expected output, and which of the paper's numbers differ from THEMIS's
+and why (`--taxonomy-fill` builds the "fresh normalization" variant; the default
+is the paper snapshot's own behaviour — the two are never mixed silently).
 
-| command | paper section | what it demonstrates |
+| command | paper § | what it shows |
 |---|---|---|
-| `audit` | 5.1–5.2 | corpus composition, corroboration depth, agreement outcomes, and the three independence tests |
-| `drift` | 5.3 | the same corpus and procedure under four label-trust rules |
-| `bootstrap [--both]` | 5.4 | cluster-bootstrap intervals, resampling provenance roots rather than rows |
-| `anchors` | 4.3/4.7 | provenance-aware validation against the bundled open anchor set, and why a source-level accuracy table isn't published |
-| `explain <address>` | 3.2 | one address traced to its provenance roots, with apparent vs actual corroboration |
-| `taxonomy` | 3.2 | the classification rules, printed so they can be checked |
-| `sources` | — | the source registry: every bundled dataset's declared provenance rule and any address-normalization rule, read straight from config |
-| `report` | — | the canonical result object (dataset summary, every analysis, the reliability profile, an audit trail) as one JSON document |
-| `ingest <file>` | — | audit a dataset THEMIS has never seen - crypto detection, schema mapping, address validation, and (if a reference corpus is available) cross-source comparison |
+| `audit` | 5.1–5.2 | composition, corroboration depth, agreement outcomes, kappa, containment, decoding, circularity |
+| `drift` | 5.3 | the same corpus and procedure under four trust rules, each with its coverage |
+| `bootstrap [--both]` | 5.4 | root-cluster bootstrap intervals; prints resamples, seed, confidence, engine |
+| `anchors` | 4.2 | agreement with the open anchor set per source, with independent-root support |
+| `explain <address>` | 3 | one address traced to its provenance roots, apparent vs actual corroboration |
+| `taxonomy`, `sources` | 3 | the rules and the source registry, printed from config |
+| `report [--bootstrap] [--anchors]` | — | the canonical result object as one JSON document with its audit trail |
+| `ingest <file>` | — | audit a dataset THEMIS has not seen |
 
-## 7. Web dashboard
+Global options: `--json FILE`, `--observations FILE`, `--data-dir DIR`, `--as-of DATE`.
 
-```
-pip install -e ".[ui]"
-python -m themis.api          # backend on http://127.0.0.1:5001
+## 7. Uploading a new Bitcoin attribution CSV
 
-cd frontend
-npm ci
-npm run dev                   # frontend on http://127.0.0.1:5173
-```
+Dashboard: Upload → pre-flight → confirm schema → run. CLI: `themis ingest FILE
+--source-id NAME [--map role=column ...] [--reference OBS | --no-reference]`.
+Schema roles (address, label, category, source, timestamp, confidence) are
+inferred from column names and sampled values and can be overridden. Try it with
+the synthetic files in `examples/`.
 
-Both need to be running together. `frontend/src/lib/api.js` points at
-`http://127.0.0.1:5001` by default; override with `VITE_API_URL` if you run
-the API on a different port. `npm run build && npm run preview` serves the
-production build.
+An unrecognized `--source-id` has no provenance rule in `config/sources/`, so
+every claim resolves **UNRESOLVED** by construction — a new dataset is never
+assumed independent. Cross-source comparison needs a reference corpus (§6);
+without one the audit says so and continues.
 
-## 8. Auditing a new dataset
+## 8. Pre-flight behavior
 
-`themis ingest` (CLI) / Upload (dashboard) runs the full pre-flight-through-
-reliability-profile pipeline on any CSV. Schema roles (address/label/
-category/source/timestamp/confidence) are inferred from column names and
-sampled values and can be overridden with `--map role=column`. An
-unrecognized `--source-id` gets no provenance rule from `config/sources/`, so
-every claim it produces resolves `UNRESOLVED` by construction — a new dataset
-is never silently assumed independent. Compare it against the bundled sample
-with `--reference FILE` (a full observations build) or skip comparison with
-`--no-reference`.
+Before any workspace exists THEMIS never assumes an upload is cryptocurrency
+data, and distinguishes four cases instead of one generic rejection:
 
-### Supported input
+| input | result |
+|---|---|
+| **Supported-chain attribution data** (Bitcoin: base58check, bech32/bech32m) | runs the full pipeline |
+| **Crypto, not attribution** (e.g. a price series with a `symbol` column naming BTC) | stops: recognised as cryptocurrency-related but not attribution data — via an opt-in `symbol_aliases` content signal on the chain adapter, never from a filename |
+| **Unsupported-chain attribution** (e.g. Ethereum) | stops: identified as crypto attribution data on a chain THEMIS does not support, via a chain-agnostic token-shape fallback |
+| **Non-crypto** | stops: no address-shaped column and no asset-identity signal, with an explanation of what was looked for |
+| **Malformed** (empty, binary, non-UTF-8, header only) | fails gracefully with a specific message, not a stack trace |
 
-THEMIS never assumes an uploaded file is cryptocurrency-related, and
-distinguishes four cases rather than collapsing them into one generic
-rejection:
+Invalid addresses (wrong checksum, wrong network, non-Bitcoin) and duplicate rows
+are rejected with the row number and reason, never analysed.
 
-- **A supported-chain attribution CSV (Bitcoin today)** is detected via the
-  registered blockchain adapters (`themis/chains/bitcoin.py`: base58check and
-  bech32/bech32m) sampling every column for address-shaped values, and runs
-  the full pipeline above.
-- **An unsupported-chain attribution CSV** (e.g. Ethereum) is distinguished
-  from non-crypto data via a chain-agnostic opaque-token-shape fallback and
-  reported as "unsupported chain," not misreported as "not crypto."
-- **Crypto data that isn't attribution data** (e.g. a Bitcoin OHLC/price
-  series) is distinguished from genuinely non-crypto data (no address-shaped
-  column and no asset-identity signal) via an opt-in `symbol_aliases` content
-  signal on the adapter — never from the filename.
-- **Non-crypto data** (no address-shaped column, no asset-identity signal)
-  stops early with an explanation of what THEMIS looked for and didn't find.
-- **Malformed CSV** input (encoding errors, missing columns) fails gracefully
-  with a specific error, not a stack trace.
+## 9. Main modules
 
-## 9. Main tool modules
-
-| module | CLI | dashboard page |
+| module | CLI | dashboard |
 |---|---|---|
-| Upload / preflight | `themis ingest` | Upload |
-| Audit (agreement, independence, kappa) | `themis audit` | Audit |
-| Claims (bounded, filterable claim listing) | API only: `GET /api/analysis/{id}/claims` (a full unbounded CSV is `GET /api/analysis/{id}/export/{name}`) | Claims |
-| Address Inspector | `themis explain <addr>` | Address |
-| Provenance | `themis sources` | Provenance (lineage graph is dashboard/API-only via `graph.lineage_graph()`, not a CLI command) |
-| Conflicts | surfaced within Audit's outcome breakdown and Claims' evidence-tier filter — not a separate page | — |
-| Trust-rule sensitivity / drift | `themis drift` | Drift |
-| Anchor validation | `themis anchors` | (JSON via `report --anchors`; not yet a dedicated page) |
-| Export | CLI: global `--json FILE` before any command. Dashboard: `GET /api/analysis/{id}/export/{name}` (CSV) | Export |
-| Paper reproduction | `themis report --bootstrap --anchors` | — |
+| Upload / pre-flight | `ingest` | Upload |
+| Audit (agreement, independence, kappa) | `audit` | Audit |
+| Claims (bounded, filterable) | API `GET /api/analysis/{id}/claims` | Claims |
+| Address Inspector | `explain` | Address |
+| Provenance | `sources` | Provenance (lineage graph) |
+| Trust-rule sensitivity | `drift` | Drift (paper mode only) |
+| Anchor validation | `anchors` | JSON via `report --anchors` |
+| Export | global `--json`; API `GET /api/analysis/{id}/export/{name}` | Export |
 
-## 10. Scientific terminology
+## 10. Evidence taxonomy
 
-- **Claim, not label.** The unit of analysis is one source asserting one
-  category about one address. Keeping claims separate (rather than
-  collapsing to "the corpus says X") is what makes disagreement visible.
-- **Provenance root.** Where a claim's evidence actually originates, as
-  opposed to which dataset republished it. Assigned from a source's own
-  declared rule (`config/sources/<id>.yml`); never guessed from a dataset
-  name. A root is *resolved* when it's a known evidential origin, *verified*
-  when it terminates in independently re-checkable evidence, and *native*
-  when the source **is** that origin rather than re-describing another
-  source's finding.
-- **Unresolved.** Deliberately distinct from "shares a root with everything
-  else unresolved" — an unresolved root is an unknown relationship, not an
-  asserted one.
-- **Circular / inherited.** Two or more apparently-independent claims that
-  trace to the same provenance root. Raw agreement counts these as
-  corroboration; THEMIS reports both the raw count and the corrected one.
-- **Evidence tier.** `verified` / `derived` / `unverified-report` / `unknown`
-  — how a claim's methodology was declared, not how confident it sounds.
-- **Currency-unknown vs. stale.** A claim with no revision date is
-  `currency-unknown`. `stale` requires an actual date older than the
-  configured threshold. Conflating the two would overclaim — most of this
-  corpus has no date at all.
-- **Structured label.** A `type:entity`-shaped raw label (e.g.
-  `onlinewallet:flexcoin`); its category-shaped prefix is canonicalized like
-  any other alias, and the entity half is preserved, not discarded.
+- **Tiers** — `verified` (provenance ends in evidence a third party could
+  re-check: seized data, a court record, a sanctions designation, an issuer's
+  self-disclosure); `derived` (heuristic propagation or curated annotation);
+  `unverified-report` (crowd report, forum post, automated extraction);
+  `unknown` (an upload with no declared methodology — never silently `derived`).
+  A source's own "manually verified" declaration does not by itself reach
+  `verified`; a *record* whose root is re-checkable (an OFAC listing) does.
+- **Flags** — `currency-unknown`, `stale`, `conflicting`, `circular`; orthogonal
+  to the tier.
+- **Conflict logic** — exact / hierarchical refinement / entity-type conflict /
+  licit-illicit conflict / incomparable. *Incomparable* means fewer than two
+  datasets contributed a category the taxonomy can interpret; one opinion is not
+  agreement with itself.
 
-## 11. Dataset / license notice
+## 11. Provenance terminology
 
-The bundled sample (`demo_data/`) contains normalized, derived rows from
-seven public sources. **Redistribution status varies by source and is not
-uniformly confirmed** — see `THIRD_PARTY_DATA.md` for the full per-source
-breakdown (license, citation, retrieval date, redistribution status). In
-short: TagPack (MIT), Schnöring (CC BY 4.0) and Ransomwhere (CC BY) are
-confirmed permissive (~39% of the corpus). Elliptic++ (~53% of the corpus)
-and Rodwald have **unconfirmed** redistribution status and should be verified
-directly with their authors before further redistribution. WatchYourBack's
-code repository is GPL-3.0; whether that extends to its address/tag data is
-not separately confirmed.
+- **Claim** — one source asserting one category about one address; the unit of analysis.
+- **Root** — where a claim's evidence originates, which is not the dataset that
+  republished it. Assigned from a source's declared rule, **per record where
+  records differ** (WatchYourBack cites an external URL on every row, so its
+  Treasury-cited records are rooted at OFAC and only the rest at WatchYourBack).
+- **Resolved / native / verified / unresolved** — a known origin; the source *is*
+  that origin; the origin is re-checkable; an unknown relationship.
+- **Circular / inherited** — apparently independent claims that share one resolved root.
+- **Structured label** — a `type:entity` raw label (`onlinewallet:flexcoin`); its
+  category-shaped prefix is canonicalized like any alias and the entity kept.
 
-**THEMIS's own code currently has no LICENSE file** — a repository-level
-decision left to the author, tracked separately from the dataset licenses
-above.
+## 12. Trust-rule interpretation
 
-## 12. Testing
+`themis drift` re-runs one task (ransomware revenue) under four rules: **A** naive
+union, **B** address-level deduplication (the baseline), **C** inherited claims
+collapsed to their root, **D** the addresses an anchor set names. D is *the
+highest declared confidence present*, not verified ground truth: in the bundled
+corpus it is exactly the addresses TagPack tags `confidence: forensic` (plus
+WatchYourBack's ransomware annotations), and almost all of it is one upstream
+study. Read the ratio and the coverage together; neither means anything alone.
+
+## 13. Dataset and license notice
+
+Seven public datasets feed the paper corpus. Redistribution status differs and is
+**not uniformly confirmed** — `THIRD_PARTY_DATA.md` has the per-source table
+(license, evidence, retrieval date, status). TagPack (MIT), Schnöring and
+Ransomwhere (CC BY 4.0) are confirmed; Elliptic++ (53% of claims) and both
+Rodwald releases state no terms; WatchYourBack's GPL-3.0 covers its code.
+**This release ships no third-party data and no observation table.** THEMIS's
+own code has **no LICENSE file yet** — an author decision, separate from the
+dataset terms.
+
+## 14. Testing
 
 ```
 python -m pytest
 ```
 
-191 tests. A large share assert a number printed in the paper — if the
-implementation drifts from what was published, they fail. Several caught
-genuine bugs during hardening, not just regressions: a circularity flag that
-only fired when *every* dataset shared one root; `classify_address` counting
-one source's opinion as two sources agreeing whenever every other matched
-label failed to canonicalize (moved the §5.1 agreement breakdown from
-13,673/88.79% exact to 10,515/68.28%); a stray upstream "#" character
-silently breaking cross-source address matching for a subset of one source's
-claims; and the cluster bootstrap producing different confidence-interval
-endpoints depending on whether numpy happened to be installed. The rest cover
-the generic engine directly: Bitcoin address validation against real mainnet
-vectors, the new-dataset pipeline (crypto/non-crypto/unsupported-chain
-detection, schema inference, rejection reporting), the trust-policy engine
-against a synthetic non-Bitcoin task, provenance-independence edge cases, and
-that an unconfigured source really does resolve UNRESOLVED rather than being
-assumed independent.
+With the reference corpus present every test runs. Without it (the release),
+tests that assert a number printed in the paper, or that drive the
+paper-reproduction endpoints, **skip with a stated reason** rather than fail;
+everything else — the adapters, address validation, the taxonomy, provenance
+independence (every case A–G across CLI/API/flags/trust predicates), the trust
+engine, ingest detection, export safety, the rebuild script — runs on synthetic
+data. Tests have caught real defects, not just regressions: `classify_address`
+counting one source's opinion as agreement (moved the §5.1 breakdown from 13,673
+to 10,515 exact), a stray upstream `#` silently breaking joins, a bootstrap that
+depended on whether numpy was installed, and a staleness date that made the
+paper's own "99.9% over three years old" irreproducible.
 
-## 13. Limitations
+## 15. Limitations
 
-- The bundled sample's corpus-wide totals (e.g. 1,497,191 addresses) come
-  from a manifest recorded when the full corpus was originally built, not
-  live-recomputed on every run; a full local rebuild uses `--observations`
-  against your own build. There is currently no bundled, from-source rebuild
-  script — see `REPRODUCE.md`.
-- The bundled revenue file stores USD rounded to cents, so `drift` totals can
-  differ from the paper by a few dollars out of a billion.
-- Bootstrap intervals over a small number of provenance-root clusters carry
-  visible Monte Carlo noise; they are quoted at a fixed seed and 2,000
-  resamples (see §15 for why the interval is now environment-independent).
-- `themis anchors`' per-source accuracy figures describe agreement with a
-  small (289-address), source-concentrated open reference set, not verified
-  accuracy against ground truth for the corpus as a whole — see §3.
-- The verified tier is *declared*, not independently confirmed — Condition D
-  in `themis drift` uses each source's highest declared confidence.
-- GraphSense TagPack's real per-tag confidence vocabulary (`forensic`,
-  `forensic_investigation`, `service_data`, ...) survives per-claim in the
-  bundled corpus but is not currently used to re-tier evidence — every
-  TagPack claim gets one flat evidence tier regardless of it.
-- WatchYourBack's own upstream data marks 87 of 309 claims with a leading
-  "#"; THEMIS now normalizes the address for cross-source matching, but the
-  correct provenance root for those 87 (many cite OFAC/other external
-  sources rather than WatchYourBack's own methodology) is not yet
-  reassigned — they still resolve to WatchYourBack's own root pending an
-  author decision.
-- TagPack's proper-noun entity names (e.g. "Antpool", "Lazarus group") are
-  not mapped to taxonomy categories; that would require an external entity
-  dictionary, a different feature from a category-synonym alias table.
+- **The paper and THEMIS disagree on 32 numbers**, chiefly §5.1's agreement
+  breakdown (the paper pipeline counts one interpretable label as agreement),
+  WatchYourBack-dependent overlaps and kappa values, and §5.4's exact-rate
+  interval. `REPRODUCE.md` lists them.
+- Several paper figures need the **full corpus**, not the sample: the
+  multi-dataset-rate interval, 853,604 upper-bound clusters, corpus-wide
+  freshness. The bundled sample keeps every multi-dataset address, so agreement,
+  conflict and circularity figures are exact; corpus-wide totals come from a manifest.
+- **The corpus-wide totals are pre-`#`-fix.** The manifest's 1,497,191 addresses
+  / 1,481,791 single-dataset / 15,400 multi-dataset were computed when
+  WatchYourBack's 87 `#`-prefixed addresses were still unjoined. Joined, at least
+  72 addresses (in the sample) plus 13 more (TagPack rows the sample left out) merge
+  and 13 addresses become multi-dataset: a full rebuild gives roughly 85 fewer
+  addresses and at least 15,413 multi-dataset ones. Percentages round the same
+  (98.97%); Elliptic++'s contribution needs its file to count.
+- The anchor set (`ground_truth.csv`, 289 addresses) is curated from
+  WatchYourBack and the OFAC list and is not yet scripted. It is small,
+  concentrated in few roots, and yields an estimable figure for only two sources.
+- WatchYourBack is resolved per record only for its 71 Treasury-cited `#`
+  records. 16 other `#` records, 31 more Treasury-cited and 171 externally-cited
+  records still resolve to its own root: the observation schema carries no
+  per-record reference URL.
+- Kappa keeps `unknown` as a class in its headline (an interpretable-only
+  companion is printed beside it).
+- TagPack's proper-noun entity labels ("Antpool") are not mapped to categories.
+- The bundled revenue file is rounded to cents, so `drift` totals differ from the
+  paper by a few dollars in a billion.
+- The dashboard was built and its API exercised end to end, but **no browser
+  QA was performed**: MANUAL BROWSER QA STILL REQUIRED.
+- Tested on Python 3.14 and Node 26 only.
 
-## 14. Citation
+## 16. Reproducibility
 
-The paper this tool reproduces is under submission (ICISHCT 2026) with a
-blinded author field; a formal citation (authors, venue, year, pages) will be
-added here once the submission is no longer under review. In the meantime,
-cite by title: *"Provenance Before Precision: Auditing Public Bitcoin
-Attribution Labels and Their Effect on Forensic Conclusions."*
+- Every `report` carries an audit trail: software version, timestamp, input file
+  hash, and a hash of `taxonomy.yml` / `thresholds.yml` / `trust_rules.yml` /
+  `sources/*.yml` / `notable_roots.yml` — equal hashes mean equal scientific rules.
+- Staleness is judged at a **declared analysis date** (the bundled corpus
+  declares 2026-09-15; `--as-of` overrides), never the wall clock.
+- The canonical bootstrap is stdlib `random.Random(seed)` regardless of numpy;
+  seed 42 / 2,000 resamples / 95% are read from `config/thresholds.yml`.
+  `--fast` (numpy) is marked non-canonical.
+- `scripts/build_corpus.py` records input hashes, adapter and normalization
+  versions, retrieval dates and dropped rows, and is byte-deterministic. Checked
+  against real data: today's GraphSense TagPack rebuilds to the paper's exact
+  499,327 claims / 483,296 addresses.
+- `expected_output/` holds the frozen CLI output; `REPRODUCE.md` has the commands.
 
-## 15. Reproducibility
+## 17. Citation
 
-- Every `themis report` output includes an audit trail: software version,
-  analysis timestamp, input file hash, and a config hash covering
-  `taxonomy.yml`/`thresholds.yml`/`trust_rules.yml`/`sources/*.yml`/
-  `notable_roots.yml` — two runs with the same config hash used the same
-  scientific rules, regardless of when they ran.
-- `themis explain`/`report`'s freshness figures default to the corpus's own
-  `snapshot_date` (the latest revision date actually present in its claims),
-  not the wall clock, so a paper-reproduction run doesn't drift "staler"
-  every year it's re-run.
-- The cluster bootstrap's canonical path (`fast=False`, the CLI default) is
-  always `random.Random`, regardless of whether numpy is installed — the two
-  RNGs are different algorithms and produced different CI endpoints (not
-  point estimates) for the same seed before this was fixed. `--fast` opts
-  into a numpy-accelerated path for a much larger corpus build; its output is
-  marked `engine: "numpy_fast_exploratory"` and is not the canonical/paper
-  path.
-- See `REPRODUCE.md` for the exact end-to-end commands a reviewer would run
-  in a clean environment.
+The paper is under review at ICISHCT 2026. Until the reference is final, cite by
+title: *"Provenance Before Precision: Auditing Public Bitcoin Attribution Labels
+and Their Effect on Forensic Conclusions."*
 
 ## Appendix: layout
 
 ```
-themis/
-  taxonomy.py     tiers, flags, categories, conflict logic - all config-driven
-  provenance.py   root resolution, address normalization, independence tests
-  corpus.py       loading, sample-vs-full accounting
-  analysis.py     agreement, independence, drift, freshness, bootstrap, anchors
-  reliability.py  multidimensional reliability profile
-  report.py       canonical result object, JSON export, audit trail
-  graph.py        provenance lineage graph (config -> nodes/edges)
-  api.py          thin FastAPI JSON API for the web dashboard (ui extra)
-  cli.py          command line
-  chains/         blockchain adapters (Bitcoin: base58check + bech32/bech32m)
-  ingest/         new-dataset pipeline: detect, schema, validate, claims
-  trust/          composable trust-rule policy engine
-  tasks/          task-specific aggregation (ransomware revenue is the one bundled)
-  config/         taxonomy.yml, trust_rules.yml, thresholds.yml, sources/*.yml
-demo_data/        bundled corpus sample + manifest
-tests/            paper regression + generic-engine tests
-frontend/         React + Vite dashboard (talks to themis/api.py)
-provenance_register.html   interactive register (same data, self-contained)
+themis/            taxonomy, provenance, corpus, analysis, reliability, report, graph,
+                   target_audit, workspace, api, cli, chains/, ingest/, trust/, tasks/, config/
+scripts/           build_corpus.py, generate_result_sets.py, independent_agreement_check.py
+tests/             unit and paper-regression tests (paper tests skip without the corpus)
+examples/          synthetic CSVs for the upload flow
+expected_output/   frozen CLI output and metrics for comparison
+frontend/          React + Vite dashboard
+demo_data/         (development checkout only) bundled sample - not part of a release
 ```
 
-## Appendix: design notes
-
 **Config, not code, is dataset-specific.** Nothing under `themis/*.py` names a
-source, a category, or a trust condition by string literal. `provenance.py`'s
-`resolve()` reads a generic rule shape (`fixed_root` / `field_map` /
-`contains_rules` / `substring_map`) out of `config/sources/<id>.yml`; even
-`is_unresolved(root)` derives its answer by walking that same config, not
-from a hardcoded prefix tuple. Adding an eighth source, an eleventh category,
-or a fifth trust condition is a config change.
-
-**One policy engine, any task.** `themis/trust/` scores claims against
-composable predicates (`root_independent_or_native`, `anchor_membership`,
-...) named in `config/trust_rules.yml`; `themis/tasks/ransomware_revenue.py`
-is the one module that knows the paper's task is a USD sum per address. A
-different forensic task (sanctions exposure, entity counts) is a new module
-in that shape, reusing the same policies, not a new branch in the engine.
-
-**The decode is allowed to be inconclusive.** `decode_field` returns
-`insufficient` for groups too small to establish containment and `malformed`
-for values a source ships broken, instead of forcing every group to a
-verdict.
+source, category or trust condition by string literal; `provenance.resolve()`
+reads a generic rule shape (`fixed_root` / `field_map` / `contains_rules` /
+`substring_map`) from `config/sources/<id>.yml`. **One policy engine, any task:**
+`themis/trust/` scores claims against composable predicates named in
+`config/trust_rules.yml`; `tasks/ransomware_revenue.py` is the one module that
+knows the task is a USD sum. **The decode may be inconclusive:** `decode_field`
+returns `insufficient` or `malformed` rather than forcing a verdict.

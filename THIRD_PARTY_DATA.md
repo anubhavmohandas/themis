@@ -49,7 +49,7 @@ The repository is already public (github.com/anubhavmohandas/themis) and has
 contained `observations_sample.csv.gz` since its first commit; nothing here
 rewrites that history — that would be a separate decision.
 
-### Conservative release options (the author's choice; none has been applied)
+### Conservative release options (the author's choice; the release below applies option 2 by default)
 
 1. **Confirm** with the Elliptic++ and Rodwald authors and record the answer
    here; ship the bundle as is.
@@ -60,13 +60,25 @@ rewrites that history — that would be a separate decision.
    499,327 claims / 483,296 addresses; WatchYourBack's 309 rows and Condition
    D's 146,243-address anchor set rebuild identically; only the sampling of
    Elliptic++ and TagPack in the bundled sample is not itself reproducible.
-3. **Substitute** a small synthetic demo for those sources.
+3. **Substitute** a small synthetic demo for those sources (the release includes `examples/` for the upload flow).
 
-The release candidate built for this submission (`release/themis/`, ZIP
-recorded in `results/final_freeze/`) is the **full-reproduction package**
-(option "ship as is"). It is a *candidate*: it must not be distributed
-outside the review process until options 1–3 are settled for the sources
-marked UNCONFIRMED above.
+**What the release does (a conservative default, not a legal conclusion).**
+The paper's Data availability statement says *the derived observation table is
+not redistributed, because the redistribution terms of the constituent sources
+differ.* The release therefore ships **none** of the files in the first table
+above - no `observations_sample.csv.gz`, `verified_anchors.txt.gz`,
+`revenue.csv.gz`, `ground_truth.csv` or `manifest.json`. It ships the code, the
+tests (those that need the corpus skip with a stated reason), the rebuild script,
+`expected_output/` (aggregate statistics only) and small synthetic examples. A
+reviewer fetches the sources from their published locations and runs
+`scripts/build_corpus.py`; `REPRODUCE.md` gives the commands. The
+development repository still tracks `demo_data/` (already public since its first
+commit); changing that is a separate decision.
+
+Two things this leaves to the author: whether to confirm terms with the
+Elliptic++ and Rodwald authors and then ship a sample after all, and how a
+reviewer without the sources is served (the anchor set `ground_truth.csv` is
+curated from WatchYourBack's file and the OFAC list and is not yet scripted).
 
 ## Attribution
 
