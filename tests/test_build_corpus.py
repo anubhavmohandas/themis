@@ -127,6 +127,15 @@ class TestBuildCorpus(unittest.TestCase):
         self.assertEqual(m["builder"]["claims_rederived_by_taxonomy_fill"], 1)
         self.assertIn("taxonomy-fill", m["builder"]["normalization_version"])
 
+    def test_ransomwhere_bare_list_snapshot_is_read_like_the_live_export(self):
+        # Zenodo's snapshot is the bare list; the live API wraps it as {"result": [...]}
+        items = json.loads((self.d / "rw.json").read_text())["result"]
+        (self.d / "rw_list.json").write_text(json.dumps(items))
+        bc.main(["--out", str(self.d / "o4"), "--ransomwhere", str(self.d / "rw_list.json")])
+        with gzip.open(self.d / "o4" / "observations.csv.gz", "rt", encoding="utf-8", newline="") as f:
+            got = [(r["address"], r["lastmod"]) for r in csv.DictReader(f)]
+        self.assertEqual(got, [(A[4], "2024-05-06")])
+
     def test_nonexistent_input_stops_with_a_clear_message(self):
         with self.assertRaises(SystemExit) as cm:
             bc.main(["--out", str(self.d / "o3"), "--schnoering", str(self.d / "nope.csv")])

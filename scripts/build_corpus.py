@@ -131,8 +131,7 @@ class Builder:
                           f"rodwald:{(r.get('source') or '').strip()}", subcat=fam, heuristic="inherited")
 
     def ransomwhere(self, path):
-        with open(path, encoding="utf-8-sig") as f:
-            for x in json.load(f)["result"]:
+        for x in _ransomwhere_records(path):
                 if x.get("blockchain") != "bitcoin":
                     continue
                 self.emit(x.get("address"), "ransomwhere", x.get("family"), "ransomware",
@@ -191,6 +190,14 @@ class Builder:
                           "wyb:manual", subcat=r[3], heuristic="manual_verified")
 
 
+def _ransomwhere_records(path):
+    """The live API export wraps the list as {"result": [...]}; the Zenodo
+    snapshot is the bare list. Same records either way."""
+    with open(path, encoding="utf-8-sig") as f:
+        data = json.load(f)
+    return data["result"] if isinstance(data, dict) else data
+
+
 # -------------------------------------------------- derived task inputs (Condition D)
 def revenue_rows(rodwald_ransom, ransomwhere):
     rows = []
@@ -204,12 +211,11 @@ def revenue_rows(rodwald_ransom, ransomwhere):
                 rows.append((r["address"].strip(), "rodwald_ransom", usd,
                              (r.get("family") or "").strip(), (r.get("source") or "").strip()))
     if ransomwhere:
-        with open(ransomwhere, encoding="utf-8-sig") as f:
-            for x in json.load(f)["result"]:
-                if x.get("blockchain") != "bitcoin":
-                    continue
-                usd = sum(float(t.get("amountUSD") or 0) for t in (x.get("transactions") or []))
-                rows.append(((x.get("address") or "").strip(), "ransomwhere", usd, x.get("family") or "", ""))
+        for x in _ransomwhere_records(ransomwhere):
+            if x.get("blockchain") != "bitcoin":
+                continue
+            usd = sum(float(t.get("amountUSD") or 0) for t in (x.get("transactions") or []))
+            rows.append(((x.get("address") or "").strip(), "ransomwhere", usd, x.get("family") or "", ""))
     return rows
 
 
