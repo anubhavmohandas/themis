@@ -158,6 +158,9 @@ def cmd_bootstrap(args):
         b = analysis.bootstrap(c, n_boot=args.n, upper_bound=ub, fast=args.fast)
         name = "upper bound (unresolved independent)" if ub else "lower bound (unresolved pooled)"
         out["upper" if ub else "lower"] = b
+        if len(out) == 1:
+            print(f"  {b['n_boot']:,} resamples, seed {b['seed']}, "
+                  f"{100 * b['confidence_level']:.0f}% percentile interval, engine {b['engine']}")
         print(f"\n  {name}: {b['n_clusters']:,} clusters")
         if b.get("note"):
             print(_c("    " + b["note"], DIM))
@@ -182,16 +185,30 @@ def cmd_anchors(args):
     if r["uninterpretable_ground_truth_label"]:
         print(f"  {r['uninterpretable_ground_truth_label']:,} usable anchors have a "
               f"ground-truth label the taxonomy can't canonicalize")
-    print(f"\n  {'source':<20}{'n':>8}{'exact':>8}{'accuracy':>11}{'95% CI':>18}")
+    lvl = f"{100 * r['confidence_level']:.0f}%"
+    print("\n  one decision per (source, address); 'agree' = exact agreement with the anchor's "
+          "label,\n  NOT the source's accuracy. roots = independent resolved provenance roots "
+          "behind the\n  decisions; top = share of decisions from the single largest root.")
+    print(f"\n  {'source':<20}{'n':>6}{'exact':>7}{'agree':>8}{'roots':>7}{'top':>7}"
+          f"{lvl + ' CI (roots resampled)':>30}")
     for src, v in sorted(r["per_source"].items(), key=lambda kv: -(kv[1]["n"] or 0)):
         if not v["estimable"]:
-            print(f"  {src:<20}{'not estimable (n=0 independent claims)':>45}")
+            why = v["not_estimable_reason"]
+            head = (f"  {src:<20}{v['n']:>6,}{v['exact']:>7,}{100*v['anchor_agreement']:>7.1f}%"
+                    f"{v['independent_roots']:>7}{100*v['largest_root_share']:>6.0f}%"
+                    if v["n"] else f"  {src:<20}{0:>6}")
+            print(f"{head}     not estimable: {why}")
             continue
-        print(f"  {src:<20}{v['n']:>8,}{v['exact']:>8,}{100*v['accuracy']:>10.1f}%"
-              f"   [{100*v['ci_low']:5.1f}, {100*v['ci_high']:5.1f}]")
+        print(f"  {src:<20}{v['n']:>6,}{v['exact']:>7,}{100*v['anchor_agreement']:>7.1f}%"
+              f"{v['independent_roots']:>7}{100*v['largest_root_share']:>6.0f}%"
+              f"{'[' + format(100*v['ci_low'], '5.1f') + ', ' + format(100*v['ci_high'], '5.1f') + ']':>30}")
     if not r["estimable"]:
-        print(_c("\n  source-level accuracy is not estimable: no source has an "
-                 "independent (non-self-root) claim on any usable anchor", YEL))
+        print(_c("\n  no source is estimable: none has enough independent roots behind "
+                 "its decisions on this anchor set", YEL))
+    else:
+        print(_c("\n  an estimable source is not a well-measured one: with this few "
+                 "independent roots the\n  interval is wide by construction, and it "
+                 "bounds only agreement with this anchor set.", YEL))
     print(textwrap.fill("\n" + r["limitations"], 76, subsequent_indent="  "))
     if args.json:
         json.dump(r, open(args.json, "w"), indent=1)
@@ -350,7 +367,10 @@ def main(argv=None):
     e.set_defaults(fn=cmd_explain)
 
     b = sub.add_parser("bootstrap", help="cluster-bootstrap confidence intervals")
-    b.add_argument("-n", type=int, default=2000)
+    # default=None defers to config/thresholds.yml's bootstrap.iterations - a
+    # hardcoded default here silently overrode the config on the CLI path
+    b.add_argument("-n", type=int, default=None,
+                   help="resamples (default: bootstrap.iterations in config/thresholds.yml)")
     b.add_argument("--upper", action="store_true", help="unresolved records independent")
     b.add_argument("--both", action="store_true", help="report both lineage bounds")
     b.add_argument("--fast", action="store_true",

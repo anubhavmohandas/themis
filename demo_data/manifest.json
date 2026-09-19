@@ -56,9 +56,9 @@
    "tagpack_INTERPOL CNTL": 392,
    "wbtc_disclosure": 370,
    "exchange_self_disclosure": 342,
-   "watchyourback_manual": 309,
+   "watchyourback_manual": 238,
    "tagpack_EtherScanDB Team": 305,
-   "ofac_sdn": 186,
+   "ofac_sdn": 257,
    "tagpack_GraphSense Core team": 155,
    "tagpack_github user 3xp0rt": 18,
    "walletexplorer": 9,
@@ -82,5 +82,11 @@
    "tagpack"
   ]
  },
- "note": "Every claim from every source except Elliptic++ and GraphSense TagPack is present in full, together with all multi-dataset addresses and a seeded sample of the remainder. Agreement, conflict, independence and drift results are therefore exact; corpus-wide totals come from full_corpus."
+ "note": "Every claim from every source except Elliptic++ and GraphSense TagPack is present in full, together with all multi-dataset addresses and a seeded sample of the remainder. Agreement, conflict, independence and drift results are therefore exact; corpus-wide totals come from full_corpus.",
+ "revisions": [
+  {
+   "date": "2026-09-19",
+   "change": "full_corpus.root_claims: ofac_sdn 186->257 and watchyourback_manual 309->238. 71 WatchYourBack hydra-market records cite Treasury/OFAC and are re-rooted to ofac_sdn per-record (config/sources/watchyourback.yml). roots_total/identified/unresolved and every other count are unchanged."
+  }
+ ]
 }

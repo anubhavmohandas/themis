@@ -100,7 +100,15 @@ TIER_ORDER = [TIER_VERIFIED, TIER_DERIVED, TIER_REPORT, TIER_UNKNOWN]
 
 #: heuristic-dependency value -> tier. Declared per source at ingestion.
 TIER_BY_HEURISTIC = {
-    "manual_verified": TIER_VERIFIED,
+    # was TIER_VERIFIED. Paper Sec 3 / 4.2: a manual annotation reaches the
+    # verified tier only where the underlying evidence is retained and
+    # re-checkable, and WatchYourBack's own annotations "do not themselves
+    # reach the verified tier". A source calling its output manually verified
+    # is a declaration about its process (README: declared confidence is not
+    # verified ground truth). A record whose *root* terminates in re-checkable
+    # evidence (e.g. an OFAC designation) still lands in VERIFIED through
+    # `prov_verified` / VERIFIED_ROOTS in tier_of(), ahead of this table.
+    "manual_verified": TIER_DERIVED,
     "curated": TIER_DERIVED,
     "multi_input": TIER_DERIVED,
     "inherited": TIER_DERIVED,

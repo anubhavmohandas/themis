@@ -853,7 +853,12 @@ class TestAnchorValidation(unittest.TestCase):
         self.assertEqual(r["usable_anchors"], 1)
         self.assertEqual(r["per_source"]["tagpack"]["n"], 1)
         self.assertEqual(r["per_source"]["tagpack"]["exact"], 1)
-        self.assertTrue(r["per_source"]["tagpack"]["estimable"])
+        # was: assertTrue(estimable). Now False - a source whose only
+        # decision comes from ONE independent root has no between-root
+        # variance to resample (anchor_min_independent_roots, thresholds.yml),
+        # so its agreement is reported but never presented as an estimate.
+        self.assertFalse(r["per_source"]["tagpack"]["estimable"])
+        self.assertEqual(r["per_source"]["tagpack"]["independent_roots"], 1)
 
     def test_licit_illicit_conflict_counted_not_exact(self):
         c = _FakeCorpus({"1A": [_claim("tagpack", "tagpack_own", "exchange")]})
@@ -901,16 +906,79 @@ class TestAnchorValidation(unittest.TestCase):
         self.assertEqual(r["usable_anchors"], 0)
 
     def test_wilson_interval_brackets_the_point_estimate(self):
-        by_addr = {f"addr{i}": [_claim("tagpack", f"root{i}", "mixer" if i < 8 else "exchange")]
+        # roots must be *resolved* to count as independent (an unrecognised
+        # root string is "unknown stays unknown"); tagpack_<creator> resolves
+        # via the source registry's fallback template.
+        by_addr = {f"addr{i}": [_claim("tagpack", f"tagpack_root{i}", "mixer" if i < 8 else "exchange")]
                    for i in range(10)}
         c = _FakeCorpus(by_addr)
         anchors = {f"addr{i}": ("mixer", "ofac_sdn") for i in range(10)}
         r = analysis.anchor_validation(c, anchors=anchors)
         v = r["per_source"]["tagpack"]
         self.assertEqual(v["n"], 10)
-        self.assertAlmostEqual(v["accuracy"], 0.8)
-        self.assertLess(v["ci_low"], v["accuracy"])
-        self.assertGreater(v["ci_high"], v["accuracy"])
+        # was v["accuracy"] (per-claim Wilson CI as the headline interval);
+        # now `anchor_agreement` - it measures agreement with the anchor
+        # set, not source accuracy - with a root-cluster bootstrap CI
+        # headline and the address-level Wilson kept as wilson_low/high.
+        self.assertAlmostEqual(v["anchor_agreement"], 0.8)
+        self.assertEqual(v["independent_roots"], 10)
+        self.assertTrue(v["estimable"])
+        self.assertLess(v["ci_low"], v["anchor_agreement"])
+        self.assertGreater(v["ci_high"], v["anchor_agreement"])
+        self.assertLess(v["wilson_low"], v["anchor_agreement"])
+        self.assertGreater(v["wilson_high"], v["anchor_agreement"])
+
+    def test_source_repeating_itself_on_one_anchor_is_one_decision(self):
+        # Sec 4.2 - the unit is the address, not the claim: 531 TagPack
+        # claims over 267 addresses must not be read as 531 confirmations.
+        c = _FakeCorpus({"1A": [_claim("tagpack", "tagpack_r1", "mixer"),
+                                _claim("tagpack", "tagpack_r1", "mixer"),
+                                _claim("tagpack", "tagpack_r2", "mixer")]})
+        r = analysis.anchor_validation(c, anchors={"1A": ("mixer", "ofac_sdn")})
+        self.assertEqual(r["per_source"]["tagpack"]["n"], 1)
+
+    def test_modal_label_decides_and_tie_is_order_independent(self):
+        forward = [_claim("tagpack", "tagpack_r1", "mixer"), _claim("tagpack", "tagpack_r2", "exchange")]
+        for claims in (forward, list(reversed(forward))):
+            r = analysis.anchor_validation(_FakeCorpus({"1A": claims}),
+                                           anchors={"1A": ("mixer", "ofac_sdn")})
+            v = r["per_source"]["tagpack"]
+            # tie broken by label name ("exchange" < "mixer"), never claim order
+            self.assertEqual((v["n"], v["exact"], v["conflicting"]), (1, 0, 1))
+
+    def test_unresolved_roots_are_not_independent_roots(self):
+        # two anchors, both supported only by a source whose root is
+        # unresolved (unknown relationship, not a distinct identity)
+        by_addr = {f"a{i}": [_claim("ellipticpp", "elliptic_undisclosed", "mixer")]
+                   for i in range(2)}
+        r = analysis.anchor_validation(_FakeCorpus(by_addr),
+                                       anchors={a: ("mixer", "ofac_sdn") for a in by_addr})
+        v = r["per_source"]["ellipticpp"]
+        self.assertEqual(v["independent_roots"], 0)
+        self.assertFalse(v["estimable"])
+        self.assertIsNone(v["ci_low"])
+
+    def test_root_cluster_ci_is_wider_than_wilson_when_support_is_concentrated(self):
+        # 40 addresses but all through 2 roots that disagree sharply: the
+        # address-level Wilson interval looks tight, the root-cluster one
+        # must not.
+        by_addr = {}
+        for i in range(40):
+            root, canon = ("tagpack_rA", "mixer") if i < 20 else ("tagpack_rB", "exchange")
+            by_addr[f"a{i}"] = [_claim("tagpack", root, canon)]
+        r = analysis.anchor_validation(_FakeCorpus(by_addr),
+                                       anchors={a: ("mixer", "ofac_sdn") for a in by_addr})
+        v = r["per_source"]["tagpack"]
+        self.assertEqual(v["independent_roots"], 2)
+        self.assertGreater(v["ci_high"] - v["ci_low"], v["wilson_high"] - v["wilson_low"])
+
+    def test_anchor_ci_is_deterministic(self):
+        by_addr = {f"a{i}": [_claim("tagpack", f"tagpack_r{i % 3}", "mixer" if i % 4 else "exchange")]
+                   for i in range(30)}
+        anchors = {a: ("mixer", "ofac_sdn") for a in by_addr}
+        r1 = analysis.anchor_validation(_FakeCorpus(by_addr), anchors=anchors)
+        r2 = analysis.anchor_validation(_FakeCorpus(by_addr), anchors=anchors)
+        self.assertEqual(r1["per_source"]["tagpack"], r2["per_source"]["tagpack"])
 
 
 class TestAnchorValidationRealCorpus(Base):
@@ -934,8 +1002,71 @@ class TestAnchorValidationRealCorpus(Base):
         r = analysis.anchor_validation(self.c)
         self.assertEqual(r["anchors_total"], 289)
         self.assertEqual(r["usable_anchors"], 268)
-        self.assertEqual(r["excluded_self_root_claims"], 290)
+        # was 290 (paper Sec 4.2). Now 361: +71 WatchYourBack hydra-market
+        # claims. Each cites Treasury's OFAC page and sits at an address that
+        # is itself an OFAC anchor, so per-record provenance (watchyourback.yml)
+        # now roots them at ofac_sdn - same root as the anchor, hence excluded
+        # as self-validation instead of counted as an independent confirmation.
+        self.assertEqual(r["excluded_self_root_claims"], 361)
         self.assertEqual(r["uninterpretable_ground_truth_label"], 0)
+
+    def test_real_anchor_per_source_support(self):
+        # Sec 4.2: five of seven sources collapse to a single root or no
+        # validated addresses; the survivors are Schnoering and TagPack.
+        # Unit = one decision per (source, address), so n is addresses (was
+        # claims: tagpack 401, schnoering 41 under the per-claim count).
+        ps = analysis.anchor_validation(self.c)["per_source"]
+        est = {s for s, v in ps.items() if v["estimable"]}
+        self.assertEqual(est, {"tagpack", "schnoering"})
+        self.assertEqual((ps["tagpack"]["n"], ps["tagpack"]["exact"],
+                          ps["tagpack"]["independent_roots"]), (259, 113, 5))
+        self.assertEqual((ps["schnoering"]["n"], ps["schnoering"]["exact"],
+                          ps["schnoering"]["independent_roots"]), (34, 32, 3))
+        for single in ("ransomwhere", "rodwald_ransom"):
+            self.assertEqual(ps[single]["independent_roots"], 1)
+        # concentrated support must never produce a tight interval
+        self.assertGreater(ps["tagpack"]["ci_high"] - ps["tagpack"]["ci_low"], 0.5)
+
+
+class TestStructuredLabelEdgeCases(unittest.TestCase):
+    """Phase 2C re-verification: a label only gets a structured-prefix
+    reading when its own prefix is a declared alias. Anything else must stay
+    unmapped rather than be guessed."""
+
+    def test_known_prefix_plus_entity(self):
+        self.assertEqual(taxonomy.canonicalize_category("tormarket:hydra-market"), "darknet_market")
+        self.assertEqual(taxonomy.canonicalize_category("MIXER:Helix"), "mixer")
+
+    def test_unknown_prefix_plus_entity_stays_unmapped(self):
+        for raw in ("foo:bar", "cryptolocker:variant-9", "a:b:c"):
+            self.assertIsNone(taxonomy.canonicalize_category(raw))
+
+    def test_urls_and_free_text_colons_never_match(self):
+        for raw in ("http://example.com/x", "https://treasury.gov/a:b", "note: this is a mixer",
+                    "see: exchange", ":entity"):
+            self.assertIsNone(taxonomy.canonicalize_category(raw), raw)
+
+    def test_only_the_first_separator_splits(self):
+        self.assertEqual(taxonomy.split_structured_label("mixer:a:b"), ("mixer", "a:b"))
+
+    def test_malformed_values_do_not_raise(self):
+        for raw in (None, "", "   ", ":", "::", "x" * 10000 + ":y"):
+            self.assertIsNone(taxonomy.canonicalize_category(raw))
+
+    def test_plain_alias_is_unchanged_by_the_structured_path(self):
+        self.assertEqual(taxonomy.canonicalize_category("mixer"), "mixer")
+        self.assertEqual(taxonomy.split_structured_label("mixer"), (None, None))
+
+    def test_paper_snapshot_canon_is_not_recomputed_on_load(self):
+        # frozen-snapshot vs fresh-normalization must never mix silently: the
+        # bundled corpus keeps its pre-baked canon (WatchYourBack's
+        # "tormarket:*" is `unknown` there) even though a fresh ingest of the
+        # same raw label now canonicalizes it.
+        c = Corpus.demo()
+        claim = next(x for x in c.claims if x["source"] == "watchyourback"
+                     and x["raw_label"] == "tormarket:hydra-market")
+        self.assertEqual(claim["canon"], "unknown")
+        self.assertEqual(taxonomy.canonicalize_category(claim["raw_label"]), "darknet_market")
 
 
 if __name__ == "__main__":

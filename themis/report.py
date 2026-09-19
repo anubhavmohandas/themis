@@ -37,7 +37,11 @@ def audit_trail(input_path=None, parameters: dict | None = None, warnings: list 
         input_file=str(input_path) if input_path else None,
         input_file_hash=_hash_file(input_path),
         config_hash=_hash_config(),
-        config_dir=str(config_io.config_dir()),
+        # the bundled tree is named, not its absolute install path (an export
+        # must not leak the machine it was produced on); an explicit
+        # THEMIS_CONFIG_DIR override is the caller's own choice and is kept.
+        config_dir=("themis/config (bundled)" if config_io.config_dir() == config_io.PKG_CONFIG
+                    else str(config_io.config_dir())),
         parameters=parameters or {},
         warnings=warnings or [],
     )

@@ -20,6 +20,15 @@ bootstrap:
   seed: 42
   confidence_level: 0.95
 
+# Anchor validation (Sec 4.3/4.7) - a source's agreement with the open anchor
+# set is only estimable when its evaluated decisions come from at least this
+# many independent RESOLVED provenance roots. The interval is a root-cluster
+# bootstrap, and resampling one cluster (or none) has no between-root
+# variance to draw on; 2 is the structural minimum, not a tuned accuracy bar.
+# The reported root count and largest-root share, not this floor, are what a
+# reader should use to judge how much a source's figure can bear.
+anchor_min_independent_roots: 2
+
 # STEP 11 - a pair's kappa is only surfaced as "substantial agreement" above
 # this value; the raw figure and undefined/zero pairs are still reported.
 kappa_substantial_threshold: 0.4

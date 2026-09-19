@@ -337,6 +337,37 @@ def _wilson_interval(successes: int, n: int, confidence_level: float) -> tuple[f
     return max(0.0, center - margin), min(1.0, center + margin)
 
 
+def _modal_claim(claims: list[dict]) -> tuple[str, str]:
+    """One decision per (source, address): the most common canonical label
+    among that source's interpretable claims, ties broken by label then root
+    name so the result never depends on claim order. Returns (canon, root of
+    the claim(s) that carried it)."""
+    cnt = collections.Counter(c["canon"] for c in claims)
+    canon = min(cnt, key=lambda k: (-cnt[k], k))
+    return canon, min(c["root"] for c in claims if c["canon"] == canon)
+
+
+def _root_cluster_ci(per_root: dict, n_boot: int, seed: int,
+                     confidence_level: float) -> tuple[float | None, float | None]:
+    """Percentile interval for a pooled ratio, resampling provenance roots
+    (each root's (successes, n) is one cluster) - the same unit `bootstrap()`
+    resamples, for the same reason: evaluations that descend from one root
+    are not independent observations, so a Wilson interval over addresses
+    would report far more certainty than the evidence supports."""
+    keys = sorted(per_root)
+    rng = random.Random(seed)
+    vals = []
+    for _ in range(n_boot):
+        pick = [keys[rng.randrange(len(keys))] for _ in keys]
+        d_ = sum(per_root[k][1] for k in pick)
+        if d_:
+            vals.append(sum(per_root[k][0] for k in pick) / d_)
+    vals.sort()
+    tail = (1 - confidence_level) / 2
+    return ((vals[int(tail * (len(vals) - 1))], vals[int((1 - tail) * (len(vals) - 1))])
+            if vals else (None, None))
+
+
 def anchor_validation(corpus, anchors=None, confidence_level=None) -> dict:
     """Provenance-aware validation against the paper's open-anchor reference
     set (Sec 4.3/4.7: `demo_data/ground_truth.csv`) - operationalizes what
@@ -352,18 +383,34 @@ def anchor_validation(corpus, anchors=None, confidence_level=None) -> dict:
     schnoering claim inherited from `ofac_sdn` "confirming" an OFAC anchor).
     A naive name-based check misses the second case entirely.
 
-    A claim whose own raw label never canonicalized contributes no usable
-    opinion (same rule as `taxonomy.classify_address`) and is counted as
-    `incomparable`, not folded into a source's accuracy denominator.
+    The unit of evaluation is one decision per (source, address), the
+    source's modal interpretable label (Sec 4.2: "the unit must be the
+    address rather than the claim") - a source that repeats itself on an
+    anchor must not be counted as several confirmations. A source with no
+    interpretable claim at an anchor (canon == "unknown", same rule as
+    `taxonomy.classify_address`) contributes an `incomparable`, not a miss.
+
+    What is reported is AGREEMENT WITH THE ANCHOR SET, not source accuracy:
+    the reference set is small, non-random, and concentrated in a few roots.
+    Each source therefore also carries the number of independent resolved
+    roots its evaluated decisions come from and the share held by its
+    largest root; the interval is a root-cluster bootstrap (not Wilson over
+    addresses, kept alongside as `wilson_low/high` for comparison only) and
+    a source below `anchor_min_independent_roots` is not estimable at all -
+    with one root there is no between-root variance to resample.
     """
     anchors = anchors if anchors is not None else corpus.ground_truth()
     confidence_level = (_BOOT_CFG.get("confidence_level", 0.95)
                         if confidence_level is None else confidence_level)
+    n_boot = _BOOT_CFG.get("iterations", 2000)
+    seed = _BOOT_CFG.get("seed", 42)
+    min_roots = _cfg.thresholds.get("anchor_min_independent_roots", 2)
 
     usable_anchors = excluded_self_root_claims = uninterpretable_ground_truth = 0
     root_counts = []
     outcome_totals = collections.Counter()
     per_source = collections.defaultdict(collections.Counter)
+    evaluated = collections.defaultdict(list)     # source -> [(root, outcome)]
 
     for addr, (label, anchor_root) in anchors.items():
         claims = corpus.by_addr.get(addr, [])
@@ -381,33 +428,55 @@ def anchor_validation(corpus, anchors=None, confidence_level=None) -> dict:
             uninterpretable_ground_truth += 1
             continue
         anchor_claim = dict(source="__anchor__", canon=gt_canon)
+        by_source = collections.defaultdict(list)
         for c in indep_claims:
-            outcome = taxonomy.classify_address(
-                [anchor_claim, dict(source=c["source"], canon=c["canon"])])
-            outcome_totals[outcome] += 1
-            src = per_source[c["source"]]
-            if outcome == "incomparable":
-                src["incomparable"] += 1
+            by_source[c["source"]].append(c)
+        for src, group in by_source.items():
+            interpretable = [c for c in group if c["canon"] != "unknown"]
+            if not interpretable:
+                per_source[src]["incomparable"] += 1
+                outcome_totals["incomparable"] += 1
                 continue
-            src["n"] += 1
-            src[outcome] += 1
+            canon, root = _modal_claim(interpretable)
+            outcome = taxonomy.classify_address(
+                [anchor_claim, dict(source=src, canon=canon)])
+            outcome_totals[outcome] += 1
+            per_source[src]["n"] += 1
+            per_source[src][outcome] += 1
+            evaluated[src].append((root, outcome))
 
     per_source_report = {}
     for src, counts in per_source.items():
         n = counts["n"]
         if n == 0:
             per_source_report[src] = dict(
-                n=0, incomparable=counts["incomparable"],
-                accuracy=None, ci_low=None, ci_high=None, estimable=False)
+                n=0, incomparable=counts["incomparable"], independent_roots=0,
+                anchor_agreement=None, ci_low=None, ci_high=None,
+                wilson_low=None, wilson_high=None, estimable=False,
+                not_estimable_reason="no interpretable claim on any usable anchor")
             continue
         exact = counts["exact"]
-        ci_low, ci_high = _wilson_interval(exact, n, confidence_level)
+        per_root = collections.defaultdict(lambda: [0, 0])
+        for root, outcome in evaluated[src]:
+            per_root[root][1] += 1
+            per_root[root][0] += outcome == "exact"
+        roots = len({r for r in per_root if not provenance.is_unresolved(r)})
+        estimable = roots >= min_roots
+        ci_low, ci_high = (_root_cluster_ci(per_root, n_boot, seed, confidence_level)
+                           if estimable else (None, None))
+        w_low, w_high = _wilson_interval(exact, n, confidence_level)
         per_source_report[src] = dict(
             n=n, exact=exact,
             hierarchical=counts["hierarchical refinement"],
             conflicting=counts["entity-type conflict"] + counts["licit/illicit conflict"],
             incomparable=counts["incomparable"],
-            accuracy=exact / n, ci_low=ci_low, ci_high=ci_high, estimable=True)
+            anchor_agreement=exact / n,
+            independent_roots=roots,
+            largest_root_share=max(v[1] for v in per_root.values()) / n,
+            ci_low=ci_low, ci_high=ci_high, ci_method="root_cluster_bootstrap",
+            wilson_low=w_low, wilson_high=w_high, estimable=estimable,
+            not_estimable_reason=None if estimable else (
+                f"{roots} independent root(s), need {min_roots}+"))
 
     return dict(
         anchors_total=len(anchors),
@@ -419,18 +488,23 @@ def anchor_validation(corpus, anchors=None, confidence_level=None) -> dict:
         outcome_totals=dict(outcome_totals),
         per_source=per_source_report,
         confidence_level=confidence_level,
+        min_independent_roots=min_roots,
         estimable=any(v["estimable"] for v in per_source_report.values()),
         limitations=(
             "This reference set is small (see anchors_total) and concentrated in a "
             "few sources; a per-source figure here measures agreement with this "
             "open anchor set, not verified accuracy against ground truth for the "
-            "corpus as a whole. estimable=False (n=0) means either the source was "
-            "never seen on a usable anchor, or every claim it made there never "
-            "canonicalized - neither is an accuracy of zero. Root resolution can "
-            "only be as correct as the source registry's declared provenance - "
-            "see config/sources/"
-            "watchyourback.yml's confidence_semantics for a known case where a "
-            "source's declared root may itself be too coarse."))
+            "corpus as a whole. One decision is counted per (source, address); a "
+            "source whose decisions come from few independent roots is not "
+            "estimable, and where it is the interval resamples roots, so few "
+            "roots means a wide interval - read it as a bound on what this "
+            "reference set can say, not as a measurement. estimable=False means "
+            "either too few independent roots, or the source was never seen on a "
+            "usable anchor, or every claim it made there never canonicalized - "
+            "none of these is an agreement of zero. Root resolution can only be "
+            "as correct as the source registry's declared provenance - see "
+            "config/sources/watchyourback.yml's confidence_semantics for a known "
+            "case where a source's declared root may itself be too coarse."))
 
 
 # ------------------------------------------------------------- STEP 13 freshness

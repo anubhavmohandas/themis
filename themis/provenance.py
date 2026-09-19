@@ -48,7 +48,9 @@ def resolve(claim: dict, sources: dict | None = None) -> dict:
     evidence (STEP 6) - a declaration a source config must make explicitly,
     never inferred from a dataset calling itself verified. `kind` is for the
     provenance explorer (STEP 18): DECLARED when the config states the root
-    outright (a fixed identity or an exact declared-field match), INFERRED
+    outright (a fixed identity, an exact declared-field match, or a
+    field_map default that itself sets `declared: true` - the source's own
+    stated root for every record no map entry overrides), INFERRED
     when it came from decoding an undocumented code or a residue/fallback
     guess, UNKNOWN when no rule was configured at all - no edge is ever
     shown as fact beyond what this reflects.
@@ -73,7 +75,7 @@ def resolve(claim: dict, sources: dict | None = None) -> dict:
         d = entry or prov.get("default", {})
         return dict(root=d.get("root", f"{src_id}_other"), resolved=bool(d.get("resolved", False)),
                     native=bool(d.get("native", False)), verified=bool(d.get("verified", False)),
-                    kind="DECLARED" if entry else "INFERRED")
+                    kind="DECLARED" if entry or d.get("declared") else "INFERRED")
 
     if mode in ("contains_rules", "substring_map"):
         raw = claim.get(prov["field"], "") or ""
