@@ -29,12 +29,12 @@ python -m pytest
 Only `pyproject.toml` supplies dependencies (PyYAML at runtime; pytest, httpx,
 fastapi, python-multipart for the tests). Expected:
 
-- **release / no reference corpus:** `171 passed, 65 skipped` — the 65 skipped
+- **release / no reference corpus:** `173 passed, 92 skipped` — the 65 skipped
   are the tests that assert a number printed in the paper or drive paper mode;
   each says `reference corpus not present (not redistributed - see
   THIRD_PARTY_DATA.md; set THEMIS_DATA_DIR)`.
 - **development checkout, or a release with `THEMIS_DATA_DIR` pointing at a
-  matching corpus:** `236 passed`.
+  matching corpus:** `265 passed`.
 
 If a test fails, stop here; the rest assumes a clean run.
 

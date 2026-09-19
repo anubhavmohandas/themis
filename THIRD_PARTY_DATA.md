@@ -45,9 +45,9 @@ confirmed, that is stated as `UNCONFIRMED`; the decision is the author's.
   stated redistribution terms.
 - **Partially confirmed** — WatchYourBack (0.02%): code license only.
 
-The repository is already public (github.com/anubhavmohandas/themis) and has
-contained `observations_sample.csv.gz` since its first commit; nothing here
-rewrites that history — that would be a separate decision.
+The development repository is already public and has contained
+`observations_sample.csv.gz` since its first commit; nothing here rewrites that
+history — that would be a separate decision.
 
 ### Conservative release options (the author's choice; the release below applies option 2 by default)
 
