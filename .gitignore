@@ -37,3 +37,6 @@ external_data/
 # Editors
 .vscode/
 .idea/
+
+# Release build output (scripts/make_release.py)
+release/
