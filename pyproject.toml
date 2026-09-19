@@ -24,3 +24,8 @@ packages = ["themis", "themis.trust", "themis.tasks", "themis.chains", "themis.i
 
 [tool.setuptools.package-data]
 themis = ["config/*.yml", "config/sources/*.yml"]
+
+[tool.pytest.ini_options]
+# collect only tests/: a bare `python -m pytest` must not wander into release/ (a
+# copy of tests/ with the same module names), frontend/node_modules or external_data/
+testpaths = ["tests"]
