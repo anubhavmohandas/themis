@@ -3,7 +3,7 @@
 ADDRESS  14BWrn1evbyvBGGxFzUCVQ61ntNtRjRdm7
   outcome            exact
   tier               derived
-  flags              circular, currency-unknown
+  flags              circular, stale
 
   apparent corroboration   4 dataset(s)
   actual corroboration     3 provenance root(s)
@@ -12,6 +12,6 @@ ADDRESS  14BWrn1evbyvBGGxFzUCVQ61ntNtRjRdm7
   claims:
     schnoering      ransomware        root=montreal_paquet_clouston_2019     derived           currency-unknown
     rodwald_ransom  ransomware        root=ransomwhere_crowd                 derived           currency-unknown
-    ransomwhere     ransomware        root=ransomwhere_crowd                 unverified-report 
-    tagpack         ransomware        root=tagpack_GraphSense Core Team      derived           
-    tagpack         ransomware        root=montreal_paquet_clouston_2019     derived           
+    ransomwhere     ransomware        root=ransomwhere_crowd                 unverified-report stale
+    tagpack         ransomware        root=tagpack_GraphSense Core Team      derived           stale
+    tagpack         ransomware        root=montreal_paquet_clouston_2019     derived           stale

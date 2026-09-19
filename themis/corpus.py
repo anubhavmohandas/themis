@@ -5,7 +5,17 @@ from . import provenance
 
 csv.field_size_limit(10 ** 9)
 PKG = pathlib.Path(__file__).resolve().parent.parent
-DEMO = PKG / "demo_data"
+_MISSING = ("No reference corpus found at {path}. The derived observation table is not "
+            "redistributed with THEMIS (see THIRD_PARTY_DATA.md): build it from the sources "
+            "with scripts/build_corpus.py, then point THEMIS at it with --data-dir DIR or the "
+            "THEMIS_DATA_DIR environment variable.")
+
+
+def data_dir() -> pathlib.Path:
+    """Where the reference corpus files live: THEMIS_DATA_DIR if set, else the
+    repository's demo_data/ (present in a development checkout, absent from
+    the release). Read at call time so the override can be set late."""
+    return pathlib.Path(os.environ.get("THEMIS_DATA_DIR") or PKG / "demo_data")
 
 FIELDS = ["address", "source", "raw_label", "canon", "polarity",
           "prov_family", "lastmod", "heuristic", "subcat"]
@@ -45,9 +55,12 @@ class Corpus:
     # -------------------------------------------------------------- loaders
     @classmethod
     def demo(cls):
-        with open(DEMO / "manifest.json") as fh:
+        d = data_dir()
+        if not (d / "manifest.json").is_file() or not (d / "observations_sample.csv.gz").is_file():
+            raise FileNotFoundError(_MISSING.format(path=d))
+        with open(d / "manifest.json") as fh:
             man = json.load(fh)
-        with _open(DEMO / "observations_sample.csv.gz") as f:
+        with _open(d / "observations_sample.csv.gz") as f:
             claims = list(csv.DictReader(f))
         return cls(claims, man, full=False)
 
@@ -144,17 +157,19 @@ class Corpus:
             return None
 
     def revenue_rows(self, path=None):
-        path = path or DEMO / "revenue.csv.gz"
+        path = path or data_dir() / "revenue.csv.gz"
+        if not pathlib.Path(path).is_file():
+            raise FileNotFoundError(_MISSING.format(path=path))
         with _open(path) as f:
             return list(csv.DictReader(f))
 
     def verified_anchors(self, path=None):
-        path = path or DEMO / "verified_anchors.txt.gz"
+        path = path or data_dir() / "verified_anchors.txt.gz"
         with _open(path) as f:
             return {ln.strip() for ln in f if ln.strip()}
 
     def ground_truth(self, path=None):
-        path = path or DEMO / "ground_truth.csv"
+        path = path or data_dir() / "ground_truth.csv"
         with _open(path) as f:
             return {r["address"]: (r["ground_truth_label"], r["ground_truth_source"])
                     for r in csv.DictReader(f)}

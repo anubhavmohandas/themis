@@ -8,11 +8,15 @@ import unittest, datetime, sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from themis.corpus import Corpus
 from themis import analysis, taxonomy, provenance, report
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from _data import HAVE_REFERENCE, REASON, requires_reference_corpus
 
 
 class Base(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        if not HAVE_REFERENCE:
+            raise unittest.SkipTest(REASON)
         cls.c = Corpus.demo()
         cls.agree = analysis.agreement(cls.c)
         cls.indep = analysis.independence(cls.c)
@@ -1132,6 +1136,7 @@ class TestStructuredLabelEdgeCases(unittest.TestCase):
         self.assertEqual(taxonomy.canonicalize_category("mixer"), "mixer")
         self.assertEqual(taxonomy.split_structured_label("mixer"), (None, None))
 
+    @requires_reference_corpus
     def test_paper_snapshot_canon_is_not_recomputed_on_load(self):
         # frozen-snapshot vs fresh-normalization must never mix silently: the
         # bundled corpus keeps its pre-baked canon (WatchYourBack's

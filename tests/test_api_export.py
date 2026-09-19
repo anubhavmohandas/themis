@@ -5,6 +5,8 @@ like "=cmd|' /C calc'!A0" must not reach a downloaded CSV as a live formula.
 """
 import asyncio, sys, pathlib, unittest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from _data import requires_reference_corpus
 from themis.api import _csv_safe_cell, _csv_response, app
 from fastapi.testclient import TestClient
 
@@ -114,6 +116,7 @@ class TestUploadInputValidation(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.json()["preflight"]["stopped"])
 
+    @requires_reference_corpus
     def test_unknown_export_name_is_a_clean_404(self):
         r = self.client.post("/api/analysis/paper")
         aid = r.json()["analysis_id"]
@@ -126,6 +129,7 @@ class TestUploadInputValidation(unittest.TestCase):
             r = self.client.get(f"/api/analysis/does-not-exist{path}")
             self.assertEqual(r.status_code, 404, path)
 
+    @requires_reference_corpus
     def test_claims_endpoint_paginates_and_never_returns_the_whole_corpus(self):
         r = self.client.post("/api/analysis/paper")
         aid = r.json()["analysis_id"]
@@ -141,6 +145,7 @@ class TestUploadInputValidation(unittest.TestCase):
         huge = self.client.get(f"/api/analysis/{aid}/claims", params={"limit": 10_000_000})
         self.assertLessEqual(huge.json()["n_returned"], 500)
 
+    @requires_reference_corpus
     def test_claims_endpoint_ordering_is_stable_across_requests(self):
         r = self.client.post("/api/analysis/paper")
         aid = r.json()["analysis_id"]
@@ -151,6 +156,7 @@ class TestUploadInputValidation(unittest.TestCase):
         next_page = self.client.get(f"/api/analysis/{aid}/claims", params={"offset": 10, "limit": 10}).json()
         self.assertNotIn(next_page["claims"][0]["address"], {c["address"] for c in first["claims"]})
 
+    @requires_reference_corpus
     def test_claims_endpoint_filters_by_source_and_evidence_tier(self):
         r = self.client.post("/api/analysis/paper")
         aid = r.json()["analysis_id"]
@@ -185,6 +191,41 @@ class TestUploadInputValidation(unittest.TestCase):
             export = self.client.get(f"/api/analysis/{aid}/export/normalized_claims.csv")
             self.assertEqual(export.status_code, 200)
             self.assertNotIn(fn, export.text)
+
+
+class TestNoReferenceCorpus(unittest.TestCase):
+    """A release ships no reference corpus (the derived observation table is
+    not redistributed). Nothing may crash: paper mode says how to get the
+    corpus, and an upload that asks for a comparison is analysed without one
+    and says so."""
+
+    def setUp(self):
+        import os
+        from themis import api
+        self._os, self._api = os, api
+        self._old = os.environ.get("THEMIS_DATA_DIR")
+        os.environ["THEMIS_DATA_DIR"] = "/nonexistent-themis-data-dir"
+        api._reference_cache.clear()
+        self.client = TestClient(app)
+
+    def tearDown(self):
+        if self._old is None:
+            self._os.environ.pop("THEMIS_DATA_DIR", None)
+        else:
+            self._os.environ["THEMIS_DATA_DIR"] = self._old
+        self._api._reference_cache.clear()
+
+    def test_paper_mode_is_a_409_naming_the_fix(self):
+        r = self.client.post("/api/analysis/paper")
+        self.assertEqual(r.status_code, 409)
+        self.assertIn("build_corpus.py", r.json()["detail"])
+
+    def test_upload_requesting_a_reference_degrades_to_no_comparison(self):
+        r = self.client.post("/api/analysis", files={"file": ("x.csv", BTC_CSV, "text/csv")},
+                             data={"source_id": "t", "use_reference": "true"})
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(any("No cross-source comparison" in w for w in r.json()["meta"]["warnings"]))
+        self.assertFalse(r.json()["preflight"]["stopped"])
 
 
 if __name__ == "__main__":

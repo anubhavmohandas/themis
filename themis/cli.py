@@ -2,7 +2,7 @@
 Assessment. Runs the attribution-reliability audit from the command line.
 """
 from __future__ import annotations
-import argparse, json, sys, textwrap
+import argparse, json, os, sys, textwrap
 from .corpus import Corpus
 from . import analysis, taxonomy, config_io, report as _report
 from .ingest import pipeline as _ingest_pipeline
@@ -268,7 +268,10 @@ def cmd_ingest(args):
     if args.reference:
         reference = Corpus.from_file(args.reference)
     elif not args.no_reference:
-        reference = Corpus.demo()
+        try:
+            reference = Corpus.demo()
+        except FileNotFoundError as e:
+            print(_c(f"note: no reference corpus, so no cross-source comparison ({e})", YEL), file=sys.stderr)
 
     override = {}
     for spec in args.map or []:
@@ -359,8 +362,12 @@ def main(argv=None):
                     "Investigative Source Assessment. Audits public Bitcoin "
                     "attribution labels: provenance, independence, currency, and "
                     "their effect on a forensic figure.")
-    p.add_argument("--observations", help="full observations.csv(.gz); omit to use "
-                                          "the bundled sample")
+    p.add_argument("--observations", help="full observations.csv(.gz) from scripts/build_corpus.py; "
+                                          "omit to use the reference corpus in the data directory")
+    p.add_argument("--data-dir", metavar="DIR",
+                   help="directory holding the reference corpus and its task inputs (default: "
+                        "$THEMIS_DATA_DIR, else demo_data/ in a development checkout - a release "
+                        "does not ship it, see THIRD_PARTY_DATA.md)")
     p.add_argument("--as-of", metavar="YYYY-MM-DD",
                    help="the date staleness is judged against (default: the bundled sample's "
                         "declared analysis date; for --observations, the newest revision date in "
@@ -409,7 +416,14 @@ def main(argv=None):
     ig.set_defaults(fn=cmd_ingest)
 
     a = p.parse_args(argv)
-    return a.fn(a) or 0
+    if a.data_dir:
+        os.environ["THEMIS_DATA_DIR"] = a.data_dir      # corpus.data_dir() reads it at call time
+    try:
+        return a.fn(a) or 0
+    except FileNotFoundError as e:
+        # a missing corpus/anchor/revenue file is an operator problem with a known fix, not a crash
+        print(f"themis: {e}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

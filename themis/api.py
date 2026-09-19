@@ -39,11 +39,19 @@ _reference_cache: dict = {}
 
 
 def _reference_corpus() -> Corpus:
-    """The bundled reference corpus, loaded once and cached - only ever
-    touched when a request explicitly opts into comparing against it."""
+    """The reference corpus, loaded once and cached - only ever touched when a
+    request explicitly opts into comparing against it. Raises
+    FileNotFoundError when it is not present (a release does not ship it)."""
     if "corpus" not in _reference_cache:
         _reference_cache["corpus"] = Corpus.demo()
     return _reference_cache["corpus"]
+
+
+def _reference_or_none():
+    try:
+        return _reference_corpus(), None
+    except FileNotFoundError as e:
+        return None, str(e)
 
 
 def _get_workspace(analysis_id: str) -> _workspace.AnalysisWorkspace:
@@ -134,7 +142,7 @@ async def create_analysis(file: UploadFile = File(...), source_id: str = Form("u
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(data)
-        reference = _reference_corpus() if use_reference else None
+        reference, missing = _reference_or_none() if use_reference else (None, None)
         today = datetime.date.today()
         result = _ingest_pipeline.ingest(tmp_path, source_id, mapping_override=mapping_override,
                                          reference=reference, analysis_as_of_date=today)
@@ -148,7 +156,8 @@ async def create_analysis(file: UploadFile = File(...), source_id: str = Form("u
         input_file_hash=_hash_bytes(data), blockchain=result["detection"].get("blockchain"),
         schema_mapping=result.get("schema_mapping"), claims=result.get("claims", []),
         reference_corpus_version=("bundled_sample" if reference is not None else None),
-        warnings=result.get("limitations", []), result=result,
+        warnings=result.get("limitations", []) + ([f"No cross-source comparison was run: {missing}"] if missing else []),
+        result=result,
         audit_trail=_report.audit_trail(parameters=dict(source_id=source_id, use_reference=use_reference),
                                         warnings=result.get("limitations", [])),
     )
@@ -163,7 +172,10 @@ async def create_analysis(file: UploadFile = File(...), source_id: str = Form("u
 def create_paper_reproduction():
     """STEP 20 - a deliberate, separate mode: reproduce the bundled
     seven-source research corpus. Never entered implicitly."""
-    corpus = _reference_corpus()
+    try:
+        corpus = _reference_corpus()
+    except FileNotFoundError as e:
+        raise HTTPException(409, str(e)) from e
     result = _report.build_corpus_report(corpus)
     ws = _workspace.AnalysisWorkspace(
         analysis_id=_workspace.new_id(), mode=_workspace.MODE_PAPER,
