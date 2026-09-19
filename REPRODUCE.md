@@ -33,8 +33,10 @@ fastapi, python-multipart for the tests). Expected:
   are the tests that assert a number printed in the paper or drive paper mode;
   each says `reference corpus not present (not redistributed - see
   THIRD_PARTY_DATA.md; set THEMIS_DATA_DIR)`.
-- **development checkout, or a release with `THEMIS_DATA_DIR` pointing at a
-  matching corpus:** `265 passed`.
+- **a corpus present** (development checkout, or `THEMIS_DATA_DIR` pointing at a
+  matching one): `264 passed, 1 skipped` in a clean environment - the skip is the
+  numpy cross-check of the exploratory `--fast` bootstrap path (numpy is optional);
+  with numpy installed, `265 passed`.
 
 If a test fails, stop here; the rest assumes a clean run.
 
@@ -161,7 +163,7 @@ npm ci
 npm run build
 ```
 
-Expected: a clean Vite build (one large-chunk warning), producing `frontend/dist/`.
+Expected: a clean Vite build (225 modules), producing `frontend/dist/`.
 Only `package.json` and `package-lock.json` are used.
 
 ## 6. Running the dashboard
