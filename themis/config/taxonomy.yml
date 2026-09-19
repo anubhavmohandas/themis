@@ -21,9 +21,8 @@ categories:
     # values are pre-baked into demo_data/observations_sample.csv.gz at
     # data-preparation time, not recomputed from this file on load - this
     # only takes effect for a *newly ingested* Elliptic-shaped upload
-    # (STEP 23), never retroactively for the frozen paper corpus. See
-    # HARDENING_LOG.md "Elliptic++'s class_1/class_2..." for the full
-    # before/after check and why the bundled numbers are untouched.
+    # (STEP 23), never retroactively for the frozen paper corpus (checked by
+    # diffing agreement() with and without the alias: byte-identical).
     # state-sponsored: an actor-type descriptor, unspecified activity - same
     # shape as illicit-unspecified above. Found as the prefix of watchyourback's
     # structured `state-sponsored:lazarus`-shaped labels (see taxonomy.py's

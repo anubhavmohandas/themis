@@ -9,8 +9,7 @@ license: >
   than the other sources here (309 of 1,497,191 corpus addresses, 0.02%),
   but GPL-3.0 is copyleft (derivative works must also be GPL-3.0), and this
   repo currently has no LICENSE file of its own - a separate, smaller
-  finding worth the author's attention alongside the Elliptic++ one. See
-  HARDENING_LOG.md.
+  finding worth the author's attention alongside the Elliptic++ one (see THIRD_PARTY_DATA.md).
 confidence_semantics: >
   Curated, cited annotation: EVERY record in upstream's data/tagging/
   btc_resolv.csv (309 of 309, re-checked 2026-09-19) carries an external
@@ -21,7 +20,7 @@ confidence_semantics: >
   its annotations are open anchors that do not themselves reach that tier)
   - so its own records are tiered DERIVED, and only a record whose root
   terminates in re-checkable evidence is VERIFIED.
-  Per-record citation analysis (results/final_freeze/analysis/wyb_provenance_*):
+  Per-record citation analysis (upstream file joined to the OFAC SDN address list, 2026-09-19):
   71 of the 87 records upstream marks with a leading "#" - all entity
   "hydra-market" - cite Treasury's OFAC recent-actions page (20220405), every
   one of those addresses is in OFAC's current SDN list, and the SDN entity is

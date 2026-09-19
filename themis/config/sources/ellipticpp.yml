@@ -8,8 +8,7 @@ license: >
   request; the underlying original Elliptic transaction dataset it extends
   is separately published under CC BY-NC-ND 4.0 (non-commercial, no
   derivatives) elsewhere, but that is not confirmed to also govern
-  Elliptic++'s own wallet-address data. See HARDENING_LOG.md "PAPER MAY
-  NEED UPDATE - Elliptic++ license status" for why this matters: this
+  Elliptic++'s own wallet-address data. That matters because this
   repo's bundled demo_data/observations_sample.csv.gz is a git-tracked,
   normalized derivative of this data in what is currently a public repo.
   Flagged for the authors to verify directly with the dataset's authors -
@@ -23,7 +22,7 @@ confidence_semantics: >
   published scheme (Weber et al.) of illicit/licit/unknown - confirmed
   2026-09-18 and mapped in taxonomy.yml's `illicit_unspec`/`licit_unspec`
   aliases (class_3 correctly stays unmapped: it's the source's own declared
-  "unknown", not an inference). See HARDENING_LOG.md bug #16.
+  "unknown", not an inference).
 known_dependencies: []
 
 # The publisher does not disclose per-label methodology, so every claim from

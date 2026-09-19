@@ -192,8 +192,7 @@ class TestAgreement(Base):
 
     def test_outcome_counts(self):
         # NOTE: these differ from the currently-published paper draft
-        # (13,673 / 342 / 109 / 23) - see HARDENING_LOG.md's "PAPER MAY
-        # NEED UPDATE" section. classify_address() used to report "exact
+        # (13,673 / 342 / 109 / 23). classify_address() used to report "exact
         # agreement" whenever only ONE source's claim had an interpretable
         # canonical category and every other source's claim was unmapped
         # (canon == "unknown", e.g. Elliptic++'s undocumented "class_3"

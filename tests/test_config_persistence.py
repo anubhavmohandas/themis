@@ -6,8 +6,7 @@ is what actually prevents the failure mode Part Z describes: editing
 `themis/config/*.yml` on disk while the backend is running must never change
 what an in-memory analysis reports on its next request - a live-drift risk
 that would exist if `load()` re-read the files every call. In-memory
-workspaces don't survive a restart at all (confirmed separately in
-HARDENING_LOG.md's "Persistence / restart" section), so the two guarantees
+workspaces don't survive a restart at all (confirmed separately), so the two guarantees
 together mean an analysis's config is pinned for its entire observable
 lifetime.
 """
