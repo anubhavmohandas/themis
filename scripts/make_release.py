@@ -3,7 +3,7 @@
 git commit - never from the working tree, so untracked files, virtualenvs,
 node_modules, caches, logs, downloaded datasets and concurrent edits cannot get in.
 
-    python scripts/make_release.py [--commit HEAD] [--out release/themis] [--zip release/THEMIS_v1.0-paper.zip]
+    python scripts/make_release.py [--commit HEAD] [--out release/themis] [--zip release/THEMIS_v1.0-paper-rc1.zip] [--tag v1.0-paper-rc1]
 
 What it removes from what git tracks: the third-party-derived data files under
 demo_data/ and provenance_register.html (the paper says the derived observation
@@ -53,6 +53,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--commit", default="HEAD"); ap.add_argument("--out", default="release/themis")
     ap.add_argument("--zip", help="also write a deterministic ZIP of the directory")
+    ap.add_argument("--tag", default="v1.0-paper-rc1", help="release label recorded in RELEASE_MANIFEST.json")
     a = ap.parse_args()
     commit = sh("git", "rev-parse", a.commit, text=True).strip()
     when = datetime.datetime.fromtimestamp(int(sh("git", "show", "-s", "--format=%ct", commit, text=True)),
@@ -79,7 +80,7 @@ def main():
     if bad:
         sys.exit(f"forbidden paths in release: {bad}")
     manifest = dict(name="themis", version=re.search(r'version = "([^"]+)"', (out / "pyproject.toml").read_text()).group(1),
-                    tag="v1.0-paper", git_commit=commit, commit_time_utc=when.isoformat(),
+                    tag=a.tag, git_commit=commit, commit_time_utc=when.isoformat(),
                     files={p.relative_to(out).as_posix(): sha256(p) for p in files})
     (out / "RELEASE_MANIFEST.json").write_text(json.dumps(manifest, indent=1, sort_keys=True) + "\n")
     print(f"{len(manifest['files'])} files -> {out} (commit {commit[:12]})")
