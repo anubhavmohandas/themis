@@ -58,6 +58,18 @@ def agreement(corpus) -> dict:
 
 
 # ------------------------------------------------- chance-corrected agreement
+def _kappa_of(pairs: list) -> tuple:
+    """(raw agreement, Cohen's kappa or None, note) for a list of (x, y) label pairs."""
+    n = len(pairs)
+    agree = sum(1 for x, y in pairs if x == y) / n
+    m1 = collections.Counter(x for x, _ in pairs)
+    m2 = collections.Counter(y for _, y in pairs)
+    pe = sum(m1[k] * m2[k] for k in set(m1) | set(m2)) / (n * n)
+    if abs(1 - pe) < 1e-12:
+        return agree, None, "undefined: shared region is single-class"
+    return agree, (agree - pe) / (1 - pe), None
+
+
 def cohen_kappa(corpus) -> dict:
     """Cohen's kappa for every pair of datasets that share addresses.
 
@@ -86,16 +98,23 @@ def cohen_kappa(corpus) -> dict:
             n = len(pairs)
             if not n:
                 continue
-            agree = sum(1 for x, y in pairs if x == y) / n
-            m1 = collections.Counter(x for x, _ in pairs)
-            m2 = collections.Counter(y for _, y in pairs)
-            pe = sum(m1[k] * m2[k] for k in set(m1) | set(m2)) / (n * n)
-            if abs(1 - pe) < 1e-12:
-                k, note = None, "undefined: shared region is single-class"
-            else:
-                k, note = (agree - pe) / (1 - pe), None
+            agree, k, note = _kappa_of(pairs)
+            # Companion figure, same definition over the pairs where BOTH
+            # sources said something interpretable. The headline above keeps
+            # `unknown` as a class, so an interpretable label against an
+            # unknown one counts as a disagreement and two unknowns count as
+            # an AGREEMENT - neither is a statement about a category, which
+            # is the same principle `classify_address` applies (>= 2
+            # interpretable positions). Both are reported; neither replaces
+            # the other silently.
+            known = [(x, y) for x, y in pairs if x != "unknown" and y != "unknown"]
+            k_agree, k_kappa, k_note = _kappa_of(known) if known else (None, None, "no interpretable pair")
             out.append(dict(source_a=s1, source_b=s2, n=n,
-                            percent_agreement=agree, cohen_kappa=k, note=note))
+                            percent_agreement=agree, cohen_kappa=k, note=note,
+                            n_both_unknown=sum(1 for x, y in pairs if x == y == "unknown"),
+                            n_interpretable=len(known),
+                            percent_agreement_interpretable=k_agree,
+                            cohen_kappa_interpretable=k_kappa, note_interpretable=k_note))
     out.sort(key=lambda r: -r["n"])
     kappa_threshold = _cfg.thresholds.get("kappa_substantial_threshold", 0.4)
     usable = [r for r in out if r["cohen_kappa"] is not None and r["cohen_kappa"] > kappa_threshold]
@@ -105,7 +124,12 @@ def cohen_kappa(corpus) -> dict:
                            and abs(r["cohen_kappa"]) < 1e-9),
                 substantial=[dict(pair=f"{r['source_a']}-{r['source_b']}", n=r["n"],
                                   percent_agreement=r["percent_agreement"],
-                                  cohen_kappa=r["cohen_kappa"]) for r in usable])
+                                  cohen_kappa=r["cohen_kappa"],
+                                  n_both_unknown=r["n_both_unknown"],
+                                  n_interpretable=r["n_interpretable"],
+                                  percent_agreement_interpretable=r["percent_agreement_interpretable"],
+                                  cohen_kappa_interpretable=r["cohen_kappa_interpretable"])
+                             for r in usable])
 
 
 # ------------------------------------------------------------ E2 independence

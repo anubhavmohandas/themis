@@ -61,6 +61,11 @@ def cmd_audit(args):
     for r in kap["substantial"]:
         print(f"    {r['pair']:<28}n={r['n']:>6,}  raw {100*r['percent_agreement']:5.1f}%"
               f"   kappa {r['cohen_kappa']:.3f}")
+        ki = r["cohen_kappa_interpretable"]
+        print(_c(f"      interpretable pairs only: n={r['n_interpretable']:>6,}  "
+                 f"raw {100*r['percent_agreement_interpretable']:5.1f}%   kappa "
+                 f"{'undefined' if ki is None else format(ki, '.3f')}"
+                 f"   ({r['n_both_unknown']:,} both-unknown pairs counted as agreement above)", DIM))
     if a["top_polarity_conflicts"]:
         print(_c("  largest licit/illicit conflicts:", DIM))
         for p in a["top_polarity_conflicts"][:4]:

@@ -361,6 +361,24 @@ class TestKappaSyntheticEdgeCases(unittest.TestCase):
         self.assertAlmostEqual(pair["percent_agreement"], 0.70, places=9)
         self.assertAlmostEqual(pair["cohen_kappa"], 0.40, places=9)
 
+    def test_unknown_is_a_class_in_the_headline_and_excluded_in_the_companion(self):
+        # 2x2 textbook table (20/5/10/15, kappa 0.40) plus 30 addresses both
+        # sources left `unknown` and 5 where only one did. Headline keeps
+        # unknown as a class, so those 35 dilute the disagreement and inflate
+        # agreement; the interpretable-only companion is the textbook 0.40.
+        claims, i = [], 0
+        for a, b, n in (("cat_yes", "cat_yes", 20), ("cat_yes", "cat_no", 5),
+                        ("cat_no", "cat_yes", 10), ("cat_no", "cat_no", 15),
+                        ("unknown", "unknown", 30), ("unknown", "cat_yes", 5)):
+            for _ in range(n):
+                claims += [self._claim(f"a{i}", "s1", a), self._claim(f"a{i}", "s2", b)]; i += 1
+        pair = next(r for r in analysis.cohen_kappa(Corpus(claims, full=True))["pairs"])
+        self.assertEqual((pair["n"], pair["n_interpretable"], pair["n_both_unknown"]), (85, 50, 30))
+        self.assertAlmostEqual(pair["percent_agreement_interpretable"], 0.70, places=9)
+        self.assertAlmostEqual(pair["cohen_kappa_interpretable"], 0.40, places=9)
+        self.assertAlmostEqual(pair["percent_agreement"], (20 + 15 + 30) / 85, places=9)
+        self.assertGreater(pair["cohen_kappa"], pair["cohen_kappa_interpretable"])
+
     def test_single_class_overlap_is_undefined_not_a_crash(self):
         # Every shared address gets the same category from both sources:
         # pe=1 exactly (denominator 1-pe=0) - must be reported as undefined,
