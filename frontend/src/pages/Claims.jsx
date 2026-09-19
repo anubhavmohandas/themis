@@ -1,117 +1,158 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api.js";
 import { useApiData } from "../lib/useApi.js";
 import { useAnalysis } from "../lib/AnalysisContext.jsx";
-import StatusBadge from "../components/StatusBadge.jsx";
+import { fmt, humanize } from "../lib/format.js";
+import { AGREEMENT_OPTIONS, CURRENCY_OPTIONS, PROVENANCE, PROVENANCE_OPTIONS, TIER, TIER_OPTIONS, outcomeOf } from "../lib/vocab.js";
+import { ErrorBox, FilterSelect, Gate, Loading, PageHead, Pager, SearchBox, Status } from "../components/ui.jsx";
 
-const PAGE_SIZE = 50;
+const PAGE = 100;
 
+// Filters live in the URL, so every drill-down from another page (a bar row, a
+// metric) lands here as a shareable, reloadable view. The backend does all
+// filtering; this page only sends the parameters and renders the page it returns.
 export default function ClaimsPage() {
-  const { analysisId } = useAnalysis();
-  const [offset, setOffset] = useState(0);
-  const [filters, setFilters] = useState({ source: "", canon: "", evidence_tier: "", currency: "" });
+  return <Gate><ClaimsBody /></Gate>;
+}
 
-  const { data, error, loading } = useApiData(
-    () => api.claims(analysisId, { ...filters, offset, limit: PAGE_SIZE }),
-    [analysisId, offset, filters.source, filters.canon, filters.evidence_tier, filters.currency],
-  );
+function ClaimsBody() {
+  const { analysisId, sources, isPaper, meta, result } = useAnalysis();
+  const [sp, setSp] = useSearchParams();
+  const get = (k) => sp.get(k) || "";
+  const offset = Number(get("offset")) || 0;
+  const [qText, setQText] = useState(get("q"));
 
-  if (!analysisId) {
-    return (
-      <div className="section">
-        <div className="callout muted">
-          No active analysis. <Link to="/">Upload a dataset or reproduce the paper</Link> to begin.
-        </div>
-      </div>
-    );
+  const taxonomy = useApiData(() => api.taxonomy(), []);
+  const categories = taxonomy.data ? Object.keys(taxonomy.data) : [];
+
+  // one select maps onto the backend's `outcome` / `comparable` params
+  const agreement = get("outcome") || (get("comparable") === "yes" ? "comparable" : get("comparable") === "no" ? "not-comparable" : "");
+  const setAgreement = (v) => update({
+    outcome: v && v !== "comparable" && v !== "not-comparable" ? v : "",
+    comparable: v === "comparable" ? "yes" : v === "not-comparable" ? "no" : "",
+  });
+
+  function update(patch) {
+    const next = new URLSearchParams(sp);
+    Object.entries({ offset: "", ...patch }).forEach(([k, v]) => (v ? next.set(k, v) : next.delete(k)));
+    setSp(next, { replace: false });
   }
 
-  function setFilter(key, value) {
-    setOffset(0);
-    setFilters((f) => ({ ...f, [key]: value }));
-  }
+  // debounce the free-text box into the URL
+  useEffect(() => {
+    if (qText === get("q")) return undefined;
+    const t = setTimeout(() => update({ q: qText.trim() }), 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qText]);
+  useEffect(() => { setQText(get("q")); }, [sp.get("q")]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const params = useMemo(() => ({
+    q: get("q"), source: get("source"), canon: get("canon"), evidence_tier: get("evidence_tier"),
+    currency: get("currency"), provenance: get("provenance"),
+    outcome: get("outcome"), comparable: get("comparable"), offset, limit: PAGE,
+  }), [sp]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const { data, error, loading } = useApiData(() => api.claims(analysisId, params), [analysisId, JSON.stringify(params)]);
+
+  const sourceOptions = [["", "any"], ...Object.keys(sources || {}).map((s) => [s, s]),
+    ...(!isPaper && result?.source_id ? [[result.source_id, `${result.source_id} (uploaded)`]] : [])];
+  const agreementOptions = AGREEMENT_OPTIONS.map(([v, l]) =>
+    v === "comparable" ? [v, isPaper ? "multi-dataset addresses" : "reference match"] : [v, l]);
+  agreementOptions.splice(3, 0, ["not-comparable", isPaper ? "not multi-dataset" : "no reference match"]);
+
+  const chips = [
+    ["q", get("q") && `search “${get("q")}”`], ["source", get("source") && `source: ${get("source")}`],
+    ["canon", get("canon") && `category: ${humanize(get("canon"))}`],
+    ["evidence_tier", get("evidence_tier") && `evidence: ${get("evidence_tier")}`],
+    ["currency", get("currency") && `currency: ${get("currency")}`],
+    ["provenance", get("provenance") && `provenance: ${get("provenance")}`],
+    ["agreement", agreement && `agreement: ${agreementOptions.find(([v]) => v === agreement)?.[1] || agreement}`],
+  ].filter(([, t]) => t);
+  const clearChip = (k) => (k === "agreement" ? setAgreement("") : update({ [k]: "" }));
 
   const total = data?.total ?? 0;
-  const page = Math.floor(offset / PAGE_SIZE) + 1;
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const from = total ? offset + 1 : 0;
+  const to = Math.min(offset + PAGE, total);
 
   return (
-    <>
-      <div className="pageintro">
-        <div className="kicker">Claims</div>
-        <h1>Browse individual claims</h1>
-        <p className="lead">
-          A bounded, filtered page at a time — never the whole corpus at once. Use{" "}
-          <Link to="/export">Export</Link> for the full normalized claim set.
-        </p>
-      </div>
+    <div>
+      <PageHead kicker="Record table" title="Claims"
+        lead="One bounded, server-filtered page at a time, never the whole corpus. Use Exports for the full normalized claim set. Each address links to its evidence in the Address Inspector." />
 
-      <div className="section">
-        <div className="card" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <input placeholder="source" value={filters.source}
-            onChange={(e) => setFilter("source", e.target.value)} style={{ width: 160 }} />
-          <input placeholder="canon (category)" value={filters.canon}
-            onChange={(e) => setFilter("canon", e.target.value)} style={{ width: 160 }} />
-          <select value={filters.evidence_tier} onChange={(e) => setFilter("evidence_tier", e.target.value)}>
-            <option value="">evidence tier: any</option>
-            <option value="verified">verified</option>
-            <option value="derived">derived</option>
-            <option value="unverified-report">unverified-report</option>
-            <option value="unknown">unknown</option>
-          </select>
-          <select value={filters.currency} onChange={(e) => setFilter("currency", e.target.value)}>
-            <option value="">currency: any</option>
-            <option value="current">current</option>
-            <option value="stale">stale</option>
-            <option value="currency-unknown">currency-unknown</option>
-          </select>
-        </div>
-      </div>
-
-      {error && <div className="callout warn">{error}</div>}
-      {loading && <p className="muted">Loading claims…</p>}
-
-      {data && (
-        <div className="section">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-            <span className="muted">{total.toLocaleString()} matching claims — page {page} of {pages}</span>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>
-                Previous
-              </button>
-              <button disabled={offset + PAGE_SIZE >= total} onClick={() => setOffset(offset + PAGE_SIZE)}>
-                Next
-              </button>
-            </div>
-          </div>
-
-          {data.claims.length === 0 ? (
-            <p className="muted">No claims match these filters.</p>
-          ) : (
-            <table>
-              <thead>
-                <tr><th>Address</th><th>Source</th><th>Raw label</th><th>Canon</th><th>Polarity</th><th>Evidence tier</th><th>Last revised</th></tr>
-              </thead>
-              <tbody>
-                {data.claims.map((c, i) => (
-                  <tr key={i}>
-                    <td className="mono" style={{ fontSize: 12.5 }}>
-                      <Link to={`/address?q=${encodeURIComponent(c.address)}`}>{c.address}</Link>
-                    </td>
-                    <td>{c.source}</td>
-                    <td className="muted">{c.raw_label}</td>
-                    <td>{c.canon}</td>
-                    <td>{c.polarity}</td>
-                    <td><StatusBadge label={c.evidence_tier} /></td>
-                    <td>{c.lastmod || <span className="muted">unknown</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+      {isPaper && (
+        <div className="sample-banner">
+          This table lists the bundled sample: {fmt(meta.n_claims)} of the corpus’s {fmt(result.dataset_summary.n_claims)} claims,
+          including every multi-dataset address. Corpus-wide totals on Overview use the full corpus, so counts here can be smaller.
         </div>
       )}
-    </>
+
+      <div className="controls">
+        <SearchBox value={qText} onChange={setQText} placeholder="Search address, raw label or source" />
+        <FilterSelect label="Category" value={get("canon")} onChange={(v) => update({ canon: v })}
+          options={[["", "any"], ...categories.map((c) => [c, humanize(c)])]} />
+        <FilterSelect label="Source" value={get("source")} onChange={(v) => update({ source: v })} options={sourceOptions} />
+        <FilterSelect label="Evidence" value={get("evidence_tier")} onChange={(v) => update({ evidence_tier: v })} options={TIER_OPTIONS} />
+        <FilterSelect label="Currency" value={get("currency")} onChange={(v) => update({ currency: v })} options={CURRENCY_OPTIONS} />
+        <FilterSelect label="Agreement" value={agreement} onChange={setAgreement} options={agreementOptions} />
+        <FilterSelect label="Provenance" value={get("provenance")} onChange={(v) => update({ provenance: v })} options={PROVENANCE_OPTIONS} />
+      </div>
+      {chips.length > 0 && (
+        <div className="chips" style={{ marginBottom: 12 }}>
+          {chips.map(([k, t]) => <button key={k} type="button" className="fchip" title="Remove filter" onClick={() => clearChip(k)}>{t} ×</button>)}
+          <button type="button" className="chip-btn plain" onClick={() => setSp(new URLSearchParams())}>Clear all</button>
+        </div>
+      )}
+
+      {error && <ErrorBox title="Could not load claims">{error}</ErrorBox>}
+      {loading && !data && <Loading>Loading claims…</Loading>}
+
+      {data && (
+        <>
+          <div className="listhead">
+            <span>
+              Showing <span className="mono">{fmt(from)}–{fmt(to)}</span> of <span className="mono">{fmt(total)}</span> matching claims
+              {" "}· <span className="mono">{fmt(data.n_addresses)}</span> addresses · {PAGE} per page
+            </span>
+            <Pager offset={offset} limit={PAGE} total={total} onChange={(o) => update({ offset: o ? String(o) : "" })} />
+          </div>
+          {data.claims.length === 0 ? (
+            <div className="empty" style={{ maxWidth: "none" }}><div className="eyebrow">No matches</div><p>No claims match these filters. Remove a filter above.</p></div>
+          ) : (
+            <div className="tablewrap" style={{ opacity: loading ? 0.6 : 1 }}>
+              <table>
+                <thead><tr>
+                  <th>Address</th><th>Raw label</th><th>Category</th><th>Source</th><th>Evidence</th><th>Provenance</th><th>Last revised</th><th>Agreement</th>
+                </tr></thead>
+                <tbody>
+                  {data.claims.map((c, i) => {
+                    const o = outcomeOf(c.outcome);
+                    const t = TIER[c.evidence_tier] || { label: c.evidence_tier, tone: "mut" };
+                    const pv = PROVENANCE[c.provenance] || { label: c.provenance, tone: "mut" };
+                    return (
+                      <tr key={`${c.address}-${c.source}-${i}`}>
+                        <td className="mono"><Link to={`/address?q=${encodeURIComponent(c.address)}`}>{c.address}</Link></td>
+                        <td className="mono small mut">{c.raw_label}</td>
+                        <td>{humanize(c.canon)}</td>
+                        <td>{c.source}</td>
+                        <td><Status tone={t.tone}>{t.label}</Status></td>
+                        <td title={c.root ? `root: ${c.root}` : undefined}><Status tone={pv.tone}>{pv.label}</Status></td>
+                        <td className="small mono mut">{c.lastmod || "no date"}</td>
+                        <td>{o ? <Status tone={o.tone}>{o.short}</Status> : <Status tone="mut">single-source</Status>}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="listhead" style={{ marginTop: 10 }}>
+            <span className="fnt">Agreement is a property of the address, not the row: it is the outcome across every dataset that names it.</span>
+            <Pager offset={offset} limit={PAGE} total={total} onChange={(o) => update({ offset: o ? String(o) : "" })} />
+          </div>
+        </>
+      )}
+    </div>
   );
 }

@@ -68,11 +68,22 @@ def load_csv(path: str) -> tuple[list[dict], list[str]]:
 
 def ingest(path: str, source_id: str, mapping_override: dict | None = None,
           reference: "_corpus.Corpus | None" = None, sample_size: int = 500,
-          analysis_as_of_date=None) -> dict:
-    rows, fieldnames = load_csv(path)
+          analysis_as_of_date=None, progress=None) -> dict:
+    """`progress`, when given, is called as progress("start"|"complete", stage_id,
+    detail) around each real stage so a caller (the API's job runner) can
+    report genuine pipeline state. It changes nothing about the result."""
+    def _p(event, stage, detail=None):
+        if progress is not None:
+            progress(event, stage, detail)
 
+    _p("start", "parse")
+    rows, fieldnames = load_csv(path)
+    _p("complete", "parse", f"{len(rows):,} rows \u00b7 {len(fieldnames)} columns")
+
+    _p("start", "detect")
     inferred = _schema.infer_mapping(rows, fieldnames, sample_size)
     detection = inferred["detection"]
+    _p("complete", "detect", f"{detection.get('blockchain') or 'no chain'} \u00b7 confidence {detection.get('confidence')}")
 
     if detection["confidence"] == _detect.NONE and not mapping_override:
         unsupported_field = detection.get("unsupported_chain_field")
@@ -94,8 +105,12 @@ def ingest(path: str, source_id: str, mapping_override: dict | None = None,
         mapping.update({k: v for k, v in mapping_override.items() if v is not None})
 
     chain_id = detection.get("blockchain")
+    _p("start", "validate")
     validation = _validate.validate_rows(rows, mapping, chain_id)
+    _p("complete", "validate", f"{len(validation['valid_rows']):,} of {len(rows):,} rows have a valid address")
+    _p("start", "normalize")
     claims = _claims.build_claims(validation["valid_rows"], mapping, source_id, blockchain=chain_id)
+    _p("complete", "normalize", f"{len(claims):,} claims")
 
     capabilities = {"address_validation": True, "claim_normalization": True,
                     "internal_consistency": True}
@@ -107,6 +122,7 @@ def ingest(path: str, source_id: str, mapping_override: dict | None = None,
         capabilities["freshness"] = True
 
     target_result = None
+    _p("start", "compare")
     if reference is not None and claims:
         target_result = target_audit.audit_target_against_reference(
             claims, reference, analysis_as_of_date=analysis_as_of_date)
@@ -139,6 +155,9 @@ def ingest(path: str, source_id: str, mapping_override: dict | None = None,
             limitations=[], inheritance_candidates=[],
         )
 
+    _p("complete", "compare",
+       "provenance, reference comparison, independence and currency" if reference is not None
+       else "internal checks only (no reference corpus)")
     return dict(
         source_id=source_id, stopped=False,
         detection=detection, schema_mapping=mapping,
