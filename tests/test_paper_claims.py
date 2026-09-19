@@ -62,6 +62,15 @@ class TestAsOfDate(Base):
         c.manifest["analysis_as_of_date"] = "not-a-date"      # malformed: falls back, never raises
         self.assertEqual(c.snapshot_date, datetime.date(2022, 3, 4))
 
+    def test_freshness_states_its_own_denominator_and_scope(self):
+        # the sample's freshness (86% currency-unknown) must never be read as
+        # the corpus's (>= 67.0% of 1,545,710) - the payload says which it is
+        r = report.build_corpus_report(self.c)
+        f, scope = r["freshness"], r["freshness_scope"]
+        self.assertEqual(f["n_claims"], f["current"] + f["stale"] + f["currency_unknown"])
+        self.assertEqual((scope["n_claims_analysed"], scope["corpus_n_claims"], scope["sample"]),
+                         (268_891, 1_545_710, True))
+
     def test_missing_date_claim_is_currency_unknown_regardless_of_as_of(self):
         flags = taxonomy.currency_flags({"lastmod": ""}, today=self.c.snapshot_date)
         self.assertEqual(flags, ["currency-unknown"])

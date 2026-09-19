@@ -80,6 +80,10 @@ def build_corpus_report(corpus, include_bootstrap: bool = False, bootstrap_kwarg
                              sources=corpus.source_sizes()),
         agreement=agreement, independence=independence, kappa=kappa,
         freshness=fresh, analysis_as_of_date=str(as_of) if as_of else None,
+        # freshness is computed over the claims actually loaded; on the bundled
+        # sample that is not the corpus, and the two must never be read as one
+        freshness_scope=dict(n_claims_analysed=len(corpus.claims), corpus_n_claims=corpus.n_claims,
+                             sample=not corpus.full),
         uncertainty=uncertainty, anchor_validation=anchors, reliability_profile=profile,
         limitations=limitations, audit_trail=audit_trail(input_path=input_path),
     )

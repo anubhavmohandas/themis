@@ -36,7 +36,7 @@ function NoActiveAnalysis() {
 
 // ------------------------------------------------------ PAPER_REPRODUCTION
 function PaperOverview({ result }) {
-  const { dataset_summary: ds, agreement: a, independence: ind, kappa, freshness: f, limitations } = result;
+  const { dataset_summary: ds, agreement: a, independence: ind, kappa, freshness: f, freshness_scope: fs, limitations } = result;
 
   const sourceRows = Object.entries(ds.sources).map(([name, n]) => ({ name, n }));
   const outcomeRows = Object.entries(a.outcomes).map(([name, v]) => ({ name, n: v.n, share: v.share }));
@@ -176,6 +176,13 @@ function PaperOverview({ result }) {
             <Bar dataKey="n" fill={BAR} radius={[3, 3, 0, 0]} />
           </BarChart>
         </ChartCard>
+        {fs && (
+          <p className="muted" style={{ fontSize: 12 }}>
+            {f.n_claims.toLocaleString()} claims {fs.sample ? "in the bundled sample, of " : "analysed, of "}
+            {fs.corpus_n_claims.toLocaleString()} in the corpus, judged at {result.analysis_as_of_date}.
+            {fs.sample ? " Sample proportions are not corpus-wide rates." : ""}
+          </p>
+        )}
       </div>
 
       <div className="section">

@@ -552,7 +552,7 @@ def freshness(claims: list[dict], as_of=None) -> dict:
         else:
             current += 1
     total = len(claims) or 1
-    return dict(current=current, stale=stale, currency_unknown=unknown,
+    return dict(n_claims=len(claims), current=current, stale=stale, currency_unknown=unknown,
                 current_share=current / total, stale_share=stale / total,
                 currency_unknown_share=unknown / total)
 
