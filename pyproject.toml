@@ -2,12 +2,14 @@
 name = "themis"
 version = "1.0.0"
 description = "Provenance-aware auditing of public Bitcoin attribution labels"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = ["pyyaml>=6"]
 
 [project.optional-dependencies]
 ui = ["fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9"]
-test = ["pytest>=7", "httpx>=0.27"]
+# the API tests import fastapi and post multipart forms, so `test` carries the
+# `ui` packages too - `pip install -e ".[test]"` must be enough to run the suite
+test = ["pytest>=7", "httpx>=0.27", "fastapi>=0.110", "python-multipart>=0.0.9"]
 
 [project.scripts]
 themis = "themis.cli:main"
