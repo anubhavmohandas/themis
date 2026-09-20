@@ -5,7 +5,7 @@ YAML config directly and re-implements the outcome rule from the paper's
 definition (Sec 3, "Conflict logic"), so an error in themis.taxonomy /
 themis.corpus cannot hide in both. Compares against `themis` afterwards.
 """
-import csv, gzip, yaml, collections, json, sys, pathlib
+import csv, gzip, yaml, collections, json, os, sys, pathlib
 ROOT = pathlib.Path(".")
 tax = yaml.safe_load(open(ROOT / "themis/config/taxonomy.yml"))["categories"]
 pol = {k: (v.get("polarity") or "unknown") for k, v in tax.items()}
@@ -52,7 +52,7 @@ def outcome(cats_by_source):
 
 def run(mode):
     by = collections.defaultdict(lambda: collections.defaultdict(set))
-    with gzip.open(ROOT / "demo_data/observations_sample.csv.gz", "rt", encoding="utf-8-sig", newline="") as f:
+    with gzip.open(pathlib.Path(os.environ.get("THEMIS_DATA_DIR") or ROOT / "demo_data") / "observations_sample.csv.gz", "rt", encoding="utf-8-sig", newline="") as f:
         for r in csv.DictReader(f):
             a = r["address"]; p = strip.get(r["source"])
             if p and a.startswith(p): a = a[len(p):]
