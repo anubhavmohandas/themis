@@ -114,6 +114,7 @@ class TestProvenanceDescriptorDefinition(unittest.TestCase):
         self.assertLess(len(strings), len(pairs))       # `rodwald:S` is declared by both Rodwald datasets
 
 
+@requires_reference_corpus
 class TestVerifierCatchesDrift(unittest.TestCase):
     """Phase 35: change one synthetic analysis result, expect FAIL, restore, expect the original verdict."""
 
