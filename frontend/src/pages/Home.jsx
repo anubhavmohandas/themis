@@ -33,7 +33,11 @@ function checksFor(pf, mapping) {
     ok: detected ? "ok" : "fail",
     text: detected
       ? `Cryptocurrency addresses detected: ${d.blockchain}, confidence ${d.confidence}`
-      : "No cryptocurrency addresses detected in any column",
+      : d.unsupported_chain_field
+        ? `Address-shaped values on a chain THEMIS does not support, in “${d.unsupported_chain_field}”: THEMIS analyses Bitcoin only`
+        : d.crypto_asset_field
+          ? `Cryptocurrency-related column “${d.crypto_asset_field}”, but no Bitcoin addresses: this is not attribution data`
+          : "No cryptocurrency addresses detected in any column",
     sub: detected ? `${pct(d.sample_hit_rate, 1)} of ${fmt(d.sampled)} sampled rows in “${d.address_field}” are valid ${d.blockchain} addresses (${fmt(d.total_rows)} rows in file)` : null,
   });
   const structured = mapping.address && (mapping.label || mapping.category);
@@ -41,7 +45,7 @@ function checksFor(pf, mapping) {
     ok: structured ? "ok" : "fail",
     text: structured ? "Attribution structure found: an address column and a label or category column" : "Attribution structure missing: map an address column and a label or category column",
   });
-  if (d.unsupported_chain_field) out.push({ ok: "warn", text: `Column “${d.unsupported_chain_field}” looks like an unsupported chain and will not be analysed` });
+  if (d.unsupported_chain_field && detected) out.push({ ok: "warn", text: `Column “${d.unsupported_chain_field}” looks like an unsupported chain and will not be analysed` });
   out.push(mapping.timestamp
     ? { ok: "ok", text: `Revision date mapped to “${mapping.timestamp}”: currency can be assessed` }
     : { ok: "warn", text: "No revision-date column mapped: every label will be reported as currency-unknown" });

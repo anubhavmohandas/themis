@@ -10,7 +10,8 @@ export function useJob() {
   const timer = useRef(null);
   const alive = useRef(true);
 
-  useEffect(() => () => { alive.current = false; clearTimeout(timer.current); }, []);
+  // StrictMode mounts, cleans up and mounts again: `alive` must be re-armed on every mount
+  useEffect(() => { alive.current = true; return () => { alive.current = false; clearTimeout(timer.current); }; }, []);
 
   const poll = useCallback((jobId, onDone) => {
     api.job(jobId)
