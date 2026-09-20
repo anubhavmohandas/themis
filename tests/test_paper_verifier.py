@@ -187,6 +187,18 @@ class TestPdfLayer(unittest.TestCase):
         m["paper"] = dict(file="definitely-not-there.pdf")
         self.assertEqual(pv.verify_pdf(m, "/nonexistent.pdf")["status"], "NOT_CHECKED")
 
+    def test_a_wrong_path_never_falls_back_to_a_different_paper(self):
+        import os, tempfile
+        with tempfile.TemporaryDirectory() as d:
+            other = pathlib.Path(d) / "other.pdf"; other.write_bytes(b"%PDF-1.4 not the paper asked for")
+            os.environ["THEMIS_PAPER_PDF"] = str(other)          # a fallback that DOES exist
+            try:
+                r = pv.verify_pdf(manifest({"a": claim(1)}), "/nonexistent.pdf")
+            finally:
+                del os.environ["THEMIS_PAPER_PDF"]
+        self.assertEqual(r["status"], "NOT_CHECKED")
+        self.assertIn("does not exist", r["reason"])
+
 
 if __name__ == "__main__":
     unittest.main()

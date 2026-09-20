@@ -209,6 +209,8 @@ def check_pdf_claim(claim: dict, pages: list[str]) -> dict:
 
 
 def verify_pdf(manifest: dict, pdf=None) -> dict:
+    if pdf and not pathlib.Path(pdf).is_file():      # never quietly check a different paper than the one asked for
+        return dict(status="NOT_CHECKED", path=str(pdf), reason=f"the PDF given does not exist: {pdf}", results={})
     path = locate_pdf(manifest, pdf)
     if path is None:
         return dict(status="NOT_CHECKED", reason="no PDF found (pass --paper or set THEMIS_PAPER_PDF)", results={})
