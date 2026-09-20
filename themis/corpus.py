@@ -89,10 +89,11 @@ class Corpus:
             return None
         s = self.manifest.get("sample", {})
         return (f"bundled sample: {s.get('claims', 0):,} claims over "
-                f"{s.get('addresses', 0):,} addresses, including every one of the "
-                f"{s.get('multi_source_addresses', 0):,} multi-dataset addresses. "
-                "Agreement, conflict and circularity figures are exact; "
-                "corpus-wide rates use full-corpus counts from the manifest.")
+                f"{s.get('addresses', 0):,} addresses, including the "
+                f"{s.get('multi_source_addresses', 0):,} multi-dataset addresses the paper corpus had when the sample was drawn "
+                "(a full build joins more, through WatchYourBack's #-prefixed addresses). "
+                "Agreement, conflict and circularity figures of the complete sources are exact; "
+                "corpus-wide counts and rates come from the manifest or need a full build.")
 
     def source_sizes(self):
         if self.full:

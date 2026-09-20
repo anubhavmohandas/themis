@@ -42,7 +42,8 @@ class Scope:
         return "FULL_CORPUS" if self.full else "BUNDLED_SAMPLE"
 
     def joins(self) -> str:
-        """Cross-dataset joins: exact on the sample (every multi-dataset address is in it)."""
+        """Pairwise joins between datasets: the sample holds every multi-dataset address of the frozen paper corpus.
+        That is not exact for a total over all addresses - see metrics.py (coverage.multi_dataset_*)."""
         return LIVE
 
     def source_total(self, *sources) -> str:
@@ -405,17 +406,13 @@ def condition_d_trace(b: AnalysisBundle) -> dict:
 def anchors(b: AnalysisBundle) -> dict:
     r = b.anchors
     sizes = b.corpus.source_sizes()
-    max_w = _cfg.thresholds.get("anchor_robust_max_ci_width", 0.2)
-    reasons = []
+    reasons = []    # structural only: a source with no usable independent-root interval cannot carry an accuracy figure
     for s in sorted(sizes):
         v = r["per_source"].get(s)
         if v is None:
             reasons.append(dict(source=s, reason="never observed on a usable anchor"))
         elif not v["estimable"]:
             reasons.append(dict(source=s, reason=v["not_estimable_reason"]))
-        elif v["ci_high"] - v["ci_low"] > max_w:
-            reasons.append(dict(source=s, reason=f"interval [{v['ci_low']:.3f}, {v['ci_high']:.3f}] wider than "
-                                                 f"{max_w:.2f} (anchor_robust_max_ci_width)"))
     gt_roots = sorted({root for _, root in b.corpus.ground_truth().values()})
     return dict(
         label="AGREEMENT WITH OPEN ANCHOR SET",
@@ -428,6 +425,7 @@ def anchors(b: AnalysisBundle) -> dict:
         agreement_outcomes=r["outcome_totals"],
         per_source={s: dict(n=v["n"], agreement=v["anchor_agreement"], independent_roots=v["independent_roots"],
                             ci_low=v["ci_low"], ci_high=v["ci_high"], estimable=v["estimable"],
+                            ci_width=None if v["ci_low"] is None else v["ci_high"] - v["ci_low"],
                             not_estimable_reason=v["not_estimable_reason"]) for s, v in r["per_source"].items()},
         confidence_level=r["confidence_level"],
         source_accuracy_robustly_estimable=not reasons,

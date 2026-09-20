@@ -65,7 +65,9 @@ def build(b: ex.AnalysisBundle) -> PaperMetrics:
     m.put("corpus.provenance_roots", pr["total"], pr["basis"])
     m.put("corpus.identified_roots", pr["identified"], pr["basis"])
     m.put("corpus.unresolved_roots", pr["unresolved"], pr["basis"])
-    m.put("corpus.provenance_descriptors", len({(x["source"], x["prov_family"]) for x in c.claims}),
+    # distinct descriptor strings, as pipeline/analyse.py counts them (n_provenance_families):
+    # `rodwald:S` is one descriptor even though both Rodwald datasets declare it
+    m.put("corpus.provenance_descriptors", len({x["prov_family"] for x in c.claims}),
           sc.all_claims())
     for r in t1["rows"]:
         s = r["source"]
@@ -79,11 +81,12 @@ def build(b: ex.AnalysisBundle) -> PaperMetrics:
     sd = ex.source_depth(b)
     m.put("coverage.single_dataset_addresses", sd["single_dataset"]["addresses"], sc.corpus_total())
     m.put("coverage.single_dataset_share", sd["single_dataset"]["share"], sc.corpus_total())
-    m.put("coverage.multi_dataset_addresses", sd["multi_dataset"]["addresses"], sc.joins())
+    # a count over EVERY address: the sample is 13 short (built before the WatchYourBack `#` join), so it cannot be LIVE there
+    m.put("coverage.multi_dataset_addresses", sd["multi_dataset"]["addresses"], sc.all_claims())
     for k, v in sd["by_dataset_count"].items():
         if k == "1":
             continue
-        m.put(f"coverage.multi_dataset_distribution.{k.replace('+', '_plus')}", v["addresses"], sc.joins())
+        m.put(f"coverage.multi_dataset_distribution.{k.replace('+', '_plus')}", v["addresses"], sc.all_claims())
     om = ex.overlap_matrix(b)
     for r in om["directed"]:
         base = f"coverage.overlap.{r['source']}.{r['other']}"

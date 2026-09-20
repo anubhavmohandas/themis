@@ -397,8 +397,9 @@ def reproduction_report(md, res, t1, t2, depth, rod, mont, cur, unres, anch, tra
                                                     f"{len(res['pdf'].get('failed', []))} failed)"), ""]
     fails = [r for r in cl if r["status"] == "FAIL" and r["class"] not in ("DIAGNOSTIC", "SENSITIVITY")]
     if fails:
-        L += ["## Failures", "", "| claim | paper | THEMIS | detail |", "|---|---|---|---|"]
-        L += [f"| {r['id']} | {pv.show(r['paper_value'], r, True)} | {pv.show(r['generated_value'], r)} | {r['detail']} |" for r in fails] + [""]
+        L += ["## Failures", "", "| claim | paper | THEMIS | delta (THEMIS - paper) | detail |", "|---|---|---|---|---|"]
+        L += [f"| {r['id']} | {pv.show(r['paper_value'], r, True)} | {pv.show(r['generated_value'], r)} | "
+              f"{'' if r['delta'] is None else format(r['delta'], '+,.2f')} | {r['detail']} |" for r in fails] + [""]
     nr = [r for r in cl if r["status"] == "NOT_REPRODUCED" and r["class"] not in ("DIAGNOSTIC", "SENSITIVITY")]
     if nr:
         L += ["## Not reproduced (the loaded input cannot recompute them)", "",

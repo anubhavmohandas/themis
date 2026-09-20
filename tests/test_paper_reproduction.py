@@ -3,7 +3,8 @@ drift (mutation), that every surface reads one drift object, that absent or
 partial input never yields a PASS, and that an independent oracle - written here
 from the paper's own definitions, importing nothing from themis's analysis -
 agrees with the production results."""
-import copy, csv, gzip, json, os, pathlib, re, subprocess, sys, tempfile, unittest
+import copy
+import json, csv, gzip, json, os, pathlib, re, subprocess, sys, tempfile, unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -87,20 +88,32 @@ class TestGeneratedFromTheAnalysis(unittest.TestCase):
     def test_live_values_match_the_declared_values_that_do_reproduce(self):
         res = check(shared()["metrics"])
         for cid in ("circularity.rodwald_ransomwhere_shared", "circularity.montreal_ransomwhere", "circularity.montreal_tagpack",
-                    "circularity.montreal_rodwald", "coverage.multi_dataset_addresses", "drift.D.coverage_vs_B", "drift.B.observations",
+                    "circularity.montreal_rodwald", "drift.D.coverage_vs_B", "drift.B.observations",
                     "circularity.rodwald.group.RSH"):
             self.assertEqual(status_of(res, cid), "PASS", cid)
 
-    def test_a_real_mismatch_is_reported_as_a_mismatch(self):
-        # Table 2 revenue: the bundled table is cent-rounded and differs from the paper's own artifact by a few dollars.
-        # The verifier must say so, not hide it behind a tolerance.
+    def test_table2_revenue_reproduces_and_a_cent_rounded_value_would_not(self):
+        # revenue.csv.gz keeps Ransomwhere's sub-cent sums (a cent-rounded artifact once biased B, C and D low by
+        # $2.55-$3.16). Table 2 now reproduces; the verifier must still refuse the rounded figure, with no tolerance.
         res = check(shared()["metrics"])
         for k in "ABCD":
-            self.assertEqual(status_of(res, f"drift.{k}.revenue"), "FAIL", k)
-        self.assertEqual(res["status"], "FAIL")
+            self.assertEqual(status_of(res, f"drift.{k}.revenue"), "PASS", k)
+        rounded = copy.deepcopy(shared()["metrics"])
+        rounded.values["drift.B.revenue"] = 1101304942.45
+        self.assertEqual(status_of(check(rounded), "drift.B.revenue"), "FAIL")
+        self.assertEqual(res["status"], "FAIL")          # the sample still cannot yield PASS (and the Elliptic++ wording fails)
 
 
 @requires_reference_corpus
+class TestProvenanceDescriptorDefinition(unittest.TestCase):
+    def test_counts_distinct_descriptor_strings_like_the_paper_pipeline(self):
+        m, c = shared()["metrics"], shared()["corpus"]
+        strings = {x["prov_family"] for x in c.claims}
+        pairs = {(x["source"], x["prov_family"]) for x in c.claims}
+        self.assertEqual(m.values["corpus.provenance_descriptors"], len(strings))
+        self.assertLess(len(strings), len(pairs))       # `rodwald:S` is declared by both Rodwald datasets
+
+
 class TestVerifierCatchesDrift(unittest.TestCase):
     """Phase 35: change one synthetic analysis result, expect FAIL, restore, expect the original verdict."""
 
@@ -203,6 +216,20 @@ class TestRunDirectory(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.tmp.cleanup()
+
+    def test_report_failure_rows_carry_the_verifier_values(self):
+        """The human-readable report is generated from verification.json, never retyped: every FAIL row appears
+        with the verifier's own generated value and delta (an earlier hand-written summary had drifted)."""
+        ver = json.loads((self.d / "verification.json").read_text())
+        report = (self.d / "REPRODUCTION_REPORT.md").read_text()
+        fails = [r for r in ver["claims"] if r["status"] == "FAIL" and r["class"] not in ("DIAGNOSTIC", "SENSITIVITY")]
+        for r in fails:
+            row = next((ln for ln in report.splitlines() if ln.startswith(f"| {r['id']} |")), None)
+            self.assertIsNotNone(row, r["id"])
+            if r["delta"] is not None:
+                self.assertIn(format(r["delta"], "+,.2f"), row)
+        self.assertEqual(sum(ln.startswith("| ") and ln.split("|")[1].strip() in {r["id"] for r in fails}
+                             for ln in report.splitlines()), len(fails))
 
     def test_self_contained_directory(self):
         for f in ("metadata.json", "source_manifest.json", "config_manifest.json", "paper_metrics.json", "verification.json",

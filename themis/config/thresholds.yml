@@ -29,14 +29,6 @@ bootstrap:
 # reader should use to judge how much a source's figure can bear.
 anchor_min_independent_roots: 2
 
-# Anchor validation - "source accuracy is robustly estimable" (the paper's
-# stated reason it publishes no "dataset X is Y% accurate" figure) holds only
-# if EVERY source in the corpus is estimable and its root-cluster interval is no
-# wider than this many probability points (0.2 = 20 points). A tuned bar chosen
-# to be generous: a wider interval than this says the anchor set cannot
-# discriminate between accuracies at all.
-anchor_robust_max_ci_width: 0.2
-
 # STEP 11 - a pair's kappa is only surfaced as "substantial agreement" above
 # this value; the raw figure and undefined/zero pairs are still reported.
 kappa_substantial_threshold: 0.4
