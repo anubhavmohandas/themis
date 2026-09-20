@@ -101,7 +101,20 @@ class TestRansomwhereParsing(Build):
         r = by[("ransomwhere", ADDR("a"))]
         self.assertEqual((r["canon"], r["lastmod"], r["subcat"], r["prov_family"]), ("ransomware", "2024-05-06", "Locky", "ransomwhere:crowd"))
         with gzip.open(self.out / "revenue.csv.gz", "rt", encoding="utf-8") as f:
-            self.assertEqual([(x["dataset"], x["usd"]) for x in csv.DictReader(f)], [("ransomwhere", "15.50")])
+            self.assertEqual([(x["dataset"], float(x["usd"])) for x in csv.DictReader(f)], [("ransomwhere", 15.5)])
+
+    def test_revenue_keeps_sub_cent_precision_so_the_dedup_max_is_not_biased(self):
+        # Rodwald says exactly 1155.52; Ransomwhere's transaction sum is a hair above it.
+        # Rounding the artifact to cents would tie the two and drop the 0.001972 the
+        # paper's own arithmetic (pipeline/e3.py, float sums, no rounding) keeps.
+        rw = json.dumps({"result": [{"address": ADDR("a"), "blockchain": "bitcoin", "family": "x",
+                                     "transactions": [{"amountUSD": 1000.0}, {"amountUSD": 155.521972}]}]})
+        self.build(ransomwhere=("rw.json", rw),
+                   rodwald_ransom=("r.csv", f"address;family;source;SUM_REC_USD\n{ADDR('a')};x;R;1155.52\n"))
+        with gzip.open(self.out / "revenue.csv.gz", "rt", encoding="utf-8") as f:
+            usd = {x["dataset"]: float(x["usd"]) for x in csv.DictReader(f)}
+        self.assertEqual(usd, {"rodwald_ransom": 1155.52, "ransomwhere": 1155.521972})
+        self.assertGreater(max(usd.values()), 1155.52)
 
 
 if __name__ == "__main__":

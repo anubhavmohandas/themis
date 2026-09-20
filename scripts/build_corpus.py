@@ -316,7 +316,10 @@ def main(argv=None):
     if rev:
         def rv(t):
             w = csv.writer(t, lineterminator="\n"); w.writerow(["address", "dataset", "usd", "family", "src_letters"])
-            for r in rev: w.writerow([r[0], r[1], f"{r[2]:.2f}", r[3], r[4]])
+            # repr(float) is the shortest string that round-trips exactly. Rounding to cents here
+            # once biased Table 2: Rodwald is exact-cent, Ransomwhere sums are sub-cent, and the
+            # dedup `max` picks the unrounded value only when it sits above the other source.
+            for r in rev: w.writerow([r[0], r[1], repr(r[2]), r[3], r[4]])
         write_gz(out / "revenue.csv.gz", rv); outputs.append("revenue.csv.gz")
     anchors = anchor_addresses(b, a.watchyourback, a.tagpack) if (a.watchyourback or a.tagpack) else set()
     if anchors:

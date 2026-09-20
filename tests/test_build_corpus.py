@@ -97,9 +97,9 @@ class TestBuildCorpus(unittest.TestCase):
         bc.main(self.args)
         with gzip.open(self.d / "out" / "revenue.csv.gz", "rt", encoding="utf-8") as f:
             rev = list(csv.DictReader(f))
-        self.assertEqual({(r["dataset"], r["address"]): r["usd"] for r in rev},
-                         {("rodwald_ransom", A[4]): "12.50", ("rodwald_ransom", A[5]): "0.00",
-                          ("ransomwhere", A[4]): "15.50"})
+        self.assertEqual({(r["dataset"], r["address"]): float(r["usd"]) for r in rev},
+                         {("rodwald_ransom", A[4]): 12.5, ("rodwald_ransom", A[5]): 0.0,
+                          ("ransomwhere", A[4]): 15.5})
         with gzip.open(self.d / "out" / "verified_anchors.txt.gz", "rt") as f:
             self.assertEqual(set(f.read().split()), {A[7]})      # WYB ransomware ∪ TagPack forensic
 

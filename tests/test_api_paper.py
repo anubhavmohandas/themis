@@ -113,7 +113,7 @@ class TestFullRunThroughTheApi(Isolated):
         trace = d["artifacts"]["condition_d_trace.json"]
         self.assertEqual(trace["retained_addresses"], 7457)
         self.assertEqual(d["status"], "PASS")          # the abstract-level D claims (USD 112.4M at 13.8%) reproduce
-        self.assertEqual(client.get("/api/paper/experiments/drift").json()["status"], "FAIL")   # Table 2 revenue cells do not
+        self.assertEqual(client.get("/api/paper/experiments/drift").json()["status"], "PASS")   # Table 2 revenue reproduces (full-precision artifact)
 
         csv = client.get("/api/paper/experiments/drift/artifact/table2.csv")
         self.assertEqual(csv.status_code, 200)
