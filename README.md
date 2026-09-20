@@ -296,10 +296,12 @@ paper's own "99.9% over three years old" irreproducible.
 - Kappa keeps `unknown` as a class in its headline (an interpretable-only
   companion is printed beside it).
 - TagPack's proper-noun entity labels ("Antpool") are not mapped to categories.
-- The bundled revenue file is rounded to cents, so `drift` totals differ from the
-  paper by a few dollars in a billion.
-- The dashboard was built and its API exercised end to end, but **no browser
-  QA was performed**: MANUAL BROWSER QA STILL REQUIRED.
+- `demo_data/revenue.csv.gz` keeps full float precision (an earlier cent-rounded
+  copy biased Table 2 low by $2.55-$3.16; see REPRODUCE.md section 8).
+- The dashboard was browser-tested against the Vite dev server with a real
+  Chromium (2026-09-20): paper reproduction, evidence drill-down, upload,
+  pre-flight, analysis pages, exports and workspace switching. Not tested: Safari,
+  Firefox, mobile widths, a production `vite preview` session.
 - Tested on Python 3.14 and Node 26 only.
 
 ## 16. Reproducibility

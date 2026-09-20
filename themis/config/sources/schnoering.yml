@@ -1,8 +1,8 @@
 id: schnoering
 display_name: "Schnoering et al. corpus"
 chain: bitcoin
-citation: "Schnoering & Vazirgiannis, Bitcoin transaction-graph dataset with entity labels (Zenodo DOI 10.5281/zenodo.22239038)"
-license: "CC BY 4.0 - confirmed 2026-09-18 via the dataset's Zenodo record; redistribution/derivatives permitted with attribution."
+citation: "Schnoering & Vazirgiannis, Bitcoin research with a transaction graph dataset, Scientific Data 12, 404 (2025); labelled addresses = addresses.csv of figshare 10.6084/m9.figshare.26305093.v3 (BitcoinTemporalGraph). Not the 2026 Zenodo record 10.5281/zenodo.22239038, whose labels are per-transaction entity names with no category or source."
+license: "CC BY 4.0 - figshare record metadata, checked 2026-09-20; redistribution/derivatives permitted with attribution."
 confidence_semantics: "multi-input curation across named sub-corpora"
 known_dependencies: [ofac_sdn, coinbase_messages, exchange_self_disclosure]
 

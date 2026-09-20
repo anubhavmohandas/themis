@@ -59,15 +59,15 @@ CORROBORATION   single-dataset 1,481,791 98.97%   two or more 15,400 1.03%
 AGREEMENT   exact 10,515 68.28% | hierarchical refinement 1,253 8.14% | entity-type conflict 340 2.21%
             licit/illicit conflict 108 0.70% | incomparable 3,184 20.68%
             schnoering-tagpack  n= 8,139  raw 93.3%  kappa 0.655   (interpretable pairs only: n= 7,808  raw 97.3%  kappa 0.780)
-DRIFT       A 61,508 obs / 54,000 addr / $1,367,997,317   B 54,000 / 54,000 / $1,101,304,942
-            C 42,237 / 42,237 / $1,045,637,066            D 7,457 / 7,457 / $112,426,899   (B/D 9.8x, D covers 13.8%)
+DRIFT       A 61,508 obs / 54,000 addr / $1,367,997,318   B 54,000 / 54,000 / $1,101,304,945
+            C 42,237 / 42,237 / $1,045,637,069            D 7,457 / 7,457 / $112,426,902   (B/D 9.8x, D covers 13.8%)
 BOOTSTRAP   2,000 resamples, seed 42, 95% - exact 68.279% [6.012, 97.808] lower / [7.182, 85.130] upper
 ANCHORS     289 anchors -> 268 usable; 361 claims excluded as same-root
             schnoering 94.1% (3 roots) [71.4, 100.0]   tagpack 43.6% (5 roots) [7.0, 97.2]   the other five: not estimable
 ```
 
-(`drift` USD totals are $1–3 below the paper's: the bundle stores each row to
-the cent; the paper sums unrounded upstream values.)
+(`drift` USD totals equal the paper's Table 2: the bundle keeps each row at full
+precision, as the paper's own arithmetic does. An earlier cent-rounded bundle was $1–3 low; §8.)
 
 **Two result sets, never mixed.** The default is the *paper snapshot*: labels
 the paper-era adapters left `unknown` stay `unknown`. `expected_output/
@@ -112,7 +112,7 @@ themis --observations build/observations.csv.gz --as-of 2026-09-15 bootstrap --b
 `--as-of` is the date staleness is judged at; without it a full build uses the
 newest revision date in its own claims, which is earlier than the retrieval date.
 
-**What has been checked against real files (2026-09-19):**
+**What has been checked against real files (2026-09-19; the last two rows and the closing paragraph 2026-09-20):**
 
 | source | result |
 |---|---|
@@ -121,7 +121,14 @@ newest revision date in its own claims, which is earlier than the retrieval date
 | Condition D's anchor set (WatchYourBack ransomware ∪ TagPack `confidence: forensic`) | 146,243 addresses, identical to `verified_anchors.txt.gz` |
 | Rodwald ransomware / mixers (author's site) | 50,322 / 57,817 rows and the 50,322 revenue rows, identical to the bundle |
 | Ransomwhere (Zenodo snapshot, 2024-10-27) | 11,178 addresses, a strict subset of the paper's 11,186; the live API returned HTTP 502 that day |
-| **Elliptic++, Schnöring** | **not re-fetched**: those adapters are checked only against synthetic files in the documented layout. Schnöring's `schnoering_addresses.csv` (address, category, source) was extracted by the authors from the Zenodo labelled-entity data and that extraction is not scripted |
+| Elliptic++ (`wallets_classes.csv`, authors' Google Drive) | 822,942 rows -> 822,937 claims (5 shorter than an address dropped and counted); classes 1/2/3 = 14,266 / 251,088 / 557,588 |
+| Schnöring (`addresses.csv`, figshare 10.6084/m9.figshare.26305093.v3, CC BY 4.0, md5 verified) | 103,812 claims over 101,387 addresses, 7,222 Montréal - exactly Table 1. No extraction step: the paper's `schnoering_addresses.csv` is this published file. The earlier-cited Zenodo record 22239038 does not hold it |
+| Ransomwhere (live export, 2026-09-20) | 11,186 addresses; reproduces `pipeline/out/e3.json` for conditions A and B to the last float digit |
+
+All seven sources rebuilt together (`scripts/build_corpus.py`, 2026-09-20) give
+**1,545,710 claims over 1,497,191 addresses**, every per-source count equal to the
+manifest's, and all 268,891 frozen sample rows present verbatim. The public
+sources had not moved since the paper's retrieval date.
 
 Two caveats a full rebuild will show. (1) The bundled sample is not the corpus:
 the multi-dataset-rate interval, the 853,604-cluster upper bound and corpus-wide
@@ -236,13 +243,33 @@ figures and their `*.metadata.json` sidecars, `currency.json`,
 generated `REPRODUCTION_REPORT.md`. Staleness is judged at the declared analysis
 date, never the wall clock.
 
-**Findings the verifier reports on the sample** (2026-09-20): Table 2's four
-revenue cells differ from the paper by $1.15-$2.86 (the paper's own
-`pipeline/out/e3.json` equals Table 2 after rounding, so the difference is in the
-bundled `revenue.csv.gz`; cause undetermined - random cent-rounding of its
-61,508 rows would give about $0.25-$0.7), and §5.1's "more than 99.5% of
-Elliptic++ has no public cross-source check" is contradicted by the paper's own
-overlap counts (99.47-99.48%). Both are reported as FAIL, not tolerated.
+**Findings of the 2026-09-20 closure run** (details: `results/reproduction_closure/`, gitignored):
+
+- *Table 2 revenue.* The four cells differed from the printed Table 2 by $1.32-$3.16
+  on the old bundled `revenue.csv.gz`. Cause found: that file was written with
+  `f"{usd:.2f}"`. Rodwald's values are exact cents but Ransomwhere's transaction sums are
+  sub-cent, and the dedup `max` picks the unrounded Ransomwhere value only when it
+  sits above Rodwald's, so the rounding errors are one-sided (8,244 rows differ, none by
+  more than half a cent, all Ransomwhere). Run on the raw sources, the paper's own
+  `pipeline/e3.py` logic reproduces `e3.json` for all four conditions and `themis.analysis.drift`
+  on the old file reproduces the old figures exactly - both are faithful to their input.
+  The artifact was the defect; `scripts/build_corpus.py` now writes `repr(float)` and the
+  bundled file was replaced. No tolerance was added.
+- *Full-corpus reproduction, pinned paper `ICISHCT2026_THEMIS_Repaired_Final.pdf`:* every
+  machine-checkable claim is computed live; the remaining FAILs are statements in the
+  paper itself: (a) "more than 99.5%" of Elliptic++ without a cross-source check (live
+  99.4803%); (b) "only 15,400 addresses appear in two or more datasets" and (c) "7,832
+  in two datasets" - the paper's 429 / 7,112 / 27 are post-normalisation but its 15,400
+  and 7,832 are pre-normalisation (7,832 = 15,400 - 429 - 7,112 - 27); after joining
+  WatchYourBack's `#`-prefixed addresses the distribution is 7,845 / 429 / 7,112 / 27 =
+  15,413. The bundled sample cannot confirm (b)/(c) (it is 13 addresses short), so on
+  the sample they are `SAMPLE_OBSERVED`, not PASS.
+- *Definitions fixed in THEMIS, not the paper:* "33 provenance descriptors" counts
+  distinct descriptor strings as `pipeline/analyse.py` does (`rodwald:S` is declared by
+  both Rodwald datasets); `anchor_robust_max_ci_width` (a threshold of THEMIS's own
+  choosing) no longer decides `source_accuracy_robustly_estimable` - the verdict is
+  structural (five of seven sources have no usable interval), interval widths are reported
+  descriptively.
 
 The tests that back this: `tests/test_rq1_taxonomy.py` (the claim taxonomy as
 rules, no corpus needed), `tests/test_source_to_artifact.py` (parsers, kept apart
