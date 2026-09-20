@@ -29,12 +29,12 @@ python -m pytest
 Only `pyproject.toml` supplies dependencies (PyYAML at runtime; pytest, httpx,
 fastapi, python-multipart for the tests). Expected:
 
-- **release / no reference corpus:** `242 passed, 117 skipped` - the 117 skipped
+- **release / no reference corpus:** `243 passed, 119 skipped` - the 119 skipped
   are the tests that assert a number printed in the paper or drive paper mode;
   each says `reference corpus not present (not redistributed - see
   THIRD_PARTY_DATA.md; set THEMIS_DATA_DIR)`.
 - **a corpus present** (development checkout, or `THEMIS_DATA_DIR` pointing at a
-  matching one): `359 passed` in a clean environment with `.[test,figures]`
+  matching one): `362 passed` in a clean environment with `.[test,figures]`
   installed (numpy arrives with matplotlib). Without numpy the numpy cross-check
   of the exploratory `--fast` bootstrap path is skipped and the count is one lower.
 
