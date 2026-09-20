@@ -29,14 +29,18 @@ python -m pytest
 Only `pyproject.toml` supplies dependencies (PyYAML at runtime; pytest, httpx,
 fastapi, python-multipart for the tests). Expected:
 
-- **release / no reference corpus:** `244 passed, 119 skipped` - the 119 skipped
+- **release / no reference corpus:** `251 passed, 134 skipped` - the 134 skipped
   are the tests that assert a number printed in the paper or drive paper mode;
   each says `reference corpus not present (not redistributed - see
   THIRD_PARTY_DATA.md; set THEMIS_DATA_DIR)`.
 - **a corpus present** (development checkout, or `THEMIS_DATA_DIR` pointing at a
-  matching one): `363 passed` in a clean environment with `.[test,figures]`
+  matching one): `379 passed, 6 skipped` in a clean environment with `.[test,figures]`
   installed (numpy arrives with matplotlib). Without numpy the numpy cross-check
   of the exploratory `--fast` bootstrap path is skipped and the count is one lower.
+  The 6 skipped assert the full-corpus Overview figures and need a full build:
+  `THEMIS_OBSERVATIONS=build/observations.csv.gz THEMIS_AS_OF=2026-09-15 python -m pytest tests/test_overview.py`
+  runs them (22 passed). Do not set `THEMIS_OBSERVATIONS` for the whole suite: the
+  API tests would then load the full corpus, and they assert bundled-sample figures.
 
 If a test fails, stop here; the rest assumes a clean run.
 
