@@ -192,7 +192,8 @@ def decode_field(claims: list[dict], dataset: str, field: str, candidate: str,
         groups[val].add(c["address"])
     res = {}
     for val, addrs in sorted(groups.items(), key=lambda kv: -len(kv[1])):
-        share = len(addrs & candidate_addrs) / len(addrs)
+        inside = addrs & candidate_addrs
+        share = len(inside) / len(addrs)
         if not val.isalpha():
             verdict = "malformed"          # e.g. a stray separator in the field
         elif len(addrs) < min_group:
@@ -203,7 +204,9 @@ def decode_field(claims: list[dict], dataset: str, field: str, candidate: str,
             verdict = "independent"
         else:
             verdict = "mixed"
-        res[val] = dict(n=len(addrs), share_in_candidate=share, verdict=verdict)
+        res[val] = dict(n=len(addrs), overlap=len(inside), share_in_candidate=share, verdict=verdict,
+                        # a few real records so a reader can look at what the verdict is about
+                        examples=sorted(inside or addrs)[:5])
 
     inherited = [v for v, r in res.items() if r["verdict"] == "inherited"]
     independent = [v for v, r in res.items() if r["verdict"] == "independent"]

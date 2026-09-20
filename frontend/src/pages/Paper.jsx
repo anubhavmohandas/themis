@@ -6,6 +6,7 @@ import { useJob } from "../lib/useJob.js";
 import { dateTime, fmt, humanize, pct, shortId, usd } from "../lib/format.js";
 import { ErrorBox, PageHead, PaperRef, Section, Status, Tag } from "../components/ui.jsx";
 import Pipeline from "../components/Pipeline.jsx";
+import PaperProof from "./PaperProof.jsx";
 
 const STATE = {
   not_run: { label: "Not run", tone: "" },
@@ -24,10 +25,12 @@ export default function PaperPage() {
 
   return (
     <div>
-      <PageHead kicker="Research artifact" title="Reproduce the paper"
-        lead="Run the published method on the bundled seven-source corpus. The corpus audit runs when the reproduction is created; trust-rule sensitivity, the cluster bootstrap and anchor validation run on demand, one at a time, and each result appears here when it completes." />
+      <PageHead kicker="Research artifact" title="Paper reproduction"
+        lead="Provenance Before Precision, executed. THEMIS recomputes the paper's empirical measurements and verifies each against what the manuscript declares; every claim below opens onto the computation behind it." />
 
-      <Section title="Full reproduction">
+      <PaperProof />
+
+      <Section title="Explore the reproduced corpus" note="Create an analysis workspace from the bundled corpus to open it in the other pages. The corpus audit runs when it is created; trust-rule sensitivity, the cluster bootstrap and anchor validation run on demand, one at a time.">
         <div className="panel pad" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: 260, fontSize: 12.5, lineHeight: 1.6 }}>
             {isPaper

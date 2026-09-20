@@ -187,7 +187,8 @@ _CONDITION_LETTER = {"naive_union": "A", "address_dedup": "B",
                      "inheritance_collapsed": "C", "verified_only": "D"}
 
 
-def drift(corpus, revenue_rows=None, anchors=None, task=_revenue_task, as_of=None) -> dict:
+def drift(corpus, revenue_rows=None, anchors=None, task=_revenue_task, as_of=None,
+          keep_eligible=False) -> dict:
     """STEP 20 - re-run `task`'s forensic aggregation under every configured
     trust-rule policy (config/trust_rules.yml). The eligibility logic lives
     in the generic policy engine (themis/trust/); this function only wires a
@@ -207,7 +208,8 @@ def drift(corpus, revenue_rows=None, anchors=None, task=_revenue_task, as_of=Non
     claims = task.build_claims(rows)
     policies, baseline = trust_policy.load_policies(_cfg.trust_rules)
     result = trust_drift.run(claims, policies, baseline, task.aggregate,
-                             context=dict(anchor_addresses=anchors, as_of=as_of))
+                             context=dict(anchor_addresses=anchors, as_of=as_of),
+                             keep_eligible=keep_eligible)
 
     by_addr = collections.defaultdict(set)
     for c in claims:
@@ -224,7 +226,9 @@ def drift(corpus, revenue_rows=None, anchors=None, task=_revenue_task, as_of=Non
     return dict(conditions=conds, shared_addresses=shared_addresses,
                 spread_B_over_D=b_usd / d_usd if d_usd else None,
                 spread_A_over_D=a_usd / d_usd if d_usd else None,
-                policies=result["results"])
+                policies=result["results"],
+                # generic policy name behind each condition letter, for a trace
+                policy_of_condition={v: k for k, v in _CONDITION_LETTER.items()})
 
 
 # ------------------------------------------------------- cluster bootstrap CIs

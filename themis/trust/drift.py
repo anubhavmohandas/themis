@@ -16,8 +16,11 @@ def group_by_address(claims: list[dict]) -> dict:
     return dict(out)
 
 
-def run(claims: list[dict], policies: dict, baseline: str, aggregate_fn, context: dict | None = None) -> dict:
-    """`aggregate_fn(eligible_claims, mode) -> {observations, addresses, value}`."""
+def run(claims: list[dict], policies: dict, baseline: str, aggregate_fn, context: dict | None = None,
+        keep_eligible: bool = False) -> dict:
+    """`aggregate_fn(eligible_claims, mode) -> {observations, addresses, value}`.
+    `keep_eligible` also returns each policy's eligible claims (under `_eligible`) so a
+    trace can explain why an address was retained; off by default, it is large."""
     ctx = dict(context or {})
     ctx.setdefault("claims_by_address", group_by_address(claims))
 
@@ -26,6 +29,8 @@ def run(claims: list[dict], policies: dict, baseline: str, aggregate_fn, context
         eligible = policy.eligible(claims, ctx)
         agg = aggregate_fn(eligible, policy.aggregation)
         results[name] = dict(label=policy.label, aggregation=policy.aggregation, **agg)
+        if keep_eligible:
+            results[name]["_eligible"] = eligible
 
     if baseline not in results:
         raise KeyError(f"baseline policy {baseline!r} is not among the loaded policies")

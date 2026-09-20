@@ -123,6 +123,42 @@ is the paper snapshot's own behaviour — the two are never mixed silently).
 
 Global options: `--json FILE`, `--observations FILE`, `--data-dir DIR`, `--as-of DATE`.
 
+### 6.1 The executable paper: `reproduce-paper` and `verify-paper`
+
+**"Verify the paper" means:** recompute the paper's empirical measurements from
+declared inputs and compare them with what the manuscript states. It does **not**
+mean proving an attribution label true. THEMIS reproduces measurements; the
+labels stay claims.
+
+| command | what it does |
+|---|---|
+| `themis reproduce-paper` | runs every experiment in a fixed order (corpus audit, RQ1 tests, source depth, overlap, Rodwald decode, Montréal recurrence, currency, unresolved provenance, anchors, drift, bootstrap, Tables 1-2, Figures 1-2), writes `results/reproduction/<run_id>/` and compares the outcome with the manuscript |
+| `themis verify-paper [--paper FILE.pdf] [--metrics paper_metrics.json]` | compares generated metrics with `paper/paper_claims.yml` and with the text of the final PDF; exit 0 PASS, 1 FAIL, 3 BLOCKED |
+| `themis figures [--from-data DIR]` | Figures 1a/1b/2 as PNG, PDF, SVG plus their data and a `*.metadata.json` sidecar; `--from-data` redraws from `fig*_data.json` and needs no corpus |
+| `themis reproduce <experiment>` | one experiment alone (`rodwald-containment`, `montreal-recurrence`, `source-depth`, `overlap`, `currency`, `unresolved-provenance`, `anchors`, `table1`, `table2`, `condition-d`) |
+| `themis audit`, `drift`, `anchors` | the underlying analyses, unchanged |
+
+Three things are never blurred: **live computation** (the corpus is loaded and
+THEMIS recomputes the value), a **frozen expected artifact** (a figure shipped
+with the sample; not a reproduction) and a **manuscript declaration**
+(`paper/paper_claims.yml`). A PASS needs live computation equal to the
+declaration. Every claim is `PASS`, `FAIL`, `NOT_REPRODUCED` (the loaded input
+cannot recompute it), `INFORMATIONAL` or `NOT_MACHINE_CHECKABLE`, and the run is
+`PASS`, `FAIL` or `BLOCKED` - never `PASS` when required input was unavailable.
+The bundled sample recomputes cross-dataset results exactly but carries
+corpus-wide totals only as manifest figures, so on it those are `NOT_REPRODUCED`.
+With no corpus at all the result is `BLOCKED - INPUT CORPUS NOT AVAILABLE`, with
+the list of sources and the build command.
+
+Comparison rules are declared per claim, with no implicit tolerance:
+`exact_integer`, `exact_string`, `rounded_percent`, `rounded_decimal`, `range`,
+`approximate_text`. The verification hierarchy is THEMIS-generated metrics →
+`paper/paper_claims.yml` → the final PDF; all three must agree. The manifest is
+read only by the verifier, never by an analysis function. The Paper Reproduction
+page of the dashboard shows the same verification matrix, fetched from the API.
+Figures need `pip install -e ".[figures]"` (matplotlib); without it their data
+files are still written.
+
 ## 7. Uploading a new Bitcoin attribution CSV
 
 Dashboard: Upload → pre-flight → confirm schema → run. CLI: `themis ingest FILE
@@ -293,6 +329,8 @@ and Their Effect on Forensic Conclusions."*
 ```
 themis/            taxonomy, provenance, corpus, analysis, reliability, report, graph,
                    target_audit, workspace, api, cli, chains/, ingest/, trust/, tasks/, config/
+themis/paper/      experiments, metrics (PaperMetrics), verify, figures, reproduce
+paper/             paper_claims.yml - the manuscript's declared values (verifier input only)
 scripts/           build_corpus.py, generate_result_sets.py, independent_agreement_check.py
 tests/             unit and paper-regression tests (paper tests skip without the corpus)
 examples/          synthetic CSVs for the upload flow

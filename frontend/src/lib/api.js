@@ -61,5 +61,11 @@ export const api = {
   drift: (id) => getJSON(`/api/analysis/${id}/drift`),
   tasks: (id) => getJSON(`/api/analysis/${id}/tasks`),
   runTask: (id, task) => postEmpty(`/api/analysis/${id}/run/${task}`),
+  // Paper reproduction: every value shown comes from these; none is typed into the UI.
+  paperStatus: () => getJSON("/api/paper/status"),
+  startPaperReproduction: () => postEmpty("/api/paper/reproduce"),
+  paperClaims: () => getJSON("/api/paper/claims"),
+  paperExperiment: (id) => getJSON(`/api/paper/experiments/${id}`),
+  paperArtifactUrl: (expId, name) => `${BASE}/api/paper/experiments/${expId}/artifact/${name}`,
   exportUrl: (id, name) => `${BASE}/api/analysis/${id}/export/${name}`,
 };

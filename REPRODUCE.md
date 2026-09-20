@@ -29,14 +29,14 @@ python -m pytest
 Only `pyproject.toml` supplies dependencies (PyYAML at runtime; pytest, httpx,
 fastapi, python-multipart for the tests). Expected:
 
-- **release / no reference corpus:** `173 passed, 92 skipped` — the 92 skipped
+- **release / no reference corpus:** `242 passed, 117 skipped` - the 117 skipped
   are the tests that assert a number printed in the paper or drive paper mode;
   each says `reference corpus not present (not redistributed - see
   THIRD_PARTY_DATA.md; set THEMIS_DATA_DIR)`.
 - **a corpus present** (development checkout, or `THEMIS_DATA_DIR` pointing at a
-  matching one): `264 passed, 1 skipped` in a clean environment - the skip is the
-  numpy cross-check of the exploratory `--fast` bootstrap path (numpy is optional);
-  with numpy installed, `265 passed`.
+  matching one): `359 passed` in a clean environment with `.[test,figures]`
+  installed (numpy arrives with matplotlib). Without numpy the numpy cross-check
+  of the exploratory `--fast` bootstrap path is skipped and the count is one lower.
 
 If a test fails, stop here; the rest assumes a clean run.
 
@@ -191,3 +191,62 @@ A CSV with no address-shaped column is stopped with an explanation; an
 unsupported chain, a crypto-but-not-attribution file and a malformed file each
 get their own message (`README.md` §8). A source id the registry does not know
 resolves UNRESOLVED, never independent.
+
+## 8. The executable paper (`reproduce-paper`)
+
+```
+themis reproduce-paper                 # writes results/reproduction/<run_id>/ and mirrors it to results/paper_proof/
+themis verify-paper --paper ../ICISHCT2026_THEMIS_Repaired_Final.pdf
+themis figures                          # or: themis figures --from-data results/paper_proof  (no corpus needed)
+themis reproduce rodwald-containment
+```
+
+**What this proves and what it does not.** It recomputes the paper's empirical
+measurements from the declared inputs and compares them with the manuscript
+(`paper/paper_claims.yml`, and the printed values in the final PDF). It does not
+prove that any attribution label is true.
+
+**Inputs.** The paper's data statement is that the derived observation table is
+not redistributed, so a release contains no corpus. Without one,
+`themis reproduce-paper` prints `PAPER REPRODUCTION DATA REQUIRED` and
+`BLOCKED - INPUT CORPUS NOT AVAILABLE` with the seven sources, their citations
+and licence notes, and the build command; it exits 3 and writes no PASS. To
+supply data: fetch the sources (§3), run `scripts/build_corpus.py`, then
+
+```
+themis --observations build/observations.csv.gz --data-dir build --as-of 2026-09-15 reproduce-paper
+```
+
+On the bundled sample (a development checkout) cross-dataset results (overlap,
+Rodwald decode, Montréal recurrence, conclusion drift, anchors) are recomputed
+live; corpus-wide totals (claims, addresses, roots, unresolved provenance, the
+single-dataset share) are figures carried in `demo_data/manifest.json`, and
+currency needs every claim. Those are reported `NOT_REPRODUCED`, so the run is
+never `PASS` on the sample. A `PASS` needs a full build.
+
+**Output** (`results/reproduction/<run_id>/`): `metadata.json` (software version,
+git commit, analysis date, corpus / taxonomy / source-registry / threshold hashes,
+bootstrap seed and iterations, paper version), `source_manifest.json`,
+`config_manifest.json`, `paper_metrics.json`, `verification.json`,
+`PAPER_CLAIM_MAP.md`, `table1.*`, `table2.*`, `overlap_matrix.*`,
+`source_depth.json`, `fig1a_data.*` / `fig1b_data.*` / `fig2_data.*` with the
+figures and their `*.metadata.json` sidecars, `currency.json`,
+`unresolved_provenance.json`, `anchors.json`, `condition_d_trace.json`,
+`bootstrap_lower.json` / `bootstrap_upper.json`, `limitations.json` and a
+generated `REPRODUCTION_REPORT.md`. Staleness is judged at the declared analysis
+date, never the wall clock.
+
+**Findings the verifier reports on the sample** (2026-09-20): Table 2's four
+revenue cells differ from the paper by $1.15-$2.86 (the paper's own
+`pipeline/out/e3.json` equals Table 2 after rounding, so the difference is in the
+bundled `revenue.csv.gz`; cause undetermined - random cent-rounding of its
+61,508 rows would give about $0.25-$0.7), and §5.1's "more than 99.5% of
+Elliptic++ has no public cross-source check" is contradicted by the paper's own
+overlap counts (99.47-99.48%). Both are reported as FAIL, not tolerated.
+
+The tests that back this: `tests/test_rq1_taxonomy.py` (the claim taxonomy as
+rules, no corpus needed), `tests/test_source_to_artifact.py` (parsers, kept apart
+from manuscript checks), `tests/test_paper_verifier.py` (the verifier itself can
+fail), `tests/test_paper_reproduction.py` (mutation: change a metric, a source
+row or a config rule and the verifier must FAIL; one drift object across Table 2,
+Figure 2, CLI, API and PaperMetrics; independent oracles), `tests/test_api_paper.py`.

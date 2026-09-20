@@ -17,13 +17,14 @@ import csv, datetime, hashlib, io, json, os, tempfile, threading, time, tracebac
 try:
     from fastapi import FastAPI, File, Form, HTTPException, UploadFile
     from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import StreamingResponse
+    from fastapi.responses import FileResponse, StreamingResponse
 except ImportError as e:   # pragma: no cover
     raise SystemExit("themis.api requires the 'ui' extra: pip install -e '.[ui]'") from e
 
 from .corpus import Corpus
 from . import analysis, config_io, provenance, report as _report, graph as _graph, taxonomy, views
 from . import __version__
+from .paper import reproduce as _paper_repro, verify as _paper_verify
 from . import workspace as _workspace
 from .ingest import pipeline as _ingest_pipeline, schema as _ingest_schema
 
@@ -677,6 +678,86 @@ def analysis_export(analysis_id: str, name: str):
         return StreamingResponse(iter([payload]), media_type="application/json",
                                  headers={"Content-Disposition": 'attachment; filename="provenance_relationships.json"'})
     raise HTTPException(404, f"unknown export {name!r}")
+
+
+# ------------------------------------------------------ paper reproduction (Phase 25-31)
+#: three things that must never be blurred (Phase 31)
+_PAPER_MODES = [
+    dict(id="live", label="Live computation", text="The corpus is loaded and THEMIS recomputes the paper's result."),
+    dict(id="frozen", label="Frozen expected artifact", text="A figure shipped with the reference sample for comparison. Not a reproduction."),
+    dict(id="declared", label="Manuscript declaration", text="A value the paper states (paper/paper_claims.yml). A PASS needs live computation to equal it.")]
+
+
+def _paper_corpus_state() -> dict:
+    ref, err = _reference_or_none()
+    if ref is None:
+        return dict(available=False, message=err, required=_paper_repro.required_inputs())
+    return dict(available=True, scope="FULL_CORPUS" if ref.full else "BUNDLED_SAMPLE",
+                n_claims_loaded=len(ref.claims), analysis_as_of_date=str(ref.snapshot_date),
+                note=ref.sample_note)
+
+
+@app.get("/api/paper/status")
+def paper_status():
+    manifest = _paper_verify.load_manifest()
+    v = _paper_repro.load_verification()
+    exps = (v or {}).get("experiments", {})
+    return dict(
+        paper=manifest.get("paper"), software_version=__version__, modes=_PAPER_MODES,
+        corpus=_paper_corpus_state(), latest_run=None if v is None else dict(
+            run_id=v["run_id"], status=v["status"], groups=v.get("groups"), counts=v["counts"], pdf=v["pdf"],
+            failing=v["failing"], blocked_claims=len(v["blocked"]), warnings=v["warnings"]),
+        experiments=[dict(id=k, title=e["title"], section=e["section"],
+                          status=exps.get(k, {}).get("status", "NOT_RUN")) for k, e in manifest["experiments"].items()],
+        stages=[dict(id=i, label=l) for i, l in _paper_repro.STAGES])
+
+
+@app.post("/api/paper/reproduce")
+def start_paper_reproduction():
+    """Run `themis reproduce-paper` on a worker thread; stage progress is reported by the code that runs it."""
+    if not _paper_corpus_state()["available"]:
+        raise HTTPException(409, "PAPER REPRODUCTION DATA REQUIRED: the reference corpus is not present")
+    job = _new_job("paper_reproduction", _paper_repro.STAGES)
+    cb = _progress_for(job)
+
+    def run():
+        out = _paper_repro.reproduce(corpus=_reference_corpus(), progress=cb)
+        return dict(run_id=out["run_id"], paper_status=out["status"])
+    threading.Thread(target=_finish, daemon=True, args=(job, run)).start()
+    return dict(job_id=job["job_id"])
+
+
+@app.get("/api/paper/claims")
+def paper_claims(run_id: str | None = None):
+    """The verification matrix. Paper values come from the backend manifest, generated values from the run."""
+    v = _paper_repro.load_verification(run_id)
+    if v is not None:
+        return dict(run_id=v["run_id"], status=v["status"], claims=v["claims"], counts=v["counts"])
+    m = _paper_verify.load_manifest()
+    rows = [dict(id=k, metric=c.get("metric", k), section=c.get("section"), text=c.get("text"), status="NOT_RUN",
+                 paper_value=_paper_verify.paper_value(c), generated_value=None, basis=None, comparison=c.get("comparison"),
+                 experiment=c.get("experiment"), **{"class": c.get("class")}) for k, c in m["claims"].items()]
+    return dict(run_id=None, status="NOT_RUN", claims=rows, counts={})
+
+
+@app.get("/api/paper/experiments/{exp_id}")
+def paper_experiment(exp_id: str):
+    d = _paper_repro.experiment_detail(exp_id)
+    if d is None:
+        raise HTTPException(404, f"no paper experiment {exp_id!r}")
+    return d
+
+
+@app.get("/api/paper/experiments/{exp_id}/artifact/{name}")
+def paper_artifact(exp_id: str, name: str, run_id: str | None = None):
+    v = _paper_repro.load_verification(run_id)
+    meta = _paper_verify.load_manifest()["experiments"].get(exp_id)
+    if v is None or meta is None or name not in meta.get("artifacts", []):
+        raise HTTPException(404, "no such artifact for this experiment")
+    p = _paper_repro.run_dir_of(v["run_id"]) / name
+    if not p.is_file():
+        raise HTTPException(404, f"{name} was not generated in run {v['run_id']}")
+    return FileResponse(p, filename=name)
 
 
 def _as_of_date(ws: _workspace.AnalysisWorkspace) -> datetime.date | None:

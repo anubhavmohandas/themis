@@ -1,0 +1,1437 @@
+# THEMIS paper manifest: the values the manuscript DECLARES.
+#
+# This is a verification specification, not analysis input. Nothing in themis/
+# reads it except `themis verify-paper` (themis/paper/verify.py), which compares
+# it with what THEMIS generated (PaperMetrics) and with the text of the final PDF.
+# The flow is one-way: analysis -> generated value; this file -> declared value;
+# verifier -> comparison. It is never fed back into an analysis function.
+#
+# `expected` is the value AS THE PAPER STATES IT. `comparison` says how the paper
+# rounds it; there is no implicit tolerance:
+#   exact_integer     the generated number, rounded half-up to a whole number, equals expected
+#   exact_string      str() equality (booleans, labels)
+#   rounded_percent   generated*100 rounded half-up to `decimals` == expected*100 (expected is a fraction)
+#   rounded_decimal   generated*`scale` rounded half-up to `decimals` == expected
+#   approximate_text  as rounded_decimal, for wording such as "roughly 1.5 million"
+#   range             min <= generated <= max
+# `pdf` locates the same number in the final PDF (a table row + column, or a phrase
+# containing {v}, which is replaced by expected rendered the way the paper prints it),
+# so a manifest edited without the PDF (or the PDF without the manifest) fails.
+# `class` (HEADLINE_STABLE ... DIAGNOSTIC) decides, through `policy`, what a
+# failure does to the overall verdict. `id@suffix` reuses one metric under a second rule.
+
+paper:
+  file: ICISHCT2026_THEMIS_Repaired_Final.pdf
+  sha256: 31b6f33e5dcd32266729d749789ea5d86579393f5b335779d7cfc91e5c7232ee
+  title: 'Provenance Before Precision: Auditing Public Bitcoin Attribution Labels and Their Effect on Forensic Conclusions'
+  version: repaired_final
+policy:
+  HEADLINE_STABLE:
+    on_fail: fail
+    on_not_reproduced: block
+  SUPPORTING_STABLE:
+    on_fail: fail
+    on_not_reproduced: block
+  LIMITATION:
+    on_fail: fail
+    on_not_reproduced: block
+  DIAGNOSTIC:
+    on_fail: ignore
+    on_not_reproduced: ignore
+  SENSITIVITY:
+    on_fail: ignore
+    on_not_reproduced: ignore
+required:
+- corpus.sources
+- corpus.claims
+- corpus.provenance_roots
+- corpus.identified_roots
+- corpus.unresolved_roots
+- coverage.single_dataset_share
+- coverage.multi_dataset_addresses
+- coverage.elliptic_max_overlap_share
+- circularity.rodwald_ransomwhere_shared
+- circularity.rodwald_ransomwhere_shared@abstract
+- circularity.rodwald_ransomwhere_share_of_rodwald
+- circularity.rodwald_ransomwhere_share_of_ransomwhere
+- circularity.montreal_seed
+- circularity.montreal_ransomwhere
+- circularity.montreal_tagpack
+- circularity.montreal_rodwald
+- circularity.montreal_range@low
+- circularity.montreal_range@high
+- drift.A.revenue
+- drift.B.revenue
+- drift.C.revenue
+- drift.D.revenue
+- drift.D.coverage_vs_B
+- drift.B.revenue@abstract
+- drift.D.revenue@abstract
+- drift.D.coverage@abstract
+- drift.spread_B_over_D
+- unresolved_provenance.addresses
+- unresolved_provenance.share
+- rq1.taxonomy_rules
+experiments:
+  corpus_audit:
+    title: Corpus audit
+    section: '4.1'
+    function: themis.paper.experiments.table1
+    artifacts:
+    - table1.json
+    - table1.csv
+    - table1.md
+  rq1_taxonomy:
+    title: RQ1 taxonomy
+    section: '3'
+    function: tests/test_rq1_taxonomy.py
+    artifacts:
+    - rq1.json
+  source_depth:
+    title: Source depth
+    section: '5.1'
+    function: themis.paper.experiments.source_depth
+    artifacts:
+    - source_depth.json
+  overlap_coverage:
+    title: Overlap and coverage
+    section: '5.1'
+    function: themis.paper.experiments.overlap_matrix
+    artifacts:
+    - overlap_matrix.json
+    - overlap_matrix.csv
+  currency:
+    title: Currency and freshness
+    section: '5.1'
+    function: themis.paper.experiments.currency
+    artifacts:
+    - currency.json
+  rodwald_containment:
+    title: 'Circularity: Rodwald / Ransomwhere'
+    section: '5.2'
+    function: themis.provenance.decode_field
+    artifacts:
+    - fig1a_data.json
+    - fig1a_data.csv
+  montreal_recurrence:
+    title: 'Circularity: Montreal 2019'
+    section: '5.2'
+    function: themis.provenance.root_propagation
+    artifacts:
+    - fig1b_data.json
+    - fig1b_data.csv
+  unresolved_provenance:
+    title: Unresolved provenance
+    section: '5.4'
+    function: themis.corpus.Corpus.corpus_roots
+    artifacts:
+    - unresolved_provenance.json
+  anchors:
+    title: Anchor validation
+    section: '4.3'
+    function: themis.analysis.anchor_validation
+    artifacts:
+    - anchors.json
+  drift:
+    title: Conclusion drift
+    section: '5.3'
+    function: themis.analysis.drift
+    artifacts:
+    - table2.json
+    - table2.csv
+    - fig2_data.csv
+  condition_d:
+    title: Condition D trace
+    section: '5.3'
+    function: themis.paper.experiments.condition_d_trace
+    artifacts:
+    - condition_d_trace.json
+  agreement_diagnostics:
+    title: Agreement (taxonomy-sensitive diagnostic)
+    section: '5.1'
+    function: themis.analysis.agreement
+    artifacts:
+    - diagnostics.json
+  bootstrap:
+    title: Provenance-bound uncertainty
+    section: '5.4'
+    function: themis.analysis.bootstrap
+    artifacts:
+    - bootstrap_lower.json
+    - bootstrap_upper.json
+claims:
+  corpus.sources:
+    section: '4.1'
+    class: HEADLINE_STABLE
+    experiment: corpus_audit
+    text: Seven open sources were normalised into the corpus
+    expected: 7
+    comparison: exact_integer
+    pdf:
+      text: '{v} openly redistributable address-level label files'
+      token: Seven
+  corpus.claims:
+    section: '4.1'
+    class: HEADLINE_STABLE
+    experiment: corpus_audit
+    text: the corpus contains 1,545,710 claims
+    expected: 1545710
+    comparison: exact_integer
+    pdf:
+      text: '{v} claims across roughly 1.5 million unique Bitcoin addresses'
+  corpus.addresses@roughly:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: roughly 1.5 million unique Bitcoin addresses
+    metric: corpus.addresses
+    expected: 1.5
+    comparison: approximate_text
+    decimals: 1
+    scale: !!float '1e-06'
+    pdf:
+      text: roughly {v} million unique Bitcoin addresses
+  corpus.provenance_roots:
+    section: '4.1'
+    class: HEADLINE_STABLE
+    experiment: corpus_audit
+    text: 25 provenance roots
+    expected: 25
+    comparison: exact_integer
+    pdf:
+      text: and {v} provenance roots
+  corpus.identified_roots:
+    section: '4.1'
+    class: HEADLINE_STABLE
+    experiment: corpus_audit
+    text: of which 21 could be identified
+    expected: 21
+    comparison: exact_integer
+    pdf:
+      text: of which {v} could be identified
+  corpus.unresolved_roots:
+    section: '4.1'
+    class: HEADLINE_STABLE
+    experiment: corpus_audit
+    text: 4 unresolved provenance roots (Table 1 caption)
+    expected: 4
+    comparison: exact_integer
+    pdf:
+      text: and {v} unresolved)
+  corpus.provenance_descriptors:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: the datasets declare 33 provenance descriptors
+    expected: 33
+    comparison: exact_integer
+    pdf:
+      text: declare {v} provenance descriptors
+  table1.ellipticpp.addresses:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: 'Table 1: Elliptic++ [14] unique addresses'
+    metric: corpus.per_source.ellipticpp.addresses
+    expected: 822937
+    comparison: exact_integer
+    pdf:
+      row: Elliptic++ [14]
+      col: 1
+  table1.ellipticpp.claims:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: 'Table 1: Elliptic++ [14] claims'
+    metric: corpus.per_source.ellipticpp.claims
+    expected: 822937
+    comparison: exact_integer
+    pdf:
+      row: Elliptic++ [14]
+      col: 2
+  table1.ellipticpp.revision_field:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: 'Table 1: Elliptic++ [14] has a revision field: No'
+    metric: corpus.per_source.ellipticpp.revision_field
+    expected: false
+    comparison: exact_string
+  table1.tagpack.addresses:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: 'Table 1: GraphSense TagPack [1] unique addresses'
+    metric: corpus.per_source.tagpack.addresses
+    expected: 483296
+    comparison: exact_integer
+    pdf:
+      row: GraphSense TagPack [1]
+      col: 1
+  table1.tagpack.claims:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: 'Table 1: GraphSense TagPack [1] claims'
+    metric: corpus.per_source.tagpack.claims
+    expected: 499327
+    comparison: exact_integer
+    pdf:
+      row: GraphSense TagPack [1]
+      col: 2
+  table1.tagpack.revision_field:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: 'Table 1: GraphSense TagPack [1] has a revision field: Yes'
+    metric: corpus.per_source.tagpack.revision_field
+    expected: true
+    comparison: exact_string
+  table1.schnoering.addresses:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: 'Table 1: Schnoering label set [2] unique addresses'
+    metric: corpus.per_source.schnoering.addresses
+    expected: 101387
+    comparison: exact_integer
+    pdf:
+      row: Schnoering label set [2]
+      col: 1
+  table1.schnoering.claims:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: 'Table 1: Schnoering label set [2] claims'
+    metric: corpus.per_source.schnoering.claims
+    expected: 103812
+    comparison: exact_integer
+    pdf:
+      row: Schnoering label set [2]
+      col: 2
+  table1.schnoering.revision_field:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: 'Table 1: Schnoering label set [2] has a revision field: No'
+    metric: corpus.per_source.schnoering.revision_field
+    expected: false
+    comparison: exact_string
+  table1.rodwald_mixers.addresses:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: 'Table 1: Rodwald mixers [16] unique addresses'
+    metric: corpus.per_source.rodwald_mixers.addresses
+    expected: 57817
+    comparison: exact_integer
+    pdf:
+      row: Rodwald mixers [16]
+      col: 1
+  table1.rodwald_mixers.claims:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: 'Table 1: Rodwald mixers [16] claims'
+    metric: corpus.per_source.rodwald_mixers.claims
+    expected: 57817
+    comparison: exact_integer
+    pdf:
+      row: Rodwald mixers [16]
+      col: 2
+  table1.rodwald_mixers.revision_field:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: 'Table 1: Rodwald mixers [16] has a revision field: No'
+    metric: corpus.per_source.rodwald_mixers.revision_field
+    expected: false
+    comparison: exact_string
+  table1.rodwald_ransom.addresses:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: 'Table 1: Rodwald ransomware [15] unique addresses'
+    metric: corpus.per_source.rodwald_ransom.addresses
+    expected: 50322
+    comparison: exact_integer
+    pdf:
+      row: Rodwald ransomware [15]
+      col: 1
+  table1.rodwald_ransom.claims:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: 'Table 1: Rodwald ransomware [15] claims'
+    metric: corpus.per_source.rodwald_ransom.claims
+    expected: 50322
+    comparison: exact_integer
+    pdf:
+      row: Rodwald ransomware [15]
+      col: 2
+  table1.rodwald_ransom.revision_field:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: 'Table 1: Rodwald ransomware [15] has a revision field: No'
+    metric: corpus.per_source.rodwald_ransom.revision_field
+    expected: false
+    comparison: exact_string
+  table1.ransomwhere.addresses:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: 'Table 1: Ransomwhere [17] unique addresses'
+    metric: corpus.per_source.ransomwhere.addresses
+    expected: 11186
+    comparison: exact_integer
+    pdf:
+      row: Ransomwhere [17]
+      col: 1
+  table1.ransomwhere.claims:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: 'Table 1: Ransomwhere [17] claims'
+    metric: corpus.per_source.ransomwhere.claims
+    expected: 11186
+    comparison: exact_integer
+    pdf:
+      row: Ransomwhere [17]
+      col: 2
+  table1.ransomwhere.revision_field:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: 'Table 1: Ransomwhere [17] has a revision field: Yes'
+    metric: corpus.per_source.ransomwhere.revision_field
+    expected: true
+    comparison: exact_string
+  table1.watchyourback.addresses:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: 'Table 1: WatchYourBack [6] unique addresses'
+    metric: corpus.per_source.watchyourback.addresses
+    expected: 309
+    comparison: exact_integer
+    pdf:
+      row: WatchYourBack [6]
+      col: 1
+  table1.watchyourback.claims:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: 'Table 1: WatchYourBack [6] claims'
+    metric: corpus.per_source.watchyourback.claims
+    expected: 309
+    comparison: exact_integer
+    pdf:
+      row: WatchYourBack [6]
+      col: 2
+  table1.watchyourback.revision_field:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: 'Table 1: WatchYourBack [6] has a revision field: No'
+    metric: corpus.per_source.watchyourback.revision_field
+    expected: false
+    comparison: exact_string
+  corpus.malformed_elliptic_removed:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: five malformed Elliptic++ entries were removed
+    machine_checkable: false
+    reason: 'a source-to-artifact parser check, not a corpus statistic: tests/test_source_to_artifact.py (Elliptic++ invalid-address rejection)'
+  corpus.openly_redistributable:
+    section: '4.1'
+    class: SUPPORTING_STABLE
+    experiment: corpus_audit
+    text: seven openly redistributable address-level label files
+    machine_checkable: false
+    reason: a licensing statement. THIRD_PARTY_DATA.md records the Elliptic++ and Rodwald redistribution terms as UNCONFIRMED; nothing computes it
+  coverage.single_dataset_share:
+    section: '5.1'
+    class: HEADLINE_STABLE
+    experiment: source_depth
+    text: 98.97% of addresses occur in only one dataset
+    metric: coverage.single_dataset_share
+    expected: 0.9897
+    comparison: rounded_percent
+    decimals: 2
+    pdf:
+      text: '{v} of addresses occur in only one dataset'
+  coverage.multi_dataset_addresses:
+    section: '5.1'
+    class: HEADLINE_STABLE
+    experiment: source_depth
+    text: only 15,400 addresses appear in two or more datasets
+    expected: 15400
+    comparison: exact_integer
+    pdf:
+      text: only {v} addresses appear in two or more
+  coverage.multi_dataset_distribution.2:
+    section: '5.1'
+    class: SUPPORTING_STABLE
+    experiment: source_depth
+    text: multi-source distribution, 2 datasets
+    expected: 7832
+    comparison: exact_integer
+    pdf:
+      text: '{v} addresses in two datasets'
+  coverage.multi_dataset_distribution.3:
+    section: '5.1'
+    class: SUPPORTING_STABLE
+    experiment: source_depth
+    text: multi-source distribution, 3 datasets
+    expected: 429
+    comparison: exact_integer
+    pdf:
+      text: '{v} in three'
+  coverage.multi_dataset_distribution.4:
+    section: '5.1'
+    class: SUPPORTING_STABLE
+    experiment: source_depth
+    text: multi-source distribution, 4 datasets
+    expected: 7112
+    comparison: exact_integer
+    pdf:
+      text: '{v} in four'
+  coverage.multi_dataset_distribution.5_plus:
+    section: '5.1'
+    class: SUPPORTING_STABLE
+    experiment: source_depth
+    text: multi-source distribution, 5+ datasets
+    expected: 27
+    comparison: exact_integer
+    pdf:
+      text: '{v} in five or more'
+  coverage.elliptic_max_overlap_share:
+    section: '5.1'
+    class: HEADLINE_STABLE
+    experiment: overlap_coverage
+    text: Elliptic++ overlaps any other dataset by at most 0.49%
+    metric: coverage.by_source.ellipticpp.max_overlap_share
+    expected: 0.0049
+    comparison: rounded_percent
+    decimals: 2
+    pdf:
+      text: by at most {v}
+  coverage.elliptic_no_cross_source_check:
+    section: '5.1'
+    class: SUPPORTING_STABLE
+    experiment: overlap_coverage
+    text: more than 99.5% of Elliptic++ has no public cross-source check
+    metric: coverage.by_source.ellipticpp.no_cross_source_check_share
+    comparison: range
+    min: 0.995
+    max: 1.0
+    pdf:
+      text: more than {v} of Elliptic++
+      token: 99.5%
+  coverage.overlap.ellipticpp.schnoering:
+    section: '5.1'
+    class: SUPPORTING_STABLE
+    experiment: overlap_coverage
+    text: Elliptic++ shares 4,030 addresses with schnoering
+    metric: coverage.overlap.ellipticpp.schnoering.intersection
+    expected: 4030
+    comparison: exact_integer
+    pdf:
+      text: Elliptic++ shares {v} addresses with Schnoering
+  coverage.overlap.ellipticpp.tagpack:
+    section: '5.1'
+    class: SUPPORTING_STABLE
+    experiment: overlap_coverage
+    text: Elliptic++ shares 189 addresses with tagpack
+    metric: coverage.overlap.ellipticpp.tagpack.intersection
+    expected: 189
+    comparison: exact_integer
+    pdf:
+      text: '{v} with TagPack'
+  coverage.overlap.ellipticpp.rodwald_mixers:
+    section: '5.1'
+    class: SUPPORTING_STABLE
+    experiment: overlap_coverage
+    text: Elliptic++ shares 65 addresses with rodwald_mixers
+    metric: coverage.overlap.ellipticpp.rodwald_mixers.intersection
+    expected: 65
+    comparison: exact_integer
+    pdf:
+      text: '{v} with Rodwald mixers'
+  coverage.overlap.ellipticpp.rodwald_ransom:
+    section: '5.1'
+    class: SUPPORTING_STABLE
+    experiment: overlap_coverage
+    text: Elliptic++ shares 47 addresses with rodwald_ransom
+    metric: coverage.overlap.ellipticpp.rodwald_ransom.intersection
+    expected: 47
+    comparison: exact_integer
+    pdf:
+      text: '{v} with Rodwald ransomware'
+  coverage.overlap.ellipticpp.ransomwhere:
+    section: '5.1'
+    class: SUPPORTING_STABLE
+    experiment: overlap_coverage
+    text: Elliptic++ shares 7 addresses with ransomwhere
+    metric: coverage.overlap.ellipticpp.ransomwhere.intersection
+    expected: 7
+    comparison: exact_integer
+    pdf:
+      text: '{v} with Ransomwhere'
+  coverage.overlap.ellipticpp.watchyourback:
+    section: '5.1'
+    class: SUPPORTING_STABLE
+    experiment: overlap_coverage
+    text: Elliptic++ shares 8 addresses with watchyourback
+    metric: coverage.overlap.ellipticpp.watchyourback.intersection
+    expected: 8
+    comparison: exact_integer
+    pdf:
+      text: and {v} with WatchYourBack
+  coverage.overlap.ellipticpp.schnoering.share:
+    section: '5.1'
+    class: SUPPORTING_STABLE
+    experiment: overlap_coverage
+    text: 4,030 shared addresses are only 0.49% of Elliptic++
+    metric: coverage.overlap.ellipticpp.schnoering.share_of_source
+    expected: 0.0049
+    comparison: rounded_percent
+    decimals: 2
+    pdf:
+      text: only {v} of Elliptic++
+  coverage.overlap.ransomwhere.rodwald_ransom.share:
+    section: '5.1'
+    class: SUPPORTING_STABLE
+    experiment: overlap_coverage
+    text: the share of Ransomwhere that also appears in rodwald_ransom
+    metric: coverage.overlap.ransomwhere.rodwald_ransom.share_of_source
+    expected: 0.6712
+    comparison: rounded_percent
+    decimals: 2
+    pdf:
+      text: Of Ransomwhere, {v} appears in Rodwald ransomware
+  coverage.overlap.ransomwhere.tagpack.share:
+    section: '5.1'
+    class: SUPPORTING_STABLE
+    experiment: overlap_coverage
+    text: the share of Ransomwhere that also appears in tagpack
+    metric: coverage.overlap.ransomwhere.tagpack.share_of_source
+    expected: 0.6666
+    comparison: rounded_percent
+    decimals: 2
+    pdf:
+      text: ', {v} in TagPack'
+  coverage.overlap.ransomwhere.schnoering.share:
+    section: '5.1'
+    class: SUPPORTING_STABLE
+    experiment: overlap_coverage
+    text: the share of Ransomwhere that also appears in schnoering
+    metric: coverage.overlap.ransomwhere.schnoering.share_of_source
+    expected: 0.645
+    comparison: rounded_percent
+    decimals: 2
+    pdf:
+      text: '{v} in Schnoering'
+  currency.missing_revision_claims:
+    section: '5.1'
+    class: SUPPORTING_STABLE
+    experiment: currency
+    text: 1,035,420 claims have no revision field
+    expected: 1035420
+    comparison: exact_integer
+    pdf:
+      text: Of the 1,545,710 claims, {v} (
+  currency.missing_revision_share:
+    section: '5.1'
+    class: SUPPORTING_STABLE
+    experiment: currency
+    text: 67.0% of all claims have no revision field
+    expected: 0.67
+    comparison: rounded_percent
+    decimals: 1
+    pdf:
+      text: ({v}) have no revision field
+  currency.tagpack_older_than_three_years:
+    section: '5.1'
+    class: SUPPORTING_STABLE
+    experiment: currency
+    text: 99.9% of dated TagPack claims are more than three years old
+    metric: currency.by_source.tagpack.stale_share_of_dated
+    expected: 0.999
+    comparison: rounded_percent
+    decimals: 1
+    pdf:
+      text: '{v} of dated TagPack claims are more than three years old'
+  circularity.rodwald.group.RSH:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: rodwald_containment
+    text: 'Rodwald code RSH: 6,546 addresses, all inside Ransomwhere'
+    metric: circularity.rodwald_ransom.in.ransomwhere.groups.RSH.overlap
+    expected: 6546
+    comparison: exact_integer
+    pdf:
+      text: '{v} addresses in RSH'
+  circularity.rodwald.group.RS:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: rodwald_containment
+    text: 'Rodwald code RS: 494 addresses, all inside Ransomwhere'
+    metric: circularity.rodwald_ransom.in.ransomwhere.groups.RS.overlap
+    expected: 494
+    comparison: exact_integer
+    pdf:
+      text: ', {v} in RS,'
+  circularity.rodwald.group.R:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: rodwald_containment
+    text: 'Rodwald code R: 400 addresses, all inside Ransomwhere'
+    metric: circularity.rodwald_ransom.in.ransomwhere.groups.R.overlap
+    expected: 400
+    comparison: exact_integer
+    pdf:
+      text: ', {v} in R,'
+  circularity.rodwald.group.RH:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: rodwald_containment
+    text: 'Rodwald code RH: 33 addresses, all inside Ransomwhere'
+    metric: circularity.rodwald_ransom.in.ransomwhere.groups.RH.overlap
+    expected: 33
+    comparison: exact_integer
+    pdf:
+      text: ', {v} in RH,'
+  circularity.rodwald.group.HRS:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: rodwald_containment
+    text: 'Rodwald code HRS: 23 addresses, all inside Ransomwhere'
+    metric: circularity.rodwald_ransom.in.ransomwhere.groups.HRS.overlap
+    expected: 23
+    comparison: exact_integer
+    pdf:
+      text: ', {v} in HRS,'
+  circularity.rodwald.group.HR:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: rodwald_containment
+    text: 'Rodwald code HR: 10 addresses, all inside Ransomwhere'
+    metric: circularity.rodwald_ransom.in.ransomwhere.groups.HR.overlap
+    expected: 10
+    comparison: exact_integer
+    pdf:
+      text: ', {v} in HR and'
+  circularity.rodwald.group.SR:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: rodwald_containment
+    text: 'Rodwald code SR: 1 addresses, all inside Ransomwhere'
+    metric: circularity.rodwald_ransom.in.ransomwhere.groups.SR.overlap
+    expected: 1
+    comparison: exact_integer
+    pdf:
+      text: and {v} in SR,
+  circularity.rodwald.well_formed_inside:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: rodwald_containment
+    text: 7,507 addresses in well-formed codes containing the decoded letter
+    metric: circularity.rodwald_ransom.in.ransomwhere.well_formed_inside_addresses
+    expected: 7507
+    comparison: exact_integer
+    pdf:
+      text: for {v} addresses in total
+  circularity.rodwald.outside:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: rodwald_containment
+    text: codes without the letter cover 42,815 addresses
+    metric: circularity.rodwald_ransom.in.ransomwhere.outside_addresses
+    expected: 42815
+    comparison: exact_integer
+    pdf:
+      text: without R cover {v} addresses
+  circularity.rodwald.outside_overlap:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: rodwald_containment
+    text: only one of them appears in Ransomwhere, a malformed H,S record
+    metric: circularity.rodwald_ransom.in.ransomwhere.outside_overlap_addresses
+    expected: 1
+    comparison: exact_integer
+    pdf:
+      text: only {v} of them appears in Ransomwhere
+      token: one
+  circularity.rodwald.clean_split:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: rodwald_containment
+    text: every well-formed code containing R lies completely inside Ransomwhere; every one without R is disjoint
+    metric: circularity.rodwald_ransom.in.ransomwhere.clean_split
+    expected: true
+    comparison: exact_string
+  circularity.rodwald_ransomwhere_shared:
+    section: '5.2'
+    class: HEADLINE_STABLE
+    experiment: rodwald_containment
+    text: the two datasets share 7,508 addresses
+    metric: circularity.rodwald_ransom.in.ransomwhere.shared_addresses
+    expected: 7508
+    comparison: exact_integer
+    pdf:
+      text: the two datasets share {v} addresses
+  circularity.rodwald_ransomwhere_shared@abstract:
+    section: Abstract
+    class: HEADLINE_STABLE
+    experiment: rodwald_containment
+    text: 7,508 addresses inherited from Ransomwhere
+    metric: circularity.rodwald_ransom.in.ransomwhere.shared_addresses
+    expected: 7508
+    comparison: exact_integer
+    pdf:
+      text: reveals {v} addresses inherited
+  circularity.rodwald_ransomwhere_share_of_rodwald:
+    section: '5.2'
+    class: HEADLINE_STABLE
+    experiment: rodwald_containment
+    text: 14.92% of Rodwald ransomware
+    metric: circularity.rodwald_ransom.in.ransomwhere.share_of_dataset
+    expected: 0.1492
+    comparison: rounded_percent
+    decimals: 2
+    pdf:
+      text: equal to {v} of Rodwald
+  circularity.rodwald_ransomwhere_share_of_ransomwhere:
+    section: '5.2'
+    class: HEADLINE_STABLE
+    experiment: rodwald_containment
+    text: 67.12% of Ransomwhere
+    metric: circularity.rodwald_ransom.in.ransomwhere.share_of_candidate
+    expected: 0.6712
+    comparison: rounded_percent
+    decimals: 2
+    pdf:
+      text: and {v} of Ransomwhere
+  circularity.naming_residue.princeton_huang_2018:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: rodwald_containment
+    text: 9,176 Rodwald addresses prefixed princeton
+    metric: circularity.naming_residue.rodwald_ransom.by_root.princeton_huang_2018
+    expected: 9176
+    comparison: exact_integer
+    pdf:
+      text: '{v} addresses prefixed princeton'
+  circularity.naming_residue.padua_conti_2018:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: rodwald_containment
+    text: 1,801 Rodwald addresses prefixed padua
+    metric: circularity.naming_residue.rodwald_ransom.by_root.padua_conti_2018
+    expected: 1801
+    comparison: exact_integer
+    pdf:
+      text: '{v} padua'
+  circularity.naming_residue.montreal_paquet_clouston_2019:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: rodwald_containment
+    text: 819 Rodwald addresses prefixed montreal
+    metric: circularity.naming_residue.rodwald_ransom.by_root.montreal_paquet_clouston_2019
+    expected: 819
+    comparison: exact_integer
+    pdf:
+      text: and {v} montreal
+  circularity.naming_residue.attributed:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: rodwald_containment
+    text: 11,796 addresses link to earlier published datasets
+    metric: circularity.naming_residue.rodwald_ransom.attributed
+    expected: 11796
+    comparison: exact_integer
+    pdf:
+      text: linking {v} of 50,322
+  circularity.naming_residue.total:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: rodwald_containment
+    text: of 50,322 Rodwald ransomware addresses
+    metric: circularity.naming_residue.rodwald_ransom.total
+    expected: 50322
+    comparison: exact_integer
+    pdf:
+      text: 11,796 of {v} addresses
+  circularity.naming_residue.share:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: rodwald_containment
+    text: 23.44% of Rodwald ransomware addresses
+    metric: circularity.naming_residue.rodwald_ransom.share
+    expected: 0.2344
+    comparison: rounded_percent
+    decimals: 2
+    pdf:
+      text: ({v}) to earlier
+  circularity.montreal_seed:
+    section: '5.2'
+    class: HEADLINE_STABLE
+    experiment: montreal_recurrence
+    text: Schnoering contains 7,222 addresses attributed to the 2019 ground truth
+    metric: circularity.montreal_paquet_clouston_2019.seed_addresses
+    expected: 7222
+    comparison: exact_integer
+    pdf:
+      text: Schnoering contains {v} addresses attributed
+  circularity.montreal_ransomwhere:
+    section: '5.2'
+    class: HEADLINE_STABLE
+    experiment: montreal_recurrence
+    text: 7,208 also occur in Ransomwhere
+    metric: circularity.montreal_paquet_clouston_2019.recurrence.ransomwhere.addresses
+    expected: 7208
+    comparison: exact_integer
+    pdf:
+      text: '{v} (99.81%) also occur in Ransomwhere'
+  circularity.montreal_ransomwhere_share:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: montreal_recurrence
+    text: 99.81% of the set occur in Ransomwhere
+    metric: circularity.montreal_paquet_clouston_2019.recurrence.ransomwhere.share
+    expected: 0.9981
+    comparison: rounded_percent
+    decimals: 2
+    pdf:
+      text: ({v}) also occur in Ransomwhere
+  circularity.montreal_tagpack:
+    section: '5.2'
+    class: HEADLINE_STABLE
+    experiment: montreal_recurrence
+    text: 7,208 also occur in TagPack
+    metric: circularity.montreal_paquet_clouston_2019.recurrence.tagpack.addresses
+    expected: 7208
+    comparison: exact_integer
+    pdf:
+      text: Ransomwhere, {v} (99.81%) in TagPack
+  circularity.montreal_tagpack_share:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: montreal_recurrence
+    text: 99.81% of the set occur in TagPack
+    metric: circularity.montreal_paquet_clouston_2019.recurrence.tagpack.share
+    expected: 0.9981
+    comparison: rounded_percent
+    decimals: 2
+    pdf:
+      text: ({v}) in TagPack
+  circularity.montreal_rodwald:
+    section: '5.2'
+    class: HEADLINE_STABLE
+    experiment: montreal_recurrence
+    text: 7,122 also occur in Rodwald ransomware
+    metric: circularity.montreal_paquet_clouston_2019.recurrence.rodwald_ransom.addresses
+    expected: 7122
+    comparison: exact_integer
+    pdf:
+      text: and {v} (98.62%) in Rodwald
+  circularity.montreal_rodwald_share:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: montreal_recurrence
+    text: 98.62% of the set occur in Rodwald
+    metric: circularity.montreal_paquet_clouston_2019.recurrence.rodwald_ransom.share
+    expected: 0.9862
+    comparison: rounded_percent
+    decimals: 2
+    pdf:
+      text: ({v}) in Rodwald
+  circularity.montreal_range@low:
+    section: Abstract
+    class: HEADLINE_STABLE
+    experiment: montreal_recurrence
+    text: the 2019 ground-truth set reappears at 98.6-99.8% (low end)
+    metric: circularity.montreal_paquet_clouston_2019.recurrence.rodwald_ransom.share
+    expected: 0.986
+    comparison: rounded_percent
+    decimals: 1
+    pdf:
+      text: reappears at {v}-99.8%
+      token: '98.6'
+  circularity.montreal_range@high:
+    section: Abstract
+    class: HEADLINE_STABLE
+    experiment: montreal_recurrence
+    text: the 2019 ground-truth set reappears at 98.6-99.8% (high end)
+    metric: circularity.montreal_paquet_clouston_2019.recurrence.tagpack.share
+    expected: 0.998
+    comparison: rounded_percent
+    decimals: 1
+    pdf:
+      text: at 98.6-{v} across four
+  unresolved.elliptic_block_share_of_claims:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: unresolved_provenance
+    text: the unresolved Elliptic++ block accounts for 53.2% of all claims
+    metric: unresolved_provenance.root_share_of_claims.elliptic_undisclosed
+    expected: 0.532
+    comparison: rounded_percent
+    decimals: 1
+    pdf:
+      text: accounts for {v} of all claims
+  unresolved.graphsense_core_share_of_claims:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: unresolved_provenance
+    text: GraphSense core packs form the largest resolved family at 24.8% (of all claims)
+    metric: unresolved_provenance.root_share_of_claims.tagpack_GraphSense Core Team
+    expected: 0.248
+    comparison: rounded_percent
+    decimals: 1
+    pdf:
+      text: resolved family at {v}
+  unresolved.schnoering_bitcointalk:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: unresolved_provenance
+    text: 85.9% of Schnoering addresses come from BitcoinTalk
+    metric: unresolved_provenance.within_source.schnoering.bitcointalk_forum.share
+    expected: 0.859
+    comparison: rounded_percent
+    decimals: 1
+    pdf:
+      text: '{v} of addresses come from BitcoinTalk'
+  unresolved.schnoering_ofac:
+    section: '5.2'
+    class: SUPPORTING_STABLE
+    experiment: unresolved_provenance
+    text: only 0.18% of Schnoering addresses come from OFAC SDN
+    metric: unresolved_provenance.within_source.schnoering.ofac_sdn.share
+    expected: 0.0018
+    comparison: rounded_percent
+    decimals: 2
+    pdf:
+      text: only {v} from OFAC SDN
+  drift.A.observations:
+    section: '5.3'
+    class: SUPPORTING_STABLE
+    experiment: drift
+    text: 'Table 2, condition A: claim observations'
+    expected: 61508
+    comparison: exact_integer
+    pdf:
+      row: A - naive union
+      col: 1
+  drift.A.addresses:
+    section: '5.3'
+    class: SUPPORTING_STABLE
+    experiment: drift
+    text: 'Table 2, condition A: unique addresses'
+    expected: 54000
+    comparison: exact_integer
+    pdf:
+      row: A - naive union
+      col: 2
+  drift.A.revenue:
+    section: '5.3'
+    class: HEADLINE_STABLE
+    experiment: drift
+    text: 'Table 2, condition A: revenue in USD'
+    expected: 1367997318
+    comparison: exact_integer
+    pdf:
+      row: A - naive union
+      col: 3
+  drift.A.ratio_vs_B:
+    section: '5.3'
+    class: SUPPORTING_STABLE
+    experiment: drift
+    text: 'Table 2, condition A: ratio vs B'
+    expected: 1.24
+    comparison: rounded_decimal
+    decimals: 2
+    pdf:
+      row: A - naive union
+      col: 4
+      suffix: x
+  drift.A.coverage_vs_B:
+    section: '5.3'
+    class: SUPPORTING_STABLE
+    experiment: drift
+    text: 'Table 2, condition A: coverage vs B'
+    expected: 1.139
+    comparison: rounded_percent
+    decimals: 1
+    pdf:
+      row: A - naive union
+      col: 5
+  drift.B.observations:
+    section: '5.3'
+    class: SUPPORTING_STABLE
+    experiment: drift
+    text: 'Table 2, condition B: claim observations'
+    expected: 54000
+    comparison: exact_integer
+    pdf:
+      row: B - address
+      col: 1
+  drift.B.addresses:
+    section: '5.3'
+    class: SUPPORTING_STABLE
+    experiment: drift
+    text: 'Table 2, condition B: unique addresses'
+    expected: 54000
+    comparison: exact_integer
+    pdf:
+      row: B - address
+      col: 2
+  drift.B.revenue:
+    section: '5.3'
+    class: HEADLINE_STABLE
+    experiment: drift
+    text: 'Table 2, condition B: revenue in USD'
+    expected: 1101304945
+    comparison: exact_integer
+    pdf:
+      row: B - address
+      col: 3
+  drift.B.ratio_vs_B:
+    section: '5.3'
+    class: SUPPORTING_STABLE
+    experiment: drift
+    text: 'Table 2, condition B: ratio vs B'
+    expected: 1.0
+    comparison: rounded_decimal
+    decimals: 2
+    pdf:
+      row: B - address
+      col: 4
+      suffix: x
+  drift.B.coverage_vs_B:
+    section: '5.3'
+    class: SUPPORTING_STABLE
+    experiment: drift
+    text: 'Table 2, condition B: coverage vs B'
+    expected: 1.0
+    comparison: rounded_percent
+    decimals: 1
+    pdf:
+      row: B - address
+      col: 5
+  drift.C.observations:
+    section: '5.3'
+    class: SUPPORTING_STABLE
+    experiment: drift
+    text: 'Table 2, condition C: claim observations'
+    expected: 42237
+    comparison: exact_integer
+    pdf:
+      row: C - inheritance
+      col: 1
+  drift.C.addresses:
+    section: '5.3'
+    class: SUPPORTING_STABLE
+    experiment: drift
+    text: 'Table 2, condition C: unique addresses'
+    expected: 42237
+    comparison: exact_integer
+    pdf:
+      row: C - inheritance
+      col: 2
+  drift.C.revenue:
+    section: '5.3'
+    class: HEADLINE_STABLE
+    experiment: drift
+    text: 'Table 2, condition C: revenue in USD'
+    expected: 1045637069
+    comparison: exact_integer
+    pdf:
+      row: C - inheritance
+      col: 3
+  drift.C.ratio_vs_B:
+    section: '5.3'
+    class: SUPPORTING_STABLE
+    experiment: drift
+    text: 'Table 2, condition C: ratio vs B'
+    expected: 0.95
+    comparison: rounded_decimal
+    decimals: 2
+    pdf:
+      row: C - inheritance
+      col: 4
+      suffix: x
+  drift.C.coverage_vs_B:
+    section: '5.3'
+    class: SUPPORTING_STABLE
+    experiment: drift
+    text: 'Table 2, condition C: coverage vs B'
+    expected: 0.782
+    comparison: rounded_percent
+    decimals: 1
+    pdf:
+      row: C - inheritance
+      col: 5
+  drift.D.observations:
+    section: '5.3'
+    class: SUPPORTING_STABLE
+    experiment: drift
+    text: 'Table 2, condition D: claim observations'
+    expected: 7457
+    comparison: exact_integer
+    pdf:
+      row: D - highest declared
+      col: 1
+  drift.D.addresses:
+    section: '5.3'
+    class: SUPPORTING_STABLE
+    experiment: drift
+    text: 'Table 2, condition D: unique addresses'
+    expected: 7457
+    comparison: exact_integer
+    pdf:
+      row: D - highest declared
+      col: 2
+  drift.D.revenue:
+    section: '5.3'
+    class: HEADLINE_STABLE
+    experiment: drift
+    text: 'Table 2, condition D: revenue in USD'
+    expected: 112426902
+    comparison: exact_integer
+    pdf:
+      row: D - highest declared
+      col: 3
+  drift.D.ratio_vs_B:
+    section: '5.3'
+    class: SUPPORTING_STABLE
+    experiment: drift
+    text: 'Table 2, condition D: ratio vs B'
+    expected: 0.1
+    comparison: rounded_decimal
+    decimals: 2
+    pdf:
+      row: D - highest declared
+      col: 4
+      suffix: x
+  drift.D.coverage_vs_B:
+    section: '5.3'
+    class: HEADLINE_STABLE
+    experiment: drift
+    text: 'Table 2, condition D: coverage vs B'
+    expected: 0.138
+    comparison: rounded_percent
+    decimals: 1
+    pdf:
+      row: D - highest declared
+      col: 5
+  drift.B.revenue@abstract:
+    section: Abstract
+    class: HEADLINE_STABLE
+    experiment: drift
+    text: deduplicated public labels produce USD 1.101 billion
+    metric: drift.B.revenue
+    expected: 1.101
+    comparison: rounded_decimal
+    decimals: 3
+    scale: !!float '1e-09'
+    pdf:
+      text: produce USD {v} billion at full coverage
+  drift.D.revenue@abstract:
+    section: Abstract
+    class: HEADLINE_STABLE
+    experiment: condition_d
+    text: the highest-declared-confidence tier produces USD 112.4 million
+    metric: drift.D.revenue
+    expected: 112.4
+    comparison: rounded_decimal
+    decimals: 1
+    scale: !!float '1e-06'
+    pdf:
+      text: produces USD {v} million at 13.8% coverage
+  drift.D.coverage@abstract:
+    section: Abstract
+    class: HEADLINE_STABLE
+    experiment: condition_d
+    text: at 13.8% coverage
+    metric: drift.D.coverage_vs_B
+    expected: 0.138
+    comparison: rounded_percent
+    decimals: 1
+    pdf:
+      text: million at {v} coverage
+  drift.spread_B_over_D:
+    section: '5.3'
+    class: HEADLINE_STABLE
+    experiment: drift
+    text: a 9.8x difference obtained by changing only the trust rule
+    expected: 9.8
+    comparison: rounded_decimal
+    decimals: 1
+    pdf:
+      text: That is a {v}x difference
+  drift.naive_inflation:
+    section: '5.3'
+    class: SUPPORTING_STABLE
+    experiment: drift
+    text: treating the two sources as independent raises the estimate by 24.2%
+    metric: drift.naive_inflation_vs_B
+    expected: 0.242
+    comparison: rounded_percent
+    decimals: 1
+    pdf:
+      text: raises the estimate by {v}
+  drift.double_counted:
+    section: '5.3'
+    class: SUPPORTING_STABLE
+    experiment: drift
+    text: 7,508 addresses are counted twice
+    metric: drift.double_counted_addresses
+    expected: 7508
+    comparison: exact_integer
+    pdf:
+      text: because {v} addresses are counted twice
+  drift.collapse_addresses_removed:
+    section: '5.3'
+    class: SUPPORTING_STABLE
+    experiment: drift
+    text: collapsing circular inheritance removes 21.8% of the addresses
+    metric: drift.addresses_removed_by_collapse
+    expected: 0.218
+    comparison: rounded_percent
+    decimals: 1
+    pdf:
+      text: removes {v} of the addresses
+  drift.collapse_value_removed:
+    section: '5.3'
+    class: SUPPORTING_STABLE
+    experiment: drift
+    text: collapsing circular inheritance removes 5.1% of the value
+    metric: drift.value_removed_by_collapse
+    expected: 0.051
+    comparison: rounded_percent
+    decimals: 1
+    pdf:
+      text: but only {v} of the value
+  unresolved_provenance.addresses:
+    section: '5.4'
+    class: HEADLINE_STABLE
+    experiment: unresolved_provenance
+    text: 853,583 addresses have unresolved provenance
+    expected: 853583
+    comparison: exact_integer
+    pdf:
+      text: cover {v} addresses, about 57.0%
+  unresolved_provenance.share:
+    section: '5.4'
+    class: HEADLINE_STABLE
+    experiment: unresolved_provenance
+    text: about 57.0% of the corpus has unresolved provenance
+    expected: 0.57
+    comparison: rounded_percent
+    decimals: 1
+    pdf:
+      text: addresses, about {v} of the corpus
+  anchors.n_reference_roots:
+    section: '4.3'
+    class: SUPPORTING_STABLE
+    experiment: anchors
+    text: two open reference roots are available (WatchYourBack and OFAC SDN)
+    expected: 2
+    comparison: exact_integer
+    pdf:
+      text: provide the {v} open reference roots
+      token: two
+  anchors.source_accuracy_robustly_estimable:
+    section: '4.3'
+    class: LIMITATION
+    experiment: anchors
+    text: the confidence intervals remain too wide to support a defensible 'dataset X is Y percent accurate' claim
+    expected: false
+    comparison: exact_string
+    pdf:
+      text: remain too wide to support a defensible claim
+      literal: true
+  threats.revenue_inherited_from_upstream:
+    section: '5.4'
+    class: LIMITATION
+    experiment: drift
+    text: revenue values are inherited from upstream datasets, not recomputed from the blockchain
+    machine_checkable: false
+    reason: a limitation of the study design; THEMIS reads the same upstream USD values
+  rq1.taxonomy_rules:
+    section: '3'
+    class: HEADLINE_STABLE
+    experiment: rq1_taxonomy
+    text: claims are classified by reproducible rules (verified / derived / unverified-report; currency-unknown, stale, conflicting, circular)
+    machine_checkable: false
+    reason: a methodological property proved by tests/test_rq1_taxonomy.py, which `themis reproduce-paper` runs and reports separately
+  diagnostics.agreement.exact:
+    section: '5.1'
+    class: DIAGNOSTIC
+    experiment: agreement_diagnostics
+    text: agreement outcome 'exact' (taxonomy-sensitive; the paper freezes none)
+    metric: diagnostics.agreement.exact
+  diagnostics.agreement.hierarchical refinement:
+    section: '5.1'
+    class: DIAGNOSTIC
+    experiment: agreement_diagnostics
+    text: agreement outcome 'hierarchical refinement' (taxonomy-sensitive; the paper freezes none)
+    metric: diagnostics.agreement.hierarchical refinement
+  diagnostics.agreement.entity-type conflict:
+    section: '5.1'
+    class: DIAGNOSTIC
+    experiment: agreement_diagnostics
+    text: agreement outcome 'entity-type conflict' (taxonomy-sensitive; the paper freezes none)
+    metric: diagnostics.agreement.entity-type conflict
+  diagnostics.agreement.licit/illicit conflict:
+    section: '5.1'
+    class: DIAGNOSTIC
+    experiment: agreement_diagnostics
+    text: agreement outcome 'licit/illicit conflict' (taxonomy-sensitive; the paper freezes none)
+    metric: diagnostics.agreement.licit/illicit conflict
+  diagnostics.agreement.incomparable:
+    section: '5.1'
+    class: DIAGNOSTIC
+    experiment: agreement_diagnostics
+    text: agreement outcome 'incomparable' (taxonomy-sensitive; the paper freezes none)
+    metric: diagnostics.agreement.incomparable
+  diagnostics.bootstrap.lower.exact.point:
+    section: '5.4'
+    class: DIAGNOSTIC
+    experiment: bootstrap
+    text: 'lower-bound cluster bootstrap, exact: point estimate (REGENERATED DIAGNOSTIC)'
+    metric: diagnostics.bootstrap.lower.exact.point
+  diagnostics.bootstrap.lower.hierarchical refinement.point:
+    section: '5.4'
+    class: DIAGNOSTIC
+    experiment: bootstrap
+    text: 'lower-bound cluster bootstrap, hierarchical refinement: point estimate (REGENERATED DIAGNOSTIC)'
+    metric: diagnostics.bootstrap.lower.hierarchical refinement.point
+  diagnostics.bootstrap.lower.licit/illicit conflict.point:
+    section: '5.4'
+    class: DIAGNOSTIC
+    experiment: bootstrap
+    text: 'lower-bound cluster bootstrap, licit/illicit conflict: point estimate (REGENERATED DIAGNOSTIC)'
+    metric: diagnostics.bootstrap.lower.licit/illicit conflict.point
+  diagnostics.bootstrap.upper.exact.point:
+    section: '5.4'
+    class: DIAGNOSTIC
+    experiment: bootstrap
+    text: 'upper-bound cluster bootstrap, exact: point estimate (REGENERATED DIAGNOSTIC)'
+    metric: diagnostics.bootstrap.upper.exact.point
+  diagnostics.bootstrap.upper.hierarchical refinement.point:
+    section: '5.4'
+    class: DIAGNOSTIC
+    experiment: bootstrap
+    text: 'upper-bound cluster bootstrap, hierarchical refinement: point estimate (REGENERATED DIAGNOSTIC)'
+    metric: diagnostics.bootstrap.upper.hierarchical refinement.point
+  diagnostics.bootstrap.upper.licit/illicit conflict.point:
+    section: '5.4'
+    class: DIAGNOSTIC
+    experiment: bootstrap
+    text: 'upper-bound cluster bootstrap, licit/illicit conflict: point estimate (REGENERATED DIAGNOSTIC)'
+    metric: diagnostics.bootstrap.upper.licit/illicit conflict.point

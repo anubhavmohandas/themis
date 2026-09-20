@@ -2,7 +2,7 @@
 Assessment. Runs the attribution-reliability audit from the command line.
 """
 from __future__ import annotations
-import argparse, json, os, sys, textwrap
+import argparse, json, os, pathlib, sys, textwrap
 from .corpus import Corpus
 from . import analysis, taxonomy, config_io, report as _report
 from .ingest import pipeline as _ingest_pipeline
@@ -355,6 +355,111 @@ def cmd_report(args):
         print(f"\nwritten {path}")
 
 
+# ----------------------------------------------------- paper reproduction
+_EXPERIMENTS = {   # `themis reproduce <name>` -> (function, what it writes beside its JSON)
+    "table1": "table1", "source-depth": "source_depth", "overlap": "overlap_matrix",
+    "rodwald-containment": "rodwald_containment", "montreal-recurrence": "montreal_recurrence",
+    "currency": "currency", "unresolved-provenance": "unresolved_provenance", "anchors": "anchors",
+    "table2": "table2", "condition-d": "condition_d_trace"}
+
+
+def _paper_corpus(args):
+    """The corpus for a paper command, or None after printing why there is none."""
+    from .paper import reproduce as _rp
+    try:
+        return load(args)
+    except FileNotFoundError as e:
+        print(_rp.format_summary(dict(status="BLOCKED", blocked=dict(
+            message=str(e), required=_rp.required_inputs()))))
+        return None
+
+
+def cmd_reproduce(args):
+    from .paper import experiments as ex, figures
+    c = _paper_corpus(args)
+    if c is None:
+        return 3
+    b = ex.AnalysisBundle(c)
+    res = getattr(ex, _EXPERIMENTS[args.experiment])(b)
+    if args.experiment == "rodwald-containment":
+        rule("RODWALD PROVENANCE DECODE  (group containment, derived - nothing names the candidate)")
+        for d in res["decodes"]:
+            print(f"  {d['dataset']}.{d['field']} against {d['candidate']}  decoded letters {d['decoded_letters']}"
+                  f"  clean split: {d['clean_split']}")
+            print(f"  {'group':<8}{'size':>9}{'inside':>9}{'containment':>13}  verdict")
+            for g in d["groups"]:
+                print(f"  {g['code']:<8}{g['size']:>9,}{g['overlap_with_candidate']:>9,}{100*g['containment']:>12.2f}%  {g['verdict']}")
+            print(f"\n  shared addresses {d['shared_addresses']:,} = {100*d['share_of_dataset']:.2f}% of {d['dataset']}, "
+                  f"{100*d['share_of_candidate']:.2f}% of {d['candidate']}")
+    else:
+        print(json.dumps(res, indent=1, default=str)[:20000])
+    if args.out_dir:
+        out = pathlib.Path(args.out_dir); out.mkdir(parents=True, exist_ok=True)
+        (out / f"{_EXPERIMENTS[args.experiment]}.json").write_text(json.dumps(res, indent=1, default=str))
+        if args.experiment == "rodwald-containment":
+            figures.write_rows(figures.fig1a_rows(b), out / "fig1a_data")
+        print(f"\nwritten {out}")
+
+
+def cmd_figures(args):
+    from .paper import experiments as ex, figures, reproduce as rp
+    out = pathlib.Path(args.out_dir or rp.results_root() / "paper_proof")
+    out.mkdir(parents=True, exist_ok=True)
+    if args.from_data:   # redraw from artifacts already on disk: no corpus needed
+        src = pathlib.Path(args.from_data)
+        rows = {n: json.loads((src / f"{n}_data.json").read_text()) for n in ("fig1a", "fig1b", "fig2")}
+        b = None
+    else:
+        c = _paper_corpus(args)
+        if c is None:
+            return 3
+        b = ex.AnalysisBundle(c)
+        rows = dict(fig1a=figures.fig1a_rows(b), fig1b=figures.fig1b_rows(b), fig2=figures.fig2_rows(b))
+        for n, r in rows.items():
+            figures.write_rows(r, out / f"{n}_data")
+    if not figures.HAVE_MPL:
+        print("matplotlib is not installed: data files written, figures not rendered "
+              "(pip install -e '.[figures]')", file=sys.stderr)
+        return 1
+    meta = dict(software_version=rp.__version__, git_commit=rp.git_state()["commit"], config_hash=_report._hash_config())
+    for n, f, fn in (("fig1a", figures.render_fig1a, "themis.provenance.decode_field"),
+                     ("fig1b", figures.render_fig1b, "themis.provenance.root_propagation"),
+                     ("fig2", figures.render_fig2, "themis.analysis.drift")):
+        print(f"  {n}: " + ", ".join(f(rows[n], out, dict(meta, input_artifact=f"{n}_data.json", analysis_function=fn))))
+    print(f"figures written to {out}")
+
+
+def cmd_verify_paper(args):
+    from .paper import experiments as ex, metrics as pm, verify as pv
+    manifest = pv.load_manifest(args.claims)
+    if args.metrics:
+        m = pm.PaperMetrics.from_json(json.load(open(args.metrics)))
+    else:
+        c = _paper_corpus(args)
+        if c is None:
+            return 3
+        m = pm.build(ex.AnalysisBundle(c, bootstrap="both" if args.with_bootstrap else "none"))
+    res = pv.verify(m, manifest, pdf=args.paper)
+    print(pv.format_console(res))
+    if args.json:
+        json.dump(res, open(args.json, "w"), indent=1, default=str)
+    if args.claim_map:
+        open(args.claim_map, "w").write(pv.claim_map_markdown(res))
+        print(f"\nclaim map written to {args.claim_map}")
+    return {"PASS": 0, "FAIL": 1, "BLOCKED": 3}[res["status"]]
+
+
+def cmd_reproduce_paper(args):
+    from .paper import reproduce as rp
+    out = rp.reproduce(observations=args.observations, as_of=args.as_of, bootstrap=args.bootstrap,
+                       out_root=pathlib.Path(args.results_dir) if args.results_dir else None,
+                       run_id=args.run_id, manifest_path=args.claims, pdf=args.paper,
+                       with_rq1=not args.no_rq1, progress=None if args.quiet else
+                       (lambda ev, st, *_: print(f"  {ev:<9}{st}", file=sys.stderr) if ev == "start" else None))
+    print(rp.format_summary(out))
+    return {"PASS": 0, "FAIL": 1, "BLOCKED": 3}[out["status"]]
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(
         prog="themis",
@@ -414,6 +519,36 @@ def main(argv=None):
     ig.add_argument("--map", action="append",
                     help="override a schema role, e.g. --map address=btc_addr (repeatable)")
     ig.set_defaults(fn=cmd_ingest)
+
+    rp = sub.add_parser("reproduce-paper", help="run every paper experiment, write results/reproduction/<run>, "
+                                                "and compare with the manuscript")
+    rp.add_argument("--bootstrap", choices=["none", "lower", "both"], default="both",
+                    help="provenance-bound bootstrap bounds to regenerate (default: both)")
+    rp.add_argument("--results-dir", help="root for reproduction/ (default: $THEMIS_RESULTS_DIR or ./results)")
+    rp.add_argument("--run-id")
+    rp.add_argument("--claims", help="paper manifest (default: paper/paper_claims.yml)")
+    rp.add_argument("--paper", help="the final PDF, for the secondary manuscript check")
+    rp.add_argument("--no-rq1", action="store_true", help="skip running the RQ1 taxonomy tests")
+    rp.add_argument("--quiet", action="store_true")
+    rp.set_defaults(fn=cmd_reproduce_paper)
+
+    vp = sub.add_parser("verify-paper", help="compare generated metrics with paper/paper_claims.yml and the PDF")
+    vp.add_argument("--claims", help="paper manifest (default: paper/paper_claims.yml)")
+    vp.add_argument("--paper", help="the final PDF text is checked against the manifest too")
+    vp.add_argument("--metrics", help="verify a saved paper_metrics.json instead of recomputing")
+    vp.add_argument("--with-bootstrap", action="store_true", help="also regenerate the bootstrap diagnostics")
+    vp.add_argument("--claim-map", metavar="FILE", help="write PAPER_CLAIM_MAP.md here")
+    vp.set_defaults(fn=cmd_verify_paper)
+
+    fg = sub.add_parser("figures", help="regenerate Figures 1 and 2 (data + PNG/PDF/SVG) from generated results")
+    fg.add_argument("--out-dir")
+    fg.add_argument("--from-data", metavar="DIR", help="redraw from fig*_data.json in DIR; needs no corpus")
+    fg.set_defaults(fn=cmd_figures)
+
+    rx = sub.add_parser("reproduce", help="run one paper experiment on its own")
+    rx.add_argument("experiment", choices=sorted(_EXPERIMENTS))
+    rx.add_argument("--out-dir")
+    rx.set_defaults(fn=cmd_reproduce)
 
     a = p.parse_args(argv)
     if a.data_dir:

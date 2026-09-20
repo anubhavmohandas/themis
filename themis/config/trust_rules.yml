@@ -30,3 +30,18 @@ policies:
     label: "highest-declared-confidence tier only"
     aggregation: dedup_max_per_address
     eligibility: [anchor_membership]
+    # What the externally-assembled anchor set is declared to consist of, in
+    # each source's OWN vocabulary. This does not drive eligibility (the anchor
+    # set does); the Condition D trace reads it to check, address by address,
+    # that the retained addresses really carry such a claim in the corpus.
+    # These are declarations by the sources, not THEMIS evidence tiers, and are
+    # not re-verified here (see confidence_semantics in config/sources/tagpack.yml).
+    declared_confidence_criteria:
+      - source: tagpack
+        field: subcat
+        equals: forensic
+        meaning: "GraphSense tag declared confidence id `forensic` (a creator's declaration about a report)"
+      - source: watchyourback
+        field: canon
+        equals: ransomware
+        meaning: "WatchYourBack manually annotated ransomware address (evidence not re-checkable here)"
