@@ -26,12 +26,15 @@ export function PaperRef({ sec }) {
   );
 }
 
-export function Section({ title, sec, meta, note, children, id }) {
+// Restrained population label: which data a section's numbers were counted over.
+export const PopTag = ({ children }) => <span className="poptag">{children}</span>;
+
+export function Section({ title, sec, meta, tag, note, children, id }) {
   return (
     <section className="section" id={id}>
       <div className="section-head">
         <h2>{title}</h2>
-        {(meta || sec) && <span className="section-meta">{meta}{sec && <PaperRef sec={sec} />}</span>}
+        {(meta || sec || tag) && <span className="section-meta">{tag && <PopTag>{tag}</PopTag>}{meta}{sec && <PaperRef sec={sec} />}</span>}
       </div>
       {note && <p className="section-note">{note}</p>}
       {children}
@@ -40,17 +43,18 @@ export function Section({ title, sec, meta, note, children, id }) {
 }
 
 // ---------------------------------------------------------------------- metrics
-// items: {label, value, sub, to, tone, top, text}. Clickable when `to` is set.
+// items: {label, value, sub, tag, to, tone, top, text}. Clickable when `to` is set; `tag` names the data the figure counts.
 export function MetricStrip({ items, cols }) {
   const n = cols || items.length;
   return (
-    <div className={`metrics${n === 3 ? " c3" : ""}`}>
+    <div className={`metrics${n === 3 ? " c3" : n === 5 ? " c5" : ""}`}>
       {items.map((m) => {
         const inner = (
           <>
             <div className="m-label">{m.label}</div>
             <div className={`m-val${m.text ? " text" : ""} ${m.tone || ""}`}>{m.value}</div>
             {m.sub && <div className="m-sub">{m.sub}</div>}
+            {m.tag && <div className="m-tag">{m.tag}</div>}
           </>
         );
         const cls = `metric${m.top ? " topline" : ""}${m.top === "hot" ? " hot" : ""}`;
@@ -96,6 +100,21 @@ export const Legend = ({ items }) => (
     ))}
   </div>
 );
+
+// Which records a drill-down landed on. `table` is the population of the records shown,
+// `asked` the population of the figure that was clicked: a sample figure must never open
+// the full corpus, nor a full-corpus figure open the sample, without saying so.
+export function RecordsNote({ table, asked, sampleDetail }) {
+  let text = null;
+  if (table === "bundled_sample") {
+    text = asked && asked !== "bundled_sample"
+      ? "You followed a full-corpus figure, but the full corpus is not loaded. These are the bundled sample's records for the same filter, so counts here will not equal that figure."
+      : <>These records are the bundled sample. {sampleDetail} Corpus-wide figures on Overview are not counts of this table.</>;
+  } else if (table === "normalized_full_corpus" && asked === "bundled_sample") {
+    text = "You followed a bundled-sample figure, but the full corpus is loaded. These are the full corpus's records, so counts here can differ from that figure.";
+  }
+  return text ? <div className="sample-banner">{text}</div> : null;
+}
 
 // ------------------------------------------------------------------ status text
 // Status is always a word, never colour alone.

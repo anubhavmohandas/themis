@@ -8,11 +8,11 @@ export const OUTCOMES = [
   { key: "exact", label: "Exact agreement", short: "agree", tone: "ok", fill: "var(--tl)",
     to: (o) => `/claims?outcome=exact${o}` },
   { key: "hierarchical refinement", label: "Hierarchical refinement", short: "refinement", tone: "flag", fill: "var(--oc)",
-    to: () => "/conflicts?kind=hierarchical" },
+    to: (o) => `/conflicts?kind=hierarchical${o}` },
   { key: "entity-type conflict", label: "Entity-type conflict", short: "entity-type", tone: "hot", fill: "var(--ac)",
-    to: () => "/conflicts?kind=entity" },
+    to: (o) => `/conflicts?kind=entity${o}` },
   { key: "licit/illicit conflict", label: "Licit / illicit conflict", short: "licit/illicit", tone: "hot", fill: "var(--ac)",
-    to: () => "/conflicts?kind=polarity" },
+    to: (o) => `/conflicts?kind=polarity${o}` },
   { key: "incomparable", label: "Incomparable", short: "incomparable", tone: "mut", fill: null, hatch: true,
     to: (o) => `/claims?outcome=incomparable${o}` },
 ];
@@ -88,4 +88,28 @@ export const ROOT_KIND_TEXT = {
   DECLARED: "declared",
   INFERRED: "inferred",
   UNKNOWN: "unresolved",
+};
+
+// ---- metric population wording. The backend (themis/overview.py) labels every metric with
+// {unit, population, quality}; these only say it in words. No numbers, no analytics.
+const BASIS = { live: "LIVE FULL CORPUS", manifest: "FULL-CORPUS MANIFEST" };
+const POP_SUFFIX = { normalized_full_corpus: "NORMALIZED ADDRESSES", raw_address_keys: "RAW ADDRESS KEYS", claims_full_corpus: "CLAIM BASED" };
+const POP_NOUN = { normalized_full_corpus: "normalized addresses", raw_address_keys: "raw address keys", claims_full_corpus: "claims" };
+
+// "LIVE FULL CORPUS · NORMALIZED ADDRESSES", "BUNDLED SAMPLE", "NOT AVAILABLE"
+export function popTag(m) {
+  if (m.quality === "unavailable") return "NOT AVAILABLE";
+  if (m.population === "bundled_sample") return "BUNDLED SAMPLE";
+  return `${BASIS[m.quality] || "UNVERIFIED"} · ${POP_SUFFIX[m.population]}`;
+}
+// what a metric's denominator counts, in words
+export const popNoun = (m) => (m.population === "bundled_sample" ? `bundled-sample ${m.unit}` : POP_NOUN[m.population]);
+
+// the records table a drill-down lands on, keyed like a metric's population
+export const scopePopulation = (scope) => (scope === "FULL_CORPUS" ? "normalized_full_corpus" : scope === "BUNDLED_SAMPLE" ? "bundled_sample" : null);
+export const SCOPE_LABEL = { FULL_CORPUS: "Full corpus", BUNDLED_SAMPLE: "Bundled sample" };
+// Overview introduction, by the corpus the analysis actually loaded
+export const SCOPE_INTRO = {
+  FULL_CORPUS: "Computed from the reconstructed seven-source research corpus used for the verified paper reproduction.",
+  BUNDLED_SAMPLE: "Sample-backed view. Corpus-wide values are identified separately; full paper reproduction requires the external research corpus.",
 };

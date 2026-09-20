@@ -135,7 +135,7 @@ export default function HomePage() {
                 <label className="field">Source id:
                   <input type="text" value={sourceId} onChange={(e) => setSourceId(e.target.value)} style={{ width: 170 }} />
                 </label>
-                <label className="field" title="Compare against the bundled seven-dataset reference corpus. Without it only internal checks (address validity, currency) are possible.">
+                <label className="field" title="Compare against the reference corpus. Without it only internal checks (address validity, currency) are possible.">
                   <input type="checkbox" checked={useReference} onChange={(e) => setUseReference(e.target.checked)} />
                   compare against reference corpus
                 </label>
@@ -222,7 +222,7 @@ export default function HomePage() {
           <div className="panel pad">
             <div className="form-label">Reproduce the paper</div>
             <p className="mut" style={{ fontSize: 12.5, lineHeight: 1.6, margin: "0 0 12px" }}>
-              Run the published method on the bundled seven-source research corpus: provenance, agreement, independence, chance-corrected agreement and currency. Drift, the bootstrap and anchor validation run on demand from <Link to="/paper">Reproduce Paper</Link>.
+              Run the published method on the seven-source research corpus: provenance, agreement, independence, chance-corrected agreement and currency. Drift, the bootstrap and anchor validation run on demand from <Link to="/paper">Reproduce Paper</Link>.
             </p>
             <button type="button" className="btn secondary" onClick={runPaper} disabled={paper.job?.status === "running"}>
               {paper.job?.status === "running" ? "Running…" : "Reproduce paper"}

@@ -132,7 +132,7 @@ def ingest(path: str, source_id: str, mapping_override: dict | None = None,
         if getattr(reference, "sample_note", None):
             limitations.append("Reference corpus is a bundled sample, not the full published "
                                "corpus: cross-source figures above cover only what the sample "
-                               "contains. " + reference.sample_note)
+                               "contains.")
     else:
         limitations.append("Cross-source comparison unavailable: no reference corpus was supplied.")
         limitations.append("Provenance extraction limited: this source has no declared "

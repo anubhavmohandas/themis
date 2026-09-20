@@ -30,7 +30,7 @@ export default function PaperPage() {
 
       <PaperProof />
 
-      <Section title="Explore the reproduced corpus" note="Create an analysis workspace from the bundled corpus to open it in the other pages. The corpus audit runs when it is created; trust-rule sensitivity, the cluster bootstrap and anchor validation run on demand, one at a time.">
+      <Section title="Explore the reproduced corpus" note="Create an analysis workspace from the loaded research corpus to open it in the other pages. The corpus audit runs when it is created; trust-rule sensitivity, the cluster bootstrap and anchor validation run on demand, one at a time.">
         <div className="panel pad" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: 260, fontSize: 12.5, lineHeight: 1.6 }}>
             {isPaper

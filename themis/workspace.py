@@ -31,6 +31,7 @@ class AnalysisWorkspace:
     schema_mapping: dict | None = None
     claims: list = dataclasses.field(default_factory=list)
     reference_corpus_version: str | None = None
+    corpus_scope: str | None = None          # FULL_CORPUS | BUNDLED_SAMPLE, for a paper reproduction
     warnings: list = dataclasses.field(default_factory=list)
     result: dict | None = None               # the canonical AnalysisResult (STEP 24)
     audit_trail: dict | None = None
@@ -39,7 +40,8 @@ class AnalysisWorkspace:
         """The small, list-friendly summary - never the full claim list."""
         return dict(analysis_id=self.analysis_id, mode=self.mode, dataset_name=self.dataset_name,
                     created_at=self.created_at, analysis_as_of_date=self.analysis_as_of_date,
-                    blockchain=self.blockchain, n_claims=len(self.claims), warnings=self.warnings)
+                    blockchain=self.blockchain, n_claims=len(self.claims), warnings=self.warnings,
+                    corpus_scope=self.corpus_scope)
 
 
 class WorkspaceStore:

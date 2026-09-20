@@ -4,8 +4,8 @@ import { api } from "../lib/api.js";
 import { useApiData } from "../lib/useApi.js";
 import { useAnalysis } from "../lib/AnalysisContext.jsx";
 import { fmt, humanize, pct } from "../lib/format.js";
-import { CONFLICT_KINDS, PROVENANCE, RELATIONSHIPS, RELATIONSHIP_TEXT, ROOT_KIND_TEXT } from "../lib/vocab.js";
-import { ErrorBox, FilterSelect, Gate, Loading, MetricStrip, PageHead, Pager, RadioRow, SearchBox, Section, Status } from "../components/ui.jsx";
+import { CONFLICT_KINDS, PROVENANCE, RELATIONSHIPS, RELATIONSHIP_TEXT, ROOT_KIND_TEXT, scopePopulation } from "../lib/vocab.js";
+import { ErrorBox, FilterSelect, Gate, Loading, MetricStrip, PageHead, Pager, RadioRow, RecordsNote, SearchBox, Section, Status } from "../components/ui.jsx";
 
 const PAGE = 25;
 const OUTCOME_OF_KIND = { polarity: "licit/illicit conflict", entity: "entity-type conflict", hierarchical: "hierarchical refinement", incomparable: "incomparable" };
@@ -15,7 +15,7 @@ export default function ConflictsPage() {
 }
 
 function Body() {
-  const { analysisId, result, isPaper } = useAnalysis();
+  const { analysisId, result, isPaper, corpusScope } = useAnalysis();
   const [sp, setSp] = useSearchParams();
   const get = (k) => sp.get(k) || "";
   const offset = Number(get("offset")) || 0;
@@ -53,8 +53,10 @@ function Body() {
 
   return (
     <div>
-      <PageHead kicker="Conflict Explorer" title="Attribution conflicts"
+      <PageHead kicker={`Conflict Explorer${isPaper && corpusScope === "BUNDLED_SAMPLE" ? " · sample agreement records" : ""}`} title="Attribution conflicts"
         lead="Where two public sources disagree about the same address. THEMIS records the disagreement and its provenance context; it does not adjudicate which source is correct." />
+
+      {isPaper && <RecordsNote table={scopePopulation(corpusScope)} asked={get("population")} />}
 
       {counts && (
         <MetricStrip items={[

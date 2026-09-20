@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../lib/api.js";
 import { useAnalysis } from "../lib/AnalysisContext.jsx";
 import { dateTime, fmt, shortId } from "../lib/format.js";
+import { SCOPE_LABEL } from "../lib/vocab.js";
 
 const GROUPS = [
   { title: "Analysis", needsAnalysis: true, items: [
@@ -24,7 +25,7 @@ export const PAGE_TITLES = {
 function modeLabel(mode) { return mode === "PAPER_REPRODUCTION" ? "Paper reproduction" : "Uploaded dataset"; }
 
 function ActiveAnalysis() {
-  const { analysisId, meta, summary, summaryError, stopped, chain, nClaims, nAddresses, analyses, activate, isPaper } = useAnalysis();
+  const { analysisId, meta, summary, summaryError, stopped, chain, nClaims, nAddresses, addrLabel, corpusScope, analyses, activate } = useAnalysis();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const nav = useNavigate();
@@ -48,11 +49,12 @@ function ActiveAnalysis() {
         <div role="button" tabIndex={0} style={{ cursor: "pointer" }} onClick={() => setOpen((o) => !o)}
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen((o) => !o); } }}>
           <div className="aa-mode"><span className="dot" />{modeLabel(meta.mode)}</div>
+          {corpusScope && <div className="aa-scope">{SCOPE_LABEL[corpusScope] || corpusScope}</div>}
           <div className="aa-name">{meta.dataset_name}</div>
           <div className="aa-facts">
             <span>chain</span><b>{chain || "—"}</b>
             <span>claims</span><b>{summary ? fmt(nClaims) : "…"}</b>
-            <span>{isPaper ? "addrs" : "targets"}</span><b>{summary ? fmt(nAddresses) : "…"}</b>
+            <span>{addrLabel}</span><b>{summary ? fmt(nAddresses) : "…"}</b>
           </div>
           <div className="aa-status" style={{ color: summaryError || stopped ? "var(--ac)" : summary ? "var(--tl)" : "var(--mut)" }}>
             <span className="dot" />

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAnalysis } from "../lib/AnalysisContext.jsx";
 import { fmt, humanize, kappaText, pct } from "../lib/format.js";
-import { OUTCOMES } from "../lib/vocab.js";
+import { OUTCOMES, SCOPE_INTRO, SCOPE_LABEL, popNoun, popTag } from "../lib/vocab.js";
 import { BarRows, Gate, Legend, Limitations, MetricStrip, PageHead, Section, Status } from "../components/ui.jsx";
 
 // Every figure below is read from the backend's result object. Percentages
@@ -27,13 +27,18 @@ function agreementRows(outcomes, extraQuery = "") {
   });
 }
 
-function currencyRows(f, nLabel) {
-  return [
-    { key: "current", label: "Current", n: f.current, share: f.current_share, fill: "var(--tl)", to: "/claims?currency=current" },
-    { key: "stale", label: "Stale", n: f.stale, share: f.stale_share, fill: "var(--oc)", to: "/claims?currency=stale" },
-    { key: "unknown", label: "Currency unknown (no revision date)", n: f.currency_unknown, share: f.currency_unknown_share,
-      hatch: true, to: "/claims?currency=currency-unknown" },
-  ].map((r) => ({ ...r, pct: pct(r.share), n: `${fmt(r.n)} / ${nLabel}` }));
+const CURRENCY_ROWS = [
+  { key: "current", label: "Current", fill: "var(--tl)", q: "current" },
+  { key: "stale", label: "Stale", fill: "var(--oc)", q: "stale" },
+  { key: "currency_unknown", label: "Currency unknown (no revision date)", hatch: true, q: "currency-unknown" },
+];
+// parts: [{key, n, share}] from the backend; base: the drill-down path (with its population, if any)
+function currencyRows(parts, nLabel, base = "/claims") {
+  const sep = base.includes("?") ? "&" : "?";
+  return CURRENCY_ROWS.map(({ q, ...row }) => {
+    const p = parts.find((x) => x.key === row.key);
+    return { ...row, share: p.share, pct: pct(p.share), n: `${fmt(p.n)} / ${nLabel}`, to: `${base}${sep}currency=${q}` };
+  });
 }
 
 function Cell({ label, big, den, share, fill, to, tone }) {
@@ -119,95 +124,122 @@ function ReliabilityProfile({ profile }) {
 }
 
 // ---------------------------------------------------------------------- paper
+// Every figure is one backend metric record (result.overview, themis/overview.py) carrying its
+// own unit, population and quality; a share is only ever taken inside one population. This page
+// words those records, links them, and says which data each was counted over.
+const link = (path, m) => `${path}${path.includes("?") ? "&" : "?"}population=${m.population}`;
+const has = (m) => m.quality !== "unavailable";
+
 function PaperOverview() {
   const { result: r } = useAnalysis();
-  const { dataset_summary: ds, agreement: ag, independence: ind, kappa, freshness: f, shares: sh } = r;
-  const nAddr = fmt(ds.n_addresses);
-  const nSources = Object.keys(ds.sources).length;
+  const { independence: ind, kappa } = r;
+  const { scope, metrics: M } = r.overview;
+  const full = scope === "FULL_CORPUS";
+  const { claims, normalized_addresses: norm, raw_address_keys: raw, multi_dataset: multi, single_source: single,
+    source_depth: depth, agreement: agr, unresolved_provenance: unres, root_concentration: roots,
+    source_contribution: contrib, currency: cur, claims_without_revision: noRev } = M;
   const top = ind.root_concentration?.[0];
+  const unknown = cur.parts.find((x) => x.key === "currency_unknown");
 
   const limits = [
-    `${pct(sh.single_source_share)} of addresses (${fmt(ag.single_source)} / ${nAddr}) carry a claim from exactly one dataset, so no public cross-source comparison is possible for them.`,
-    `${pct(ind.unresolved_addr_share)} of addresses (${fmt(ind.unresolved_addresses)} / ${nAddr}) resolve to no identified provenance root. Unresolved is never scored as independent.`,
-    top && `The largest root, ${top.root}, accounts for ${pct(top.share)} of all claims (${fmt(top.claims)} / ${fmt(ds.n_claims)}) and is ${top.resolved ? "identified" : "unresolved"}.`,
-    kappa.n_undefined > 0 && `κ is undefined for ${fmt(kappa.n_undefined)} of ${fmt(kappa.n_pairs)} overlapping pairs because the shared region is single-class.`,
-    `${pct(f.currency_unknown_share)} of the ${fmt(f.n_claims)} claims analysed (${fmt(f.currency_unknown)} / ${fmt(f.n_claims)}${r.freshness_scope?.sample ? ", bundled sample" : ""}) carry no revision date; they are reported as currency-unknown, never as stale.`,
+    has(single)
+      ? `${popTag(single)} · ${pct(single.share)} of ${popNoun(single)} (${fmt(single.numerator)} / ${fmt(single.denominator)}) carry a claim from exactly one dataset, so no public cross-source comparison is possible for them.`
+      : `${popTag(multi)} · The share of addresses with no public cross-source comparison cannot be stated from the sample; it needs the normalized full corpus.`,
+    has(unres) && `${popTag(unres)} · ${pct(unres.share)} of ${popNoun(unres)} (${fmt(unres.numerator)} / ${fmt(unres.denominator)}) resolve to no identified provenance root. Unresolved is never scored as independent.`,
+    top && `${popTag(roots)} · The largest root, ${top.root}, accounts for ${pct(top.share)} of all claims (${fmt(top.claims)} / ${fmt(roots.denominator)}) and is ${top.resolved ? "identified" : "unresolved"}.`,
+    kappa.n_undefined > 0 && `${popTag(agr)} · κ is undefined for ${fmt(kappa.n_undefined)} of ${fmt(kappa.n_pairs)} overlapping pairs because the shared region is single-class.`,
+    `${popTag(cur)} · ${pct(unknown.share)} of the ${fmt(cur.value)} claims analysed (${fmt(unknown.n)} / ${fmt(cur.denominator)}) carry no revision date; they are reported as currency-unknown, never as stale.`,
     ...(r.limitations || []),
   ].filter(Boolean);
 
   return (
     <div>
-      <PageHead kicker="Corpus audit · paper reproduction" title="Attribution corpus overview"
-        lead="Composition, corroboration depth, agreement outcomes and independence, computed from the bundled seven-source reference corpus. Every figure carries its denominator; click a figure to open the records behind it." />
+      <PageHead kicker={`Corpus audit · paper reproduction · ${SCOPE_LABEL[scope].toLowerCase()}`} title="Attribution corpus overview"
+        lead={`Composition, corroboration depth, agreement diagnostics and independence. ${SCOPE_INTRO[scope]} Every figure carries its denominator and the population it was counted over; click a figure to open the records behind it.`} />
 
       <MetricStrip items={[
-        { label: "Claims", value: fmt(ds.n_claims), sub: `across ${nSources} sources` },
-        { label: "Addresses", value: nAddr, sub: "distinct, at least one claim" },
-        { label: "Multi-dataset addresses", value: pct(ag.multi_source_rate),
-          sub: `${fmt(ag.n_multi_source)} / ${nAddr} · appear in ≥2 datasets`, to: "/claims?comparable=yes", top: true },
-        { label: "Unresolved provenance", value: pct(ind.unresolved_addr_share), tone: "hot", top: "hot",
-          sub: <>{fmt(ind.unresolved_addresses)} / {nAddr} addresses<br />{pct(sh.resolved_addr_share)} have a resolved provenance root</>,
-          to: "/claims?provenance=unresolved" },
+        { label: "Claims", value: fmt(claims.value), sub: `across ${claims.sources} sources`, tag: popTag(claims) },
+        has(norm)
+          ? { label: "Normalized addresses", value: fmt(norm.value), sub: "after source-specific normalization", tag: popTag(norm) }
+          : { label: "Normalized addresses", value: "not available", text: true, sub: "needs the full corpus loaded", tag: popTag(norm) },
+        { label: "Raw address keys", value: fmt(raw.value), sub: "before cross-source normalization", tag: popTag(raw) },
+        { label: "Multi-dataset addresses", value: fmt(multi.value), top: true, tag: popTag(multi),
+          sub: full ? `${pct(multi.share)} of ${fmt(multi.denominator)} normalized addresses · in ≥2 datasets`
+            : "in the bundled sample · the full corpus adds more after normalization",
+          to: link("/claims?comparable=yes", multi) },
+        { label: "Unresolved provenance", value: pct(unres.share), tone: "hot", top: "hot", tag: popTag(unres),
+          sub: <>{fmt(unres.numerator)} / {fmt(unres.denominator)} {popNoun(unres)}<br />{pct(unres.resolved_share)} have a resolved provenance root</>,
+          to: link("/claims?provenance=unresolved", unres) },
       ]} />
 
-      <Section title="Reference comparability" sec="5.1"
-        note="Addresses for which at least one second public attribution claim exists. The remainder is not unreliable: it is unverifiable against any other public source.">
-        <div className="split c2">
-          <Cell label="Multi-dataset addresses, named by ≥2 datasets" big={pct(ag.multi_source_rate)} tone="ok"
-            den={`${fmt(ag.n_multi_source)} / ${nAddr}`} share={ag.multi_source_rate} fill="var(--tl)" to="/claims?comparable=yes" />
-          <Cell label="No public comparison available (single-source)" big={pct(sh.single_source_share)}
-            den={`${fmt(ag.single_source)} / ${nAddr}`} share={sh.single_source_share} fill="var(--nt2)" to="/claims?outcome=single-source" />
-        </div>
+      <Section title="Reference comparability" sec="5.1" tag={popTag(multi)}
+        note="Addresses for which at least one second public attribution claim exists. The remainder is not unreliable; it has no public cross-source comparison available in this corpus.">
+        {full ? (
+          <div className="split c2">
+            <Cell label="Multi-dataset addresses, named by ≥2 datasets" big={pct(multi.share)} tone="ok"
+              den={`${fmt(multi.numerator)} / ${fmt(multi.denominator)} ${popNoun(multi)}`} share={multi.share} fill="var(--tl)" to={link("/claims?comparable=yes", multi)} />
+            <Cell label="No public cross-source comparison available (single-source)" big={pct(single.share)}
+              den={`${fmt(single.numerator)} / ${fmt(single.denominator)} ${popNoun(single)}`} share={single.share} fill="var(--nt2)" to={link("/claims?outcome=single-source", single)} />
+          </div>
+        ) : (
+          <div className="split c2">
+            <Cell label="Multi-dataset addresses in the bundled sample" big={fmt(multi.value)} den="sample addresses, no corpus-wide share"
+              to={link("/claims?comparable=yes", multi)} />
+            <Cell label="No public cross-source comparison available (single-source)" big="—" den="needs the normalized full corpus" />
+          </div>
+        )}
       </Section>
 
-      <Section title="Agreement outcomes" sec="5.1" meta={`n = ${fmt(ag.n_multi_source)} multi-dataset addresses`}>
+      <Section title="Agreement diagnostics" sec="5.1" tag={popTag(agr)}
+        meta={`n = ${fmt(agr.value)} ${full ? "" : "sample "}multi-dataset addresses`}
+        note={full ? "Diagnostic and taxonomy-sensitive, not a headline reliability score."
+          : "Diagnostic and taxonomy-sensitive, not a headline reliability score. These outcomes refer to the frozen research sample; the full normalized corpus adds multi-dataset addresses through the WatchYourBack marker join and is available only when it is loaded."}>
         <div className="panel pad">
-          <BarRows rows={agreementRows(ag.outcomes)} />
+          <BarRows rows={agreementRows(agr.outcomes, `&population=${agr.population}`)} />
           <Legend items={[
             { label: "agreement", fill: "var(--tl)" }, { label: "refinement", fill: "var(--oc)" },
             { label: "conflict", fill: "var(--ac)" }, { label: "no shared taxonomy path", hatch: true }]} />
         </div>
-        {ag.sources_per_address && (
-          <p className="section-note" style={{ marginTop: 11 }}>
-            Datasets naming a multi-dataset address: {Object.entries(ag.sources_per_address).filter(([k]) => Number(k) > 1)
-              .map(([k, n]) => `${k} datasets: ${fmt(n)}`).join(" · ")} (of {fmt(ag.n_multi_source)}).
-          </p>
-        )}
+        <p className="section-note" style={{ marginTop: 11 }}>
+          Datasets naming a multi-dataset address: {depth.parts.map((x) => `${x.key} datasets: ${fmt(x.n)}`).join(" · ")} (of {fmt(depth.denominator)}{full ? " normalized" : " sample"} multi-dataset addresses).
+        </p>
       </Section>
 
-      <Section title="Chance-corrected agreement" meta={`Cohen’s κ · ${kappa.n_pairs} pairs`}
+      <Section title="Chance-corrected agreement" tag={popTag(agr)} meta={`Cohen’s κ · ${kappa.n_pairs} pairs`}
         note="Raw agreement flatters a corpus dominated by one category. κ is shown only where the shared region is not single-class.">
         <Kappa kappa={kappa} />
       </Section>
 
-      <Section title="Provenance concentration" sec="5.2" meta={`${ind.n_roots_total} roots · ${ind.n_roots_identified} identified`}>
+      <Section title="Provenance concentration" sec="5.2" tag={popTag(roots)} meta={`${roots.value} roots · ${roots.identified} identified`}>
         <div className="panel pad">
           <BarRows cols="250px 1fr 66px 170px" rows={ind.root_concentration.map((x) => ({
             key: x.root, label: x.root, labelMono: true, share: x.share, pct: pct(x.share),
-            n: `${fmt(x.claims)} / ${fmt(ds.n_claims)}`, fill: "var(--nt)", hatch: !x.resolved }))} />
+            n: `${fmt(x.claims)} / ${fmt(roots.denominator)}`, fill: "var(--nt)", hatch: !x.resolved }))} />
           <Legend items={[{ label: "resolved root", fill: "var(--nt)" }, { label: "unresolved root", hatch: true }]} />
         </div>
         <p className="section-note" style={{ marginTop: 11 }}>
-          Top {ind.root_concentration.length} of {ind.n_roots_total} roots by claim count. Apparent multi-dataset corroboration can still collapse into one root; see <Link to="/provenance">Provenance</Link>.
+          Unit: claims. Top {ind.root_concentration.length} of {roots.value} roots by claim count. Apparent multi-dataset corroboration can still collapse into one root; see <Link to="/provenance">Provenance</Link>.
         </p>
       </Section>
 
-      <Section title="Source coverage" meta={`${nSources} sources`}>
+      <Section title="Claim contribution by source" tag={popTag(contrib)} meta={`${contrib.parts.length} sources`}
+        note="Unit: claims. Each source's claim count over the corpus's total claims; a source's unique-address count is a different unit and is not divided by claims here.">
         <div className="panel pad">
-          <BarRows cols="190px 1fr 74px 170px" rows={Object.entries(ds.sources).map(([name, n]) => ({
-            key: name, label: name, labelMono: true, share: sh.source_claim_shares[name], pct: pct(sh.source_claim_shares[name]),
-            n: `${fmt(n)} / ${fmt(ds.n_claims)}`, fill: "var(--nt)", to: `/claims?source=${name}` }))} />
+          <BarRows cols="190px 1fr 74px 170px" rows={contrib.parts.map((x) => ({
+            key: x.key, label: x.key, labelMono: true, share: x.share, pct: pct(x.share),
+            n: `${fmt(x.n)} / ${fmt(contrib.denominator)}`, fill: "var(--nt)", to: link(`/claims?source=${x.key}`, contrib) }))} />
         </div>
       </Section>
 
-      <Section title="Currency" meta={`as of ${r.analysis_as_of_date}`}
+      <Section title={full ? "Currency" : "Sample currency diagnostics"} tag={popTag(cur)} meta={`as of ${r.overview.analysis_as_of}`}
         note="A claim with no revision date is currency-unknown, never stale: absence of a date is not evidence of staleness.">
         <div className="panel pad">
-          <BarRows cols="230px 1fr 74px 170px" rows={currencyRows(f, fmt(f.n_claims))} />
-          {r.freshness_scope && (
+          <div className="pophead"><b>{full ? "LIVE FULL CORPUS" : "BUNDLED SAMPLE"}</b> · {fmt(cur.value)} claims</div>
+          <BarRows cols="230px 1fr 74px 170px" rows={currencyRows(cur.parts, fmt(cur.denominator), link("/claims", cur))} />
+          {!full && (
             <div className="small mut" style={{ marginTop: 10 }}>
-              Judged at {r.analysis_as_of_date} over {fmt(r.freshness_scope.n_claims_analysed)} claims
-              {r.freshness_scope.sample ? ` in the bundled sample, of ${fmt(r.freshness_scope.corpus_n_claims)} in the corpus. Sample proportions are not corpus-wide rates.` : "."}
+              Judged at {r.overview.analysis_as_of} over {fmt(cur.value)} claims in the bundled sample, of {fmt(cur.corpus_n_claims)} in the corpus. Sample proportions are not corpus-wide rates.
+              {" "}Claims without a revision field across the full corpus: {has(noRev) ? `${fmt(noRev.numerator)} / ${fmt(noRev.denominator)}` : "not available from the sample; it needs the full corpus."}
             </div>
           )}
         </div>
@@ -220,6 +252,8 @@ function PaperOverview() {
 }
 
 // --------------------------------------------------------------------- upload
+const uploadCurrencyParts = (f) => ["current", "stale", "currency_unknown"].map((k) => ({ key: k, n: f[k], share: f[`${k}_share`] }));
+
 function UploadOverview() {
   const { result: r, meta } = useAnalysis();
   const ta = r.target_audit;
@@ -238,7 +272,7 @@ function UploadOverview() {
   return (
     <div>
       <PageHead kicker="Target audit · uploaded dataset" title="Dataset reliability profile"
-        lead={`${meta.dataset_name}: provenance, agreement with the bundled reference corpus, independence and currency for the addresses in your file. Every figure carries its denominator; click a figure to open the records behind it.`} />
+        lead={`${meta.dataset_name}: provenance, agreement with the reference corpus, independence and currency for the addresses in your file. Every figure carries its denominator; click a figure to open the records behind it.`} />
 
       <MetricStrip items={[
         { label: "Target claims", value: fmt(ta.n_target_claims), sub: `${fmt(v.n_valid)} of ${fmt(v.n_input)} rows valid` },
@@ -253,7 +287,7 @@ function UploadOverview() {
 
       {hasReference && (
         <Section title="Reference comparability"
-          note="In an uploaded analysis, reference match means the address is also named by at least one claim in the bundled reference corpus. It is a different measure from the multi-dataset count in a paper reproduction.">
+          note="In an uploaded analysis, reference match means the address is also named by at least one claim in the reference corpus. It is a different measure from the multi-dataset count in a paper reproduction.">
           <div className="split c2">
             <Cell label="Reference match, also named in the reference corpus" big={pct(rc.comparable_share)} tone="ok"
               den={`${fmt(rc.comparable)} / ${nT}`} share={rc.comparable_share} fill="var(--tl)" to="/claims?comparable=yes" />
@@ -290,7 +324,7 @@ function UploadOverview() {
       {p.currency?.available && (
         <Section title="Currency" meta={`as of ${meta.analysis_as_of_date}`}
           note="A claim with no revision date is currency-unknown, never stale.">
-          <div className="panel pad"><BarRows cols="230px 1fr 74px 170px" rows={currencyRows(p.currency, fmt(p.currency.n_claims ?? ta.n_target_claims))} /></div>
+          <div className="panel pad"><BarRows cols="230px 1fr 74px 170px" rows={currencyRows(uploadCurrencyParts(p.currency), fmt(p.currency.n_claims ?? ta.n_target_claims))} /></div>
         </Section>
       )}
 

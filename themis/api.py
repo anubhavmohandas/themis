@@ -22,7 +22,7 @@ except ImportError as e:   # pragma: no cover
     raise SystemExit("themis.api requires the 'ui' extra: pip install -e '.[ui]'") from e
 
 from .corpus import Corpus
-from . import analysis, config_io, provenance, report as _report, graph as _graph, taxonomy, views
+from . import analysis, config_io, overview as _overview, provenance, report as _report, graph as _graph, taxonomy, views
 from . import __version__
 from .paper import reproduce as _paper_repro, verify as _paper_verify
 from . import workspace as _workspace
@@ -45,7 +45,7 @@ def _reference_corpus() -> Corpus:
     request explicitly opts into comparing against it. Raises
     FileNotFoundError when it is not present (a release does not ship it)."""
     if "corpus" not in _reference_cache:
-        _reference_cache["corpus"] = Corpus.demo()
+        _reference_cache["corpus"] = Corpus.reference()
     return _reference_cache["corpus"]
 
 
@@ -145,7 +145,7 @@ def _run_upload(data: bytes, filename: str | None, source_id: str, use_reference
         reference, missing = _reference_or_none() if use_reference else (None, None)
         if use_reference and progress is not None:
             progress("complete", "reference", "reference corpus not available: comparison skipped" if missing
-                     else "bundled seven-source corpus loaded")
+                     else "reference corpus loaded")
         today = datetime.date.today()
         result = _ingest_pipeline.ingest(tmp_path, source_id, mapping_override=mapping_override,
                                          reference=reference, analysis_as_of_date=today,
@@ -166,7 +166,7 @@ def _run_upload(data: bytes, filename: str | None, source_id: str, use_reference
         analysis_as_of_date=str(today), reference_corpus=reference,
         input_file_hash=_hash_bytes(data), blockchain=result["detection"].get("blockchain"),
         schema_mapping=result.get("schema_mapping"), claims=result.get("claims", []),
-        reference_corpus_version=("bundled_sample" if reference is not None else None),
+        reference_corpus_version=(_scope_of(reference).lower() if reference is not None else None),
         warnings=result.get("limitations", []),
         result=result,
         audit_trail=_report.audit_trail(parameters=dict(source_id=source_id, use_reference=use_reference),
@@ -179,6 +179,10 @@ def _run_upload(data: bytes, filename: str | None, source_id: str, use_reference
         result = dict(result)
         result["claims"] = result["claims"][:500]   # cap the payload; counts are in `validation`
     return dict(analysis_id=ws.analysis_id, meta=ws.to_meta(), preflight=result)
+
+
+def _scope_of(corpus: Corpus) -> str:
+    return "FULL_CORPUS" if corpus.full else "BUNDLED_SAMPLE"
 
 
 def _run_paper(progress=None) -> dict:
@@ -195,8 +199,8 @@ def _run_paper(progress=None) -> dict:
         analysis_id=_workspace.new_id(), mode=_workspace.MODE_PAPER,
         dataset_name="Seven-source ICISHCT research corpus", created_at=_workspace.now_iso(),
         analysis_as_of_date=result["analysis_as_of_date"], reference_corpus=corpus,
-        claims=corpus.claims, reference_corpus_version="bundled_sample",
-        result=result, audit_trail=result["audit_trail"],
+        claims=corpus.claims, reference_corpus_version=_scope_of(corpus).lower(),
+        corpus_scope=_scope_of(corpus), result=result, audit_trail=result["audit_trail"],
     )
     _store.put(ws)
     return dict(analysis_id=ws.analysis_id, meta=ws.to_meta())
@@ -243,7 +247,7 @@ _UPLOAD_STAGES = [("reference", "Load reference corpus"), ("parse", "Parse file"
                   ("normalize", "Normalize claims"),
                   ("compare", "Provenance, reference comparison, independence, currency"),
                   ("report", "Assemble analysis")]
-_PAPER_STAGES = [("load", "Load bundled corpus"), ("agreement", "Agreement outcomes"),
+_PAPER_STAGES = [("load", "Load reference corpus"), ("agreement", "Agreement outcomes"),
                  ("independence", "Provenance and independence"), ("kappa", "Chance-corrected agreement"),
                  ("freshness", "Currency")]
 _jobs: dict[str, dict] = {}
@@ -356,20 +360,13 @@ def _present_result(ws) -> dict:
 
 def _complement_shares(result: dict) -> dict:
     """Shares the pages need that the engine reports only as one side of a
-    pair (single-source vs multi-source, unresolved vs resolved). Computed
-    here, from the engine's own counts, so the UI never does arithmetic on
-    analytic figures. Every value is a share of the denominator the page
-    shows beside it."""
+    pair (unresolved vs resolved, uploaded datasets). Computed here, from the
+    engine's own counts, so the UI never does arithmetic on analytic figures.
+    Every value is a share of the denominator the page shows beside it. A
+    paper reproduction's shares are in result["overview"] (themis/overview.py),
+    each with its own unit and population."""
     out: dict = {}
-    ag, ind, ta = result.get("agreement"), result.get("independence"), result.get("target_audit")
-    ds = result.get("dataset_summary") or {}
-    if ds.get("n_claims"):
-        out["source_claim_shares"] = {k: n / ds["n_claims"] for k, n in (ds.get("sources") or {}).items()}
-    if ag and ag.get("n_addresses"):
-        out["single_source_share"] = ag["single_source"] / ag["n_addresses"]
-        if ind and ind.get("unresolved_addresses") is not None:
-            out["resolved_addresses"] = ag["n_addresses"] - ind["unresolved_addresses"]
-            out["resolved_addr_share"] = out["resolved_addresses"] / ag["n_addresses"]
+    ta = result.get("target_audit")
     if ta:
         prof = ta.get("profile") or {}
         n_targets = ta.get("n_target_addresses") or 0
@@ -445,7 +442,10 @@ def analysis_claims(analysis_id: str, offset: int = 0, limit: int = 100,
     offset = max(0, offset)
     ordered = sorted(claims, key=lambda c: (c["address"], c.get("source", "")))
     page = ordered[offset:offset + limit]
-    return dict(total=total, n_addresses=len({c["address"] for c in claims}),
+    # which population these records are: a drill-down from a metric of another population must say so
+    population = ("uploaded_dataset" if ws.mode == _workspace.MODE_UPLOADED
+                  else _overview.NORMALIZED if ws.reference_corpus.full else _overview.SAMPLE)
+    return dict(total=total, n_addresses=len({c["address"] for c in claims}), population=population,
                offset=offset, limit=limit, n_returned=len(page),
                claims=[dict(address=c["address"], source=c["source"], raw_label=c.get("raw_label", ""),
                             canon=c.get("canon"), polarity=c.get("polarity"),
@@ -692,7 +692,7 @@ def _paper_corpus_state() -> dict:
     ref, err = _reference_or_none()
     if ref is None:
         return dict(available=False, message=err, required=_paper_repro.required_inputs())
-    return dict(available=True, scope="FULL_CORPUS" if ref.full else "BUNDLED_SAMPLE",
+    return dict(available=True, scope=_scope_of(ref),
                 n_claims_loaded=len(ref.claims), analysis_as_of_date=str(ref.snapshot_date),
                 note=ref.sample_note)
 

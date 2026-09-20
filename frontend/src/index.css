@@ -150,6 +150,7 @@ a.cell:hover, button.cell:hover { background: var(--sfa); text-decoration: none;
 /* metric strip - the (few) numbers that matter */
 .metrics { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--rl); border-radius: 4px; background: var(--sf); margin-bottom: 30px; }
 .metrics.c3 { grid-template-columns: repeat(3, 1fr); }
+.metrics.c5 { grid-template-columns: repeat(5, 1fr); }
 .metric { padding: 13px 16px; border-right: 1px solid var(--rl); color: inherit; text-decoration: none; display: block; position: relative; }
 .metric:last-child { border-right: 0; }
 a.metric:hover { background: var(--sfa); text-decoration: none; }
@@ -161,6 +162,12 @@ a.metric:hover::after { opacity: 1; }
 .m-val { font-family: var(--mn); font-size: 21px; font-weight: 500; letter-spacing: -.02em; }
 .m-val.text { font-family: var(--sn); font-size: 14px; letter-spacing: 0; margin-top: 4px; }
 .m-sub { font-size: 11.5px; color: var(--mut); margin-top: 3px; }
+.m-tag, .poptag, .aa-scope, .pophead { font-family: var(--mn); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--fnt); }
+.m-tag { margin-top: 7px; }
+.poptag { border: 1px solid var(--rl); border-radius: 2px; padding: 1px 5px; white-space: nowrap; }
+.aa-scope { margin: -3px 0 7px 13px; color: var(--mut); }
+.pophead { margin-bottom: 10px; color: var(--mut); }
+.pophead b { color: var(--ink); font-weight: 500; }
 .hot { color: var(--ac); }
 .ok { color: var(--tl); }
 .flag { color: var(--oc); }
@@ -347,7 +354,7 @@ details.more[open] > summary { margin-bottom: 6px; }
 details.more p, details.more div.txt { font-size: 11.5px; color: var(--mut); line-height: 1.6; white-space: pre-line; }
 
 @media (max-width: 1080px) {
-  .metrics, .metrics.c3 { grid-template-columns: repeat(2, 1fr); }
+  .metrics, .metrics.c3, .metrics.c5 { grid-template-columns: repeat(2, 1fr); }
   .metric:nth-child(2) { border-right: 0; }
   .metric:nth-child(-n+2) { border-bottom: 1px solid var(--rl); }
   .record-grid { grid-template-columns: repeat(2, 1fr); }

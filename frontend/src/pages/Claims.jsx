@@ -5,7 +5,7 @@ import { useApiData } from "../lib/useApi.js";
 import { useAnalysis } from "../lib/AnalysisContext.jsx";
 import { fmt, humanize } from "../lib/format.js";
 import { AGREEMENT_OPTIONS, CURRENCY_OPTIONS, PROVENANCE, PROVENANCE_OPTIONS, TIER, TIER_OPTIONS, outcomeOf } from "../lib/vocab.js";
-import { ErrorBox, FilterSelect, Gate, Loading, PageHead, Pager, SearchBox, Status } from "../components/ui.jsx";
+import { ErrorBox, FilterSelect, Gate, Loading, PageHead, Pager, RecordsNote, SearchBox, Status } from "../components/ui.jsx";
 
 const PAGE = 100;
 
@@ -72,20 +72,21 @@ function ClaimsBody() {
   ].filter(([, t]) => t);
   const clearChip = (k) => (k === "agreement" ? setAgreement("") : update({ [k]: "" }));
 
+  // which records these are; an agreement filter on the sample is "sample agreement records"
+  const recordsLabel = data?.population === "bundled_sample" ? (get("outcome") || get("comparable") ? "sample agreement records" : "bundled sample records")
+    : data?.population === "normalized_full_corpus" ? "full corpus records" : "";
   const total = data?.total ?? 0;
   const from = total ? offset + 1 : 0;
   const to = Math.min(offset + PAGE, total);
 
   return (
     <div>
-      <PageHead kicker="Record table" title="Claims"
+      <PageHead kicker={`Record table${recordsLabel ? ` · ${recordsLabel}` : ""}`} title="Claims"
         lead="One bounded, server-filtered page at a time, never the whole corpus. Use Exports for the full normalized claim set. Each address links to its evidence in the Address Inspector." />
 
       {isPaper && (
-        <div className="sample-banner">
-          This table lists the bundled sample: {fmt(meta.n_claims)} of the corpus’s {fmt(result.dataset_summary.n_claims)} claims,
-          including every multi-dataset address. Corpus-wide totals on Overview use the full corpus, so counts here can be smaller.
-        </div>
+        <RecordsNote table={data?.population} asked={get("population")}
+          sampleDetail={`It holds ${fmt(meta.n_claims)} of the corpus’s ${fmt(result.overview.metrics.claims.value)} claims, including the multi-dataset addresses it was drawn with.`} />
       )}
 
       <div className="controls">

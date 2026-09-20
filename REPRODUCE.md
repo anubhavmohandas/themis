@@ -185,6 +185,18 @@ file works either way — without a corpus the audit runs without cross-source
 comparison and says so. The dashboard has been driven through its API only:
 **MANUAL BROWSER QA STILL REQUIRED.**
 
+By default the API loads the bundled sample, and the Overview then says so: every figure is labelled
+`BUNDLED SAMPLE`, `FULL-CORPUS MANIFEST` or `NOT AVAILABLE` (the sample cannot state the normalized
+address count, the single-source share or the full-corpus multi-dataset count). To load a full build
+instead, as the CLI's `--observations` / `--as-of` do:
+
+```
+THEMIS_OBSERVATIONS=build/observations.csv.gz THEMIS_AS_OF=2026-09-15 python -m themis.api
+```
+
+The Overview is then `FULL CORPUS`: 1,497,106 normalized addresses (1,497,191 raw address keys before
+WatchYourBack's `#` marker is joined) and 15,413 multi-dataset addresses, all computed live.
+
 ## 7. Auditing your own dataset
 
 ```

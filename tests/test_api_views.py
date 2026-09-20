@@ -201,11 +201,15 @@ class TestPresentation(unittest.TestCase):
 
     def test_complement_shares_come_from_engine_counts(self):
         r = _client.get(f"/api/analysis/{paper_id()}/summary").json()["result"]
-        ag, ind, sh = r["agreement"], r["independence"], r["shares"]
-        self.assertEqual(ag["single_source"] + ag["n_multi_source"], ag["n_addresses"])
-        self.assertAlmostEqual(sh["single_source_share"], ag["single_source"] / ag["n_addresses"])
-        self.assertEqual(sh["resolved_addresses"] + ind["unresolved_addresses"], ag["n_addresses"])
-        self.assertAlmostEqual(sh["resolved_addr_share"] + ind["unresolved_addr_share"], 1.0)
+        # a paper reproduction's complements live in result["overview"], each inside ONE address universe
+        # (the old shares mixed the manifest's raw-key total with the sample's multi-dataset count)
+        m = r["overview"]["metrics"]
+        self.assertNotIn("single_source_share", r["shares"])
+        un = m["unresolved_provenance"]
+        self.assertEqual(un["resolved"] + un["numerator"], un["denominator"])
+        self.assertAlmostEqual(un["resolved_share"] + un["share"], 1.0)
+        if m["single_source"]["quality"] != "unavailable":
+            self.assertEqual(m["single_source"]["numerator"] + m["multi_dataset"]["numerator"], m["multi_dataset"]["denominator"])
         u = _client.get(f"/api/analysis/{upload_id()}/summary").json()["result"]
         prov = u["target_audit"]["profile"]["provenance"]
         n = u["target_audit"]["n_target_addresses"]

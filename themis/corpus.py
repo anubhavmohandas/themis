@@ -65,6 +65,18 @@ class Corpus:
         return cls(claims, man, full=False)
 
     @classmethod
+    def reference(cls):
+        """The corpus the API compares against: the full local build THEMIS_OBSERVATIONS names
+        (dated by THEMIS_AS_OF, like the CLI's --observations / --as-of), else the bundled sample."""
+        obs = os.environ.get("THEMIS_OBSERVATIONS")
+        if not obs:
+            return cls.demo()
+        c = cls.from_file(obs)
+        if os.environ.get("THEMIS_AS_OF"):
+            c.manifest["analysis_as_of_date"] = os.environ["THEMIS_AS_OF"]
+        return c
+
+    @classmethod
     def from_file(cls, path):
         with _open(path) as f:
             claims = list(csv.DictReader(f))
@@ -90,8 +102,8 @@ class Corpus:
         s = self.manifest.get("sample", {})
         return (f"bundled sample: {s.get('claims', 0):,} claims over "
                 f"{s.get('addresses', 0):,} addresses, including the "
-                f"{s.get('multi_source_addresses', 0):,} multi-dataset addresses the paper corpus had when the sample was drawn "
-                "(a full build joins more, through WatchYourBack's #-prefixed addresses). "
+                f"{s.get('multi_source_addresses', 0):,} multi-dataset addresses it held when it was drawn, before "
+                "WatchYourBack's #-prefixed addresses were joined (a full normalized build has more). "
                 "Agreement, conflict and circularity figures of the complete sources are exact; "
                 "corpus-wide counts and rates come from the manifest or need a full build.")
 

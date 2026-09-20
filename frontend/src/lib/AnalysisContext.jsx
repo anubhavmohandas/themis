@@ -77,13 +77,18 @@ export function AnalysisProvider({ children }) {
     const chains = sources ? [...new Set(Object.values(sources).map((s) => s.chain).filter(Boolean))] : [];
     const chain = isPaper ? chains.join(", ") || null : meta?.blockchain || null;
     const audit = result?.target_audit || null;
+    // a paper reproduction's address count: normalized when the corpus is loaded, else the manifest's raw keys
+    const m = result?.overview?.metrics;
+    const addr = m ? (m.normalized_addresses.value != null ? m.normalized_addresses : m.raw_address_keys) : null;
     return {
       analysisId, meta, summary, result, summaryError, sources, analyses, ready, theme,
       isPaper, isUpload: !!meta && !isPaper, chain,
       stopped: !!result?.stopped,
       // the numbers the sidebar shows, straight from the result object
-      nClaims: isPaper ? result?.dataset_summary?.n_claims : audit?.n_target_claims ?? meta?.n_claims,
-      nAddresses: isPaper ? result?.dataset_summary?.n_addresses : audit?.n_target_addresses,
+      nClaims: isPaper ? m?.claims?.value : audit?.n_target_claims ?? meta?.n_claims,
+      nAddresses: isPaper ? (addr?.value ?? null) : audit?.n_target_addresses,
+      addrLabel: isPaper ? (addr?.population === "raw_address_keys" ? "addr keys" : "addrs") : "targets",
+      corpusScope: isPaper ? (meta?.corpus_scope || result?.overview?.scope || null) : null,
       activate, clear, refreshAnalyses, toggleTheme,
     };
   }, [analysisId, meta, summary, summaryError, sources, analyses, ready, theme,
