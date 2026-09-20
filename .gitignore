@@ -46,3 +46,7 @@ __MACOSX/
 /results/
 /external_data/
 /release/
+
+# The manuscript is the author's paper, not code: never tracked or released
+/paper/*.pdf
+/paper/manuscript/

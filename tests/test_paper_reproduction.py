@@ -101,7 +101,8 @@ class TestGeneratedFromTheAnalysis(unittest.TestCase):
         rounded = copy.deepcopy(shared()["metrics"])
         rounded.values["drift.B.revenue"] = 1101304942.45
         self.assertEqual(status_of(check(rounded), "drift.B.revenue"), "FAIL")
-        self.assertEqual(res["status"], "FAIL")          # the sample still cannot yield PASS (and the Elliptic++ wording fails)
+        # the sample still cannot yield PASS: corpus-wide claims are NOT_REPRODUCED, so BLOCKED - and nothing FAILs
+        self.assertEqual((res["status"], res["failing"]), ("BLOCKED", []))
 
 
 @requires_reference_corpus

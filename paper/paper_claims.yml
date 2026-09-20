@@ -21,10 +21,10 @@
 # failure does to the overall verdict. `id@suffix` reuses one metric under a second rule.
 
 paper:
-  file: ICISHCT2026_THEMIS_Repaired_Final.pdf
-  sha256: 31b6f33e5dcd32266729d749789ea5d86579393f5b335779d7cfc91e5c7232ee
+  file: ICISHCT2026_THEMIS_Final_Verified.pdf
+  sha256: 11ad4bd19a7618ac578068ebef1e7377838af530b1caf65a99f958ae673bd8ea
   title: 'Provenance Before Precision: Auditing Public Bitcoin Attribution Labels and Their Effect on Forensic Conclusions'
-  version: repaired_final
+  version: final_verified
 policy:
   HEADLINE_STABLE:
     on_fail: fail
@@ -168,7 +168,7 @@ claims:
     expected: 7
     comparison: exact_integer
     pdf:
-      text: '{v} openly redistributable address-level label files'
+      text: '{v} publicly accessible address-level label sources'
       token: Seven
   corpus.claims:
     section: '4.1'
@@ -444,13 +444,13 @@ claims:
     text: five malformed Elliptic++ entries were removed
     machine_checkable: false
     reason: 'a source-to-artifact parser check, not a corpus statistic: tests/test_source_to_artifact.py (Elliptic++ invalid-address rejection)'
-  corpus.openly_redistributable:
+  corpus.publicly_accessible:
     section: '4.1'
     class: SUPPORTING_STABLE
     experiment: corpus_audit
-    text: seven openly redistributable address-level label files
+    text: seven publicly accessible address-level label sources
     machine_checkable: false
-    reason: a licensing statement. THIRD_PARTY_DATA.md records the Elliptic++ and Rodwald redistribution terms as UNCONFIRMED; nothing computes it
+    reason: an access statement (bulk download, no registration); nothing computes it. The paper makes no redistribution claim - THIRD_PARTY_DATA.md records the Elliptic++ and Rodwald redistribution terms as UNCONFIRMED
   coverage.single_dataset_share:
     section: '5.1'
     class: HEADLINE_STABLE
@@ -466,8 +466,8 @@ claims:
     section: '5.1'
     class: HEADLINE_STABLE
     experiment: source_depth
-    text: only 15,400 addresses appear in two or more datasets
-    expected: 15400
+    text: only 15,413 addresses appear in two or more datasets
+    expected: 15413
     comparison: exact_integer
     pdf:
       text: only {v} addresses appear in two or more
@@ -476,7 +476,7 @@ claims:
     class: SUPPORTING_STABLE
     experiment: source_depth
     text: multi-source distribution, 2 datasets
-    expected: 7832
+    expected: 7845
     comparison: exact_integer
     pdf:
       text: '{v} addresses in two datasets'
@@ -522,14 +522,13 @@ claims:
     section: '5.1'
     class: SUPPORTING_STABLE
     experiment: overlap_coverage
-    text: more than 99.5% of Elliptic++ has no public cross-source check
+    text: about 99.5% of Elliptic++ addresses have no public cross-source check
     metric: coverage.by_source.ellipticpp.no_cross_source_check_share
-    comparison: range
-    min: 0.995
-    max: 1.0
+    expected: 0.995
+    comparison: rounded_percent
+    decimals: 1
     pdf:
-      text: more than {v} of Elliptic++
-      token: 99.5%
+      text: about {v} of Elliptic++ addresses have no public cross-source check
   coverage.overlap.ellipticpp.schnoering:
     section: '5.1'
     class: SUPPORTING_STABLE

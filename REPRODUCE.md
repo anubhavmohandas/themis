@@ -132,11 +132,9 @@ sources had not moved since the paper's retrieval date.
 
 Two caveats a full rebuild will show. (1) The bundled sample is not the corpus:
 the multi-dataset-rate interval, the 853,604-cluster upper bound and corpus-wide
-freshness need the full build. (2) The manifest's totals (1,497,191 addresses,
-15,400 multi-dataset) predate joining WatchYourBack's 87 `#`-prefixed addresses;
-joined, a full build gives roughly 85 fewer addresses and at least 15,413
-multi-dataset ones (13 more TagPack–WatchYourBack addresses were found by the
-TagPack rebuild alone).
+freshness need the full build. (2) The bundled sample's multi-dataset total (15,400)
+predates joining WatchYourBack's 87 `#`-prefixed addresses; a full build has 15,413
+multi-dataset addresses, which is the value the manuscript now states.
 
 **Anchor validation** (`themis anchors`) needs `ground_truth.csv` in the data
 directory (columns `address, ground_truth_label, ground_truth_source`, where the
@@ -153,8 +151,8 @@ are what §5.1, §4.2 and §5.4 need updated:
    contributed an interpretable category (13,673); THEMIS requires two (10,515)
    and reports the rest `incomparable` (3,184, not 23).
 2. **WatchYourBack's `#` addresses** (87 of 309 rows carry a literal `#`
-   upstream) are joined, which changes the 2- and 3-dataset buckets (7,832 /
-   429, not 7,904 / 357), the WatchYourBack overlaps and the kappa values (n 117
+   upstream) are joined, which changes the 2- and 3-dataset buckets (7,845 /
+   429 on the full corpus, not 7,904 / 357), the WatchYourBack overlaps and the kappa values (n 117
    and 210, not 46 and 138).
 3. **Anchor validation** counts one decision per (source, address), leaves
    uninterpretable claims out of the denominator, resamples roots for the
@@ -203,7 +201,7 @@ resolves UNRESOLVED, never independent.
 
 ```
 themis reproduce-paper                 # writes results/reproduction/<run_id>/ and mirrors it to results/paper_proof/
-themis verify-paper --paper ../ICISHCT2026_THEMIS_Repaired_Final.pdf
+themis verify-paper --paper /path/to/ICISHCT2026_THEMIS_Final_Verified.pdf
 themis figures                          # or: themis figures --from-data results/paper_proof  (no corpus needed)
 themis reproduce rodwald-containment
 ```
@@ -255,15 +253,22 @@ date, never the wall clock.
   on the old file reproduces the old figures exactly - both are faithful to their input.
   The artifact was the defect; `scripts/build_corpus.py` now writes `repr(float)` and the
   bundled file was replaced. No tolerance was added.
-- *Full-corpus reproduction, pinned paper `ICISHCT2026_THEMIS_Repaired_Final.pdf`:* every
-  machine-checkable claim is computed live; the remaining FAILs are statements in the
-  paper itself: (a) "more than 99.5%" of Elliptic++ without a cross-source check (live
-  99.4803%); (b) "only 15,400 addresses appear in two or more datasets" and (c) "7,832
-  in two datasets" - the paper's 429 / 7,112 / 27 are post-normalisation but its 15,400
-  and 7,832 are pre-normalisation (7,832 = 15,400 - 429 - 7,112 - 27); after joining
-  WatchYourBack's `#`-prefixed addresses the distribution is 7,845 / 429 / 7,112 / 27 =
-  15,413. The bundled sample cannot confirm (b)/(c) (it is 13 addresses short), so on
-  the sample they are `SAMPLE_OBSERVED`, not PASS.
+- *Full-corpus reproduction, paper `ICISHCT2026_THEMIS_Final_Verified.pdf`:* every
+  machine-checkable claim is computed live. Its predecessor `..._Repaired_Final.pdf`
+  (Table 2 identical) failed on three statements that were wrong in the paper, and only
+  those were corrected: (a) "more than 99.5%" of Elliptic++ without a cross-source check
+  became "about 99.5% of Elliptic++ addresses" (live 99.4803%); (b) "only 15,400 addresses
+  appear in two or more datasets" became 15,413 and (c) "7,832 in two datasets" became 7,845
+  (the old 15,400 / 7,832 were pre-normalisation; 7,845 + 429 + 7,112 + 27 = 15,413). The
+  data statement also no longer calls the sources "openly redistributable" (no licence
+  was found for Elliptic++ or Rodwald): they are "publicly accessible". The bundled sample
+  cannot confirm (b)/(c) (it is 13 addresses short), so on the sample they are
+  `SAMPLE_OBSERVED`, not PASS.
+- *The manuscript is not distributed.* The repository and the release hold only the
+  manifest, which names the PDF and pins its SHA-256. To run the PDF-layer check, give
+  the PDF with `--paper FILE` or `THEMIS_PAPER_PDF`, or place it in `paper/` (git-ignored).
+  Without the PDF the PDF layer is reported `NOT_CHECKED` in `verification.json`, and a PASS
+  then covers the manifest against THEMIS only, not the printed text of the manuscript.
 - *Definitions fixed in THEMIS, not the paper:* "33 provenance descriptors" counts
   distinct descriptor strings as `pipeline/analyse.py` does (`rodwald:S` is declared by
   both Rodwald datasets); `anchor_robust_max_ci_width` (a threshold of THEMIS's own

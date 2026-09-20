@@ -279,13 +279,10 @@ paper's own "99.9% over three years old" irreproducible.
   multi-dataset-rate interval, 853,604 upper-bound clusters, corpus-wide
   freshness. The bundled sample keeps every multi-dataset address, so agreement,
   conflict and circularity figures are exact; corpus-wide totals come from a manifest.
-- **The corpus-wide totals are pre-`#`-fix.** The manifest's 1,497,191 addresses
-  / 1,481,791 single-dataset / 15,400 multi-dataset were computed when
-  WatchYourBack's 87 `#`-prefixed addresses were still unjoined. Joined, at least
-  72 addresses (in the sample) plus 13 more (TagPack rows the sample left out) merge
-  and 13 addresses become multi-dataset: a full rebuild gives roughly 85 fewer
-  addresses and at least 15,413 multi-dataset ones. Percentages round the same
-  (98.97%); Elliptic++'s contribution needs its file to count.
+- **The bundled sample's multi-dataset total is pre-`#`-fix (15,400).** It was computed
+  when WatchYourBack's 87 `#`-prefixed addresses were still unjoined; the full
+  corpus, with them joined, has 15,413 multi-dataset addresses (7,845 / 429 / 7,112 / 27).
+  The manuscript states the full-corpus value.
 - The anchor set (`ground_truth.csv`, 289 addresses) is curated from
   WatchYourBack and the OFAC list and is not yet scripted. It is small,
   concentrated in few roots, and yields an estimable figure for only two sources.
@@ -332,7 +329,8 @@ and Their Effect on Forensic Conclusions."*
 themis/            taxonomy, provenance, corpus, analysis, reliability, report, graph,
                    target_audit, workspace, api, cli, chains/, ingest/, trust/, tasks/, config/
 themis/paper/      experiments, metrics (PaperMetrics), verify, figures, reproduce
-paper/             paper_claims.yml - the manuscript's declared values (verifier input only)
+paper/             paper_claims.yml - the manuscript's declared values (verifier input only).
+                   The manuscript itself is not part of the repository (see REPRODUCE.md §8)
 scripts/           build_corpus.py, generate_result_sets.py, independent_agreement_check.py
 tests/             unit and paper-regression tests (paper tests skip without the corpus)
 examples/          synthetic CSVs for the upload flow
