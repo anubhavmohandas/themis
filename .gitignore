@@ -2,6 +2,9 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
+.eggs/
+# build/ is also the default output of scripts/build_corpus.py (--out build/);
+# dist/ covers frontend/dist (Vite build output)
 build/
 dist/
 
@@ -9,34 +12,37 @@ dist/
 .venv/
 venv/
 
-# Testing
+# Test and lint caches
 .pytest_cache/
 .coverage
+.coverage.*
+htmlcov/
+.ruff_cache/
+.mypy_cache/
 
-# Node / Next.js (frontend/)
+# Node (frontend/ is React + Vite)
 node_modules/
-.next/
-out/
-next-env.d.ts
 npm-debug.log*
 *.env
 *.env.*
 !*.env.example
 
-# OS
+# OS and editors
 .DS_Store
-
-# Working notes
-HARDENING_LOG.md
-RECONCILIATION_REPORT.md
-results/
-
-# Downloaded external datasets used for compatibility verification
-external_data/
-
-# Editors
+._*
+__MACOSX/
 .vscode/
 .idea/
+*.swp
+*.log
 
-# Release build output (scripts/make_release.py)
-release/
+# AI-assistant working files - authorship of this repository is the author's alone
+.claude/
+
+# Local working material, anchored to the repository root so a same-named
+# directory elsewhere is never hidden by accident
+/HARDENING_LOG.md
+/RECONCILIATION_REPORT.md
+/results/
+/external_data/
+/release/
