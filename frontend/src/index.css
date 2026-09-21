@@ -72,8 +72,8 @@ button { font-family: inherit; }
 .aa-switch { all: unset; cursor: pointer; float: right; font-family: var(--mn); font-size: 9.5px; letter-spacing: .08em;
   text-transform: uppercase; color: var(--mut); border: 1px solid var(--rl); border-radius: 3px; padding: 1px 6px; }
 .aa-switch:hover { color: var(--ac); border-color: var(--ac); }
-.switcher { position: absolute; left: 10px; right: 10px; top: 100%; z-index: 30; background: var(--sf); border: 1px solid var(--ink);
-  border-radius: 3px; max-height: 300px; overflow: auto; box-shadow: 0 6px 18px rgba(0,0,0,.12); }
+.switcher { margin-top: 10px; background: var(--sf); border: 1px solid var(--ink);
+  border-radius: 3px; max-height: 300px; overflow: auto; }
 .switcher button { all: unset; display: block; box-sizing: border-box; width: 100%; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--rls); }
 .switcher button:hover { background: var(--sfa); }
 .switcher .cur { box-shadow: inset 2px 0 0 var(--ac); }
