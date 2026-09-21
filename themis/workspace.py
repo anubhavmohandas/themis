@@ -34,6 +34,7 @@ class AnalysisWorkspace:
     corpus_scope: str | None = None          # FULL_CORPUS | BUNDLED_SAMPLE, for a paper reproduction
     warnings: list = dataclasses.field(default_factory=list)
     result: dict | None = None               # the canonical AnalysisResult (STEP 24)
+    preflight: dict | None = None            # what the pre-flight decided and on what evidence (exported as preflight.json)
     audit_trail: dict | None = None
 
     def to_meta(self) -> dict:

@@ -262,8 +262,36 @@ def cmd_sources(args):
         print(f"\nwritten {args.json}")
 
 
+def _print_preflight(pf: dict) -> None:
+    """The pre-flight as a reviewable table: what each column was taken to mean, how sure, and what blocks analysis."""
+    inp, ch = pf["input"], pf["chain"]
+    rule("DATASET PRE-FLIGHT")
+    print(f"  input:           {inp['filename']}  ({inp['type']}{', table ' + inp['table'] if inp.get('table') else ''}, "
+          f"{inp['n_rows']:,} rows, {inp['n_columns']} columns)")
+    print(f"  dataset type:    {pf['dataset_type']}")
+    chain_txt = (f"{ch['value']}  ({ch['source']}, {100*(ch['confidence'] or 0):.0f}%)" if ch["value"]
+                 else f"{ch['status']}" + ("  -> choose one with --chain" if ch["status"] in ("undetermined", "ambiguous") else ""))
+    print(f"  blockchain:      {chain_txt}")
+    if pf["currency_basis"]:
+        print(f"  staleness rule:  {pf['currency_basis']['rule']}")
+    rule("SCHEMA MAPPING")
+    print(f"  {'column':<30}{'semantic field':<50}{'conf':>6}  status")
+    for r in pf["columns"]:
+        conf = "-" if r["confidence"] is None else f"{100*r['confidence']:.0f}%"
+        color = {"ok": GRN, "review": YEL, "invalid": RED}.get(r["status"], DIM)
+        print(f"  {r['column'][:29]:<30}{r['semantic_label'][:49]:<50}{conf:>6}  {_c(r['status'], color)}")
+        for n in r["notes"]:
+            print(_c(f"      {n}", DIM))
+    for req in pf["required"]:
+        mark = _c("OK ", GRN) if req["satisfied"] else _c("MISSING", RED)
+        print(f"  required {req['name']:<20}{mark}  {req['column'] or ' / '.join(req['accepts'])}")
+    for b in pf["blockers"]:
+        print(_c(f"  blocked [{b['code']}]: {b['message']}", YEL))
+
+
 def cmd_ingest(args):
-    """STEP 23 - new dataset mode: upload a previously unseen CSV."""
+    """STEP 23 - new dataset mode: upload a previously unseen CSV. The pre-flight
+    runs first and decides whether any analysis may happen at all."""
     reference = None
     if args.reference:
         reference = Corpus.from_file(args.reference)
@@ -281,32 +309,36 @@ def cmd_ingest(args):
         role, col = spec.split("=", 1)
         override[role] = col
 
-    r = _ingest_pipeline.ingest(args.file, args.source_id, mapping_override=override or None,
-                                reference=reference)
+    try:
+        r = _ingest_pipeline.ingest(args.file, args.source_id, mapping_override=override or None,
+                                    reference=reference, chain=args.chain, confirmed=args.confirm)
+    except ValueError as e:
+        print(_c(f"error: {e}", RED), file=sys.stderr)
+        return 2
+    pf = r["dataset_preflight"]
+    if args.preflight_json:
+        json.dump(pf, open(args.preflight_json, "w"), indent=1, default=str)
     if r["stopped"]:
-        rule("DATASET PRE-FLIGHT")
+        _print_preflight(pf)
+        rule("STOPPED AT PRE-FLIGHT")
         print(_c(r["message"], YEL))
-        print(f"\n  rows: {r['basic_quality']['rows']:,}   "
-              f"columns: {', '.join(r['basic_quality']['columns'])}")
         if args.json:
-            json.dump(r, open(args.json, "w"), indent=1)
+            out = dict(r)
+            out.pop("claims", None)
+            json.dump(out, open(args.json, "w"), indent=1, default=str)
         return 1
 
-    d = r["detection"]
-    rule("DATASET PRE-FLIGHT")
-    print(f"  cryptocurrency attribution dataset: {_c(d['confidence'], GRN if d['confidence']=='HIGH' else YEL)}")
-    print(f"  detected blockchain:  {d['blockchain']}")
-    print(f"  address field:        {d['address_field']}  (sample hit rate "
-          f"{100*d['sample_hit_rate']:.1f}% of {d['sampled']} sampled)")
-    rule("SCHEMA MAPPING")
-    for role, col in r["schema_mapping"].items():
-        print(f"  {role:<12}{col or '(none found - override with --map)'}")
+    _print_preflight(pf)
     rule("VALIDATION")
     v = r["validation"]
     print(f"  {v['n_input']:,} input rows -> {v['n_valid']:,} valid claims, "
           f"{v['n_rejected']:,} rejected")
     for reason, n in v["rejected_by_reason"].items():
         print(f"    {reason:<20}{n:>8,}")
+    rule("ANALYSIS STATES")
+    for name, st in r["analysis_states"].items():
+        shown = st["state"] if st["state"] == "computed" else f"{st['state']} - {st['reason']}"
+        print(f"  {name:<18}{_c(shown, GRN if st['state'] == 'computed' else YEL)}")
     rule("CAPABILITIES")
     for cap, ok in r["capabilities"].items():
         print(f"  {_c('OK ', GRN)} {cap}" if ok else f"  {_c('--', DIM)} {cap}")
@@ -327,6 +359,41 @@ def cmd_ingest(args):
         out["claims"] = len(r["claims"])   # the full claim list is large; keep the JSON small by default
         json.dump(out, open(args.json, "w"), indent=1, default=str)
         print(f"\nwritten {args.json}")
+
+
+def cmd_preflight(args):
+    """Inspect a CSV, or a table of a SQLite database, without analysing it. A
+    SQLite file with no --table lists its tables and row counts; with --table it
+    pre-flights that table on a spread-out sample (the database is opened
+    read-only and never loaded)."""
+    from .ingest import preflight as _pf, sqlite_source as _sq
+    if _sq.is_sqlite_path(args.file):
+        if not args.table:
+            rule("SQLITE TABLES")
+            for t in _sq.list_tables(args.file):
+                n = f"{t['n_rows']:,}" if t["n_rows"] is not None else "? (count timed out)"
+                print(f"  {t['table']:<40}{n:>16} rows  {t['n_columns']:>3} columns")
+            print(_c("\n  choose one with --table NAME to pre-flight it", DIM))
+            return 0
+        sample, names = _sq.sample_rows(args.file, args.table, _pf.cfg()["sample_size"])
+        with _sq.open_readonly(args.file) as con:
+            total = _sq.count_rows(con, args.table, _sq.cfg()["count_timeout_seconds"])
+        pf = _pf.run(sample, names, filename=os.path.basename(args.file), input_type="sqlite", table=args.table,
+                     total_rows=total, overrides=_pf.overrides_from_roles(dict(m.split("=", 1) for m in args.map or []), names),
+                     chain=args.chain, confirmed=args.confirm)
+    else:
+        rows, names = _ingest_pipeline.load_csv(args.file)
+        pf = _pf.run(rows, names, filename=os.path.basename(args.file), sha256=_ingest_pipeline.sha256_file(args.file),
+                     input_type=_ingest_pipeline.input_type_of(args.file),
+                     overrides=_pf.overrides_from_roles(dict(m.split("=", 1) for m in args.map or []), names),
+                     chain=args.chain, confirmed=args.confirm)
+    _print_preflight(pf)
+    if pf["message"]:
+        rule("RESULT")
+        print(_c(pf["message"], YEL))
+    if args.json:
+        json.dump(pf, open(args.json, "w"), indent=1, default=str)
+    return 0 if pf["can_analyze"] else 1
 
 
 def cmd_report(args):
@@ -517,8 +584,21 @@ def main(argv=None):
                                         "bundled sample")
     ig.add_argument("--no-reference", action="store_true", help="skip cross-source comparison entirely")
     ig.add_argument("--map", action="append",
-                    help="override a schema role, e.g. --map address=btc_addr (repeatable)")
+                    help="override a schema role, e.g. --map address=btc_addr or "
+                         "--map ts_attribution_last_updated=updated (repeatable); the pre-flight still validates it")
+    ig.add_argument("--chain", help="the chain the identifiers belong to (required when it cannot be detected)")
+    ig.add_argument("--confirm", action="store_true",
+                    help="record that you reviewed low-confidence mappings (from `themis preflight`)")
+    ig.add_argument("--preflight-json", help="write the pre-flight record (preflight.json) here")
     ig.set_defaults(fn=cmd_ingest)
+
+    pfc = sub.add_parser("preflight", help="inspect a CSV or a SQLite table: column meanings, chain, blockers")
+    pfc.add_argument("file", help="a .csv/.csv.gz file or a .db/.sqlite/.sqlite3 database")
+    pfc.add_argument("--table", help="the SQLite table to pre-flight (omit to list tables)")
+    pfc.add_argument("--map", action="append", help="role=column override (repeatable)")
+    pfc.add_argument("--chain", help="the chain the identifiers belong to")
+    pfc.add_argument("--confirm", action="store_true", help="record that low-confidence mappings were reviewed")
+    pfc.set_defaults(fn=cmd_preflight)
 
     rp = sub.add_parser("reproduce-paper", help="run every paper experiment, write results/reproduction/<run>, "
                                                 "and compare with the manuscript")

@@ -1,0 +1,211 @@
+# Dataset pre-flight: which column plays which semantic role, how sure THEMIS is,
+# and what must be true before any attribution analysis may run. Nothing here is
+# dataset-specific; every rule the pre-flight applies is read from this file.
+#
+# Column names are only ever a *hint*. A mapping's confidence combines the name
+# hint with how well the column's VALUES fit the role, so a column named
+# "address" that holds 0, 1000, 10000... scores low and is rejected, and a
+# column of valid Bitcoin addresses named "x" is proposed for review, not
+# silently accepted.
+
+# recorded in preflight.json; bump when a rule below changes what is accepted
+schema_version: "preflight-1.0"
+
+# values read from a column to profile it (first N non-empty, plus a strided
+# sample for SQLite tables). The full file is validated row by row afterwards.
+sample_size: 500
+
+# confidence = name * name_score + value * value_score, each score in [0, 1]
+confidence_weights: {name: 0.4, value: 0.6}
+# >= auto_accept: usable without a user confirmation.
+# review <= c < auto_accept: proposed, but the analysis needs explicit confirmation.
+# < review: not proposed at all.
+auto_accept_confidence: 0.75
+review_confidence: 0.5
+# name_score for an exact normalized-name match vs a token match
+name_score: {exact: 1.0, token: 0.7}
+
+# A subject column must hold valid identifiers for the chain. Below this share
+# of valid values (sampled, then again over every row) the analysis is blocked.
+# 0.3 is the same floor detect.py uses for a MEDIUM chain-detection confidence.
+min_identifier_valid_rate: 0.3
+# Two chains are "ambiguous" when both validate at least min_identifier_valid_rate
+# and their rates are within this margin of each other: the user must choose.
+chain_ambiguity_margin: 0.1
+
+# What each kind of claim subject is, and what THEMIS can do with it.
+#   validator:  the BlockchainAdapter method that checks a value (null: no
+#               chain-level syntax check exists for this kind)
+#   analyzable: whether the claim pipeline (address-keyed reference matching,
+#               provenance, agreement, trust policies) can consume this kind
+#   value_score: the fixed value-fit score for a kind with no syntax validator.
+#               Below auto_accept_confidence on purpose: an entity/cluster id is
+#               never proposed without the user confirming it.
+subject_kinds:
+  address:     {validator: validate_address, chain_dependent: true, analyzable: true}
+  transaction: {validator: validate_transaction_hash, chain_dependent: true, analyzable: false}
+  entity:      {validator: null, chain_dependent: false, analyzable: false, value_score: 0.5}
+  cluster:     {validator: null, chain_dependent: false, analyzable: false, value_score: 0.5}
+
+# Semantic fields whose column may be proposed from its VALUES alone, with no
+# supporting name (identifiers that validate; URLs). Capped below auto-accept by
+# the weights above, so the user always reviews such a proposal.
+value_inferable: [subject_address, subject_transaction, attribution_source]
+
+# Fields without which no attribution analysis is defined. `any_of` groups are
+# satisfied by one of their members.
+required:
+  - {name: subject, any_of: [subject_address]}
+  - {name: attribution_label, any_of: [attribution_label, attribution_category]}
+
+# Semantic field vocabulary. `unique: false` means several columns may share it.
+# hints.exact: whole normalized column name (lowercase, non-alphanumerics -> _).
+# hints.tokens: any one word of the normalized name.
+# `claim_role` is the key the claim builder reads (ingest/claims.py).
+semantic_fields:
+  subject_address:
+    label: "Claim subject: address"
+    claim_role: address
+    subject_kind: address
+    hints: {exact: [address, wallet_address, addr, wallet, btc_address, bitcoin_address],
+            tokens: [address, wallet, addr]}
+  subject_transaction:
+    label: "Claim subject: transaction"
+    subject_kind: transaction
+    hints: {exact: [txid, tx_hash, tx_id, transaction_hash, transaction_id], tokens: [txid, txhash, transaction]}
+  subject_entity:
+    label: "Claim subject: entity"
+    subject_kind: entity
+    hints: {exact: [entity_id], tokens: []}
+  subject_cluster:
+    label: "Claim subject: cluster"
+    subject_kind: cluster
+    hints: {exact: [cluster_id, cluster], tokens: [cluster]}
+  attribution_label:
+    label: "Attribution label"
+    claim_role: label
+    hints: {exact: [label, tag, entity_name, name], tokens: [label, entity, tag, name]}
+  attribution_category:
+    label: "Attribution category"
+    claim_role: category
+    hints: {exact: [category, classification, class, type], tokens: [category, classification, type]}
+  attribution_actor:
+    label: "Actor"
+    claim_role: actor
+    hints: {exact: [actor, threat_actor, perpetrator, operator], tokens: [actor, perpetrator, operator]}
+  attribution_source:
+    label: "Declared source"
+    claim_role: source
+    hints: {exact: [source, source_url, reference, citation, provenance, origin],
+            tokens: [source, origin, reference, provenance, citation]}
+  attribution_confidence:
+    label: "Declared confidence"
+    claim_role: confidence
+    hints: {exact: [confidence, certainty, reliability, score], tokens: [confidence, certainty, trust, reliability, score]}
+  attribution_evidence:
+    label: "Evidence / notes"
+    hints: {exact: [evidence, notes, note, description, comment], tokens: [evidence, notes, description, comment]}
+  chain:
+    label: "Blockchain (per row)"
+    hints: {exact: [chain, blockchain, network, coin, currency, asset, symbol],
+            tokens: [chain, blockchain, network, coin, asset]}
+
+  # Timestamp roles. A date-shaped column is only ever assigned a role its NAME
+  # supports; a bare "date"/"timestamp" is `ts_unclassified` until the user says
+  # what it dates. Roles are tried in this order.
+  ts_attribution_last_verified:
+    label: "Timestamp: attribution last independently verified"
+    hints: {exact: [last_verified, verified_at, verified, date_verified, last_checked, checked_at],
+            tokens: [verified, verification, checked]}
+  ts_attribution_last_updated:
+    label: "Timestamp: attribution last updated"
+    hints: {exact: [last_updated, updated_at, updated, last_modified, lastmod, revision_date, revised, modified_at, date_modified],
+            tokens: [updated, modified, revision, revised, lastmod]}
+  ts_attribution_first_seen:
+    label: "Timestamp: attribution first seen"
+    hints: {exact: [first_seen, first_seen_at, date_added, added_at, created_at, created],
+            tokens: [added, created]}
+  ts_observation:
+    label: "Timestamp: observation"
+    hints: {exact: [last_seen, seen_at, observed_at, retrieved_at, retrieved, scraped_at, fetched_at, crawled_at, date_retrieved],
+            tokens: [seen, observed, retrieved, scraped, fetched, crawled]}
+  ts_publication:
+    label: "Timestamp: publication"
+    hints: {exact: [published_at, published, publication_date, release_date, released_at],
+            tokens: [published, publication, release, released]}
+  ts_dataset_created:
+    label: "Timestamp: dataset creation"
+    hints: {exact: [dataset_created, snapshot_date, export_date, generated_at, snapshot],
+            tokens: [snapshot, export, generated]}
+  ts_transaction:
+    label: "Timestamp: transaction"
+    hints: {exact: [tx_time, tx_date, block_time, block_timestamp, transaction_time, transaction_date],
+            tokens: [block, txn]}
+  ts_market_candle:
+    label: "Market timestamp"
+    unique: false
+    hints: {exact: [], tokens: []}     # assigned by the market-data signature below, never by name alone
+  ts_unclassified:
+    label: "Timestamp: role unknown"
+    unique: false
+    hints: {exact: [timestamp, date, time, datetime, ts, created_date], tokens: [date, time, timestamp]}
+  market_numeric:
+    label: "Numeric market data"
+    unique: false
+    hints: {exact: [], tokens: []}
+  numeric_unclassified:
+    label: "Numeric, meaning unknown"
+    unique: false
+    hints: {exact: [], tokens: []}
+  unmapped:
+    label: "Not used"
+    unique: false
+    hints: {exact: [], tokens: []}
+
+# Legacy role names (CLI --map role=column, the old API `mapping` field).
+# `timestamp` was the old "revision date": mapping it explicitly is the user
+# asserting that this column dates the attribution.
+legacy_roles:
+  address: subject_address
+  label: attribution_label
+  category: attribution_category
+  actor: attribution_actor
+  source: attribution_source
+  confidence: attribution_confidence
+  timestamp: ts_attribution_last_updated
+
+# Staleness / currency may only be computed from a timestamp that dates the
+# ATTRIBUTION. If several are mapped, the first listed here is used, and the
+# rule is reported with the result. Everything else (market candle time,
+# transaction time, observation time, publication time...) never counts.
+currency_roles: [ts_attribution_last_verified, ts_attribution_last_updated]
+
+# A market-data (OHLCV) signature: when at least `min_present` columns are named
+# exactly one of these and hold numbers, the file is market data: its numeric
+# columns are market data and its date-shaped columns are candle timestamps,
+# whatever else they are called.
+market_signature:
+  tokens: [open, high, low, close, volume, vol]
+  min_present: 3
+
+# A date column is date-shaped when at least this share of its sampled values
+# are ISO dates (YYYY-MM-DD, optionally followed by a time). A column is numeric
+# when at least numeric_share_min of its values are numbers.
+date_shape_min_share: 0.8
+numeric_share_min: 0.9
+# how many rejected rows preflight.json keeps as examples (the counts are always complete)
+rejected_examples: 50
+# a confidence column holds numbers, or a small closed set of grades
+confidence_categorical_max_distinct: 10
+
+# Per-input capabilities. SQLite tables are inspected and pre-flighted on a
+# sample; streaming analysis of a whole table is not implemented yet.
+analysis_supported_inputs: [csv, csv.gz]
+
+# SQLite ingestion (ingest/sqlite_source.py)
+sqlite:
+  # COUNT(*) on a multi-GB table is a full scan; stop counting after this many seconds
+  count_timeout_seconds: 20
+  sample_chunks: 10         # strided sample: this many spread-out slices ...
+  fetch_chunk_rows: 10000   # rows per fetch when streaming a table
+  extensions: [.db, .sqlite, .sqlite3]

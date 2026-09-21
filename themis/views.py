@@ -41,6 +41,16 @@ LISTED_KINDS = ("polarity", "entity", "hierarchical", "incomparable")
 OUTCOME_OF_KIND = {v: k for k, v in KIND_OF_OUTCOME.items()}
 
 
+# ------------------------------------------------------- analysis states
+def state_of(ws, analysis: str) -> dict:
+    """{state, reason, ...} for one downstream analysis of an uploaded dataset
+    (ingest/gating.py). A paper reproduction has no gating: its analyses are
+    over the reference corpus itself, so they are always computed."""
+    st = ((ws.result or {}).get("analysis_states") or {}).get(analysis)
+    return dict(state=st["state"], reason=st.get("reason"), detail=st.get("detail")) if st \
+        else dict(state="computed", reason=None, detail=None)
+
+
 # ------------------------------------------------------------- claim helpers
 def resolution_of(claim: dict) -> dict:
     """root / resolved / native / kind for one claim, whether or not it went
@@ -217,21 +227,25 @@ def conflict_export_rows(ws):
 #: rule id -> (label, predicate name, params, address_level, help). `address_level`
 #: predicates depend only on the claims sharing an address, so they are
 #: evaluated once per address rather than once per claim.
+# `requires` names the downstream analysis (ingest/gating.py) whose prerequisite the
+# rule's predicate reads. A rule whose prerequisite is not computed for this dataset
+# is `not_applicable`: it neither filters nor reports a retention figure, because
+# "kept 100%" of nothing-compared would read as a finding.
 RULES = [
     dict(id="resolved_provenance_only", label="Resolved provenance only", predicate="resolved_provenance_only",
          params={}, address_level=False,
          help="Keep claims whose provenance root is identified. Unresolved claims are dropped, not treated as independent."),
     dict(id="non_circular", label="Exclude circular corroboration", predicate="non_circular",
-         params={}, address_level=True,
+         params={}, address_level=True, requires="conflicts",
          help="Drop addresses where at least one apparent confirmation is a restatement of a root already counted."),
     dict(id="exclude_licit_illicit_conflict", label="Exclude licit / illicit conflicts",
-         predicate="exclude_licit_illicit_conflict", params={}, address_level=True,
+         predicate="exclude_licit_illicit_conflict", params={}, address_level=True, requires="conflicts",
          help="Drop addresses where comparable sources disagree on licit versus illicit."),
     dict(id="exclude_conflicts", label="Exclude all conflicts (entity-type and licit / illicit)",
-         predicate="exclude_conflicts", params={}, address_level=True,
+         predicate="exclude_conflicts", params={}, address_level=True, requires="conflicts",
          help="Drop addresses with any entity-type or licit/illicit conflict."),
     dict(id="current_only", label="Exclude stale labels", predicate="current_only", params={},
-         address_level=False,
+         address_level=False, requires="staleness",
          help="Drop claims older than the staleness threshold. Claims with no revision date are kept: no date is not evidence of staleness."),
     dict(id="known_evidence_tier", label="Known evidence class only", predicate="min_evidence_tier",
          params={"tier": taxonomy.TIER_REPORT}, address_level=False,
@@ -291,10 +305,19 @@ def _apply(rule: dict, claims: list, ctx: dict) -> list:
     return [c for c in claims if fn(c, ctx, **params)]
 
 
+def _rule_state(ws, rule: dict) -> dict:
+    need = rule.get("requires")
+    return state_of(ws, need) if need else dict(state="computed", reason=None, detail=None)
+
+
 def trust_coverage(ws, rule_ids: list) -> dict:
     """Apply the selected existing trust predicates to the workspace's own
     claims and report how much evidence is retained. Coverage only - no
-    forensic figure, and no claim that the retained subset is more accurate."""
+    forensic figure, and no claim that the retained subset is more accurate.
+
+    A rule whose prerequisite analysis is not computed for this dataset (conflict
+    rules with no comparable labels, the staleness rule with no attribution
+    timestamp) is reported `not_applicable` with the reason and is skipped."""
     unknown = [r for r in rule_ids if r not in RULES_BY_ID]
     if unknown:
         raise KeyError(unknown[0])
@@ -305,24 +328,34 @@ def trust_coverage(ws, rule_ids: list) -> dict:
         cache["trust_individual"] = {}
     claims, ctx = cache["trust_base"]
     n_claims, n_addr = len(claims), len({c["address"] for c in claims})
+    states = {r["id"]: _rule_state(ws, r) for r in RULES}
+    applicable = {rid for rid, st in states.items() if st["state"] == "computed"}
 
     individual = cache["trust_individual"]
     for r in RULES:
-        if r["id"] not in individual:
+        if r["id"] in applicable and r["id"] not in individual:
             kept = _apply(r, claims, ctx)
             individual[r["id"]] = dict(claims=len(kept), addresses=len({c["address"] for c in kept}))
 
     eligible, steps = claims, []
     for rid in rule_ids:
+        if rid not in applicable:
+            steps.append(dict(rule=rid, claims=None, addresses=None, **{k: states[rid][k] for k in ("state", "reason")}))
+            continue
         eligible = _apply(RULES_BY_ID[rid], eligible, ctx)
-        steps.append(dict(rule=rid, claims=len(eligible), addresses=len({c["address"] for c in eligible})))
+        steps.append(dict(rule=rid, state="computed", claims=len(eligible),
+                          addresses=len({c["address"] for c in eligible})))
     e_claims, e_addr = len(eligible), len({c["address"] for c in eligible})
 
     return dict(
-        rules=[dict(id=r["id"], label=r["label"], help=r["help"], **individual[r["id"]],
-                    claims_share=individual[r["id"]]["claims"] / n_claims if n_claims else None)
+        rules=[dict(id=r["id"], label=r["label"], help=r["help"], state=states[r["id"]]["state"],
+                    reason=states[r["id"]]["reason"], detail=states[r["id"]]["detail"],
+                    **(individual[r["id"]] if r["id"] in applicable else dict(claims=None, addresses=None)),
+                    claims_share=(individual[r["id"]]["claims"] / n_claims if n_claims else None)
+                    if r["id"] in applicable else None)
                for r in RULES],
         selected=list(rule_ids), steps=steps,
+        skipped=[s["rule"] for s in steps if s["state"] != "computed"],
         universe=dict(claims=n_claims, addresses=n_addr),
         eligible=dict(claims=e_claims, addresses=e_addr,
                       claims_share=e_claims / n_claims if n_claims else None,

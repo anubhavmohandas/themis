@@ -12,7 +12,7 @@ paper" workspace), never as a silent fallback for an uploaded dataset's
 pages.
 """
 from __future__ import annotations
-import csv, datetime, hashlib, io, json, os, tempfile, threading, time, traceback
+import collections, csv, datetime, hashlib, io, json, os, pathlib, sqlite3, tempfile, threading, time, traceback
 
 try:
     from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -22,11 +22,12 @@ except ImportError as e:   # pragma: no cover
     raise SystemExit("themis.api requires the 'ui' extra: pip install -e '.[ui]'") from e
 
 from .corpus import Corpus
+from . import chains as chains_mod
 from . import analysis, config_io, overview as _overview, provenance, report as _report, graph as _graph, taxonomy, views
 from . import __version__
 from .paper import reproduce as _paper_repro, verify as _paper_verify
 from . import workspace as _workspace
-from .ingest import pipeline as _ingest_pipeline, schema as _ingest_schema
+from .ingest import gating as _gating, pipeline as _ingest_pipeline, preflight as _preflight, sqlite_source as _sqlite
 
 app = FastAPI(title="THEMIS API")
 app.add_middleware(
@@ -61,6 +62,15 @@ def _get_workspace(analysis_id: str) -> _workspace.AnalysisWorkspace:
     if ws is None:
         raise HTTPException(404, f"no analysis with id {analysis_id!r}")
     return ws
+
+
+def _require_analyzable(ws: _workspace.AnalysisWorkspace) -> None:
+    """An uploaded dataset that failed pre-flight has no claims and no analysis:
+    every analysis route refuses it with the reason, rather than answering with
+    empty tables and zeroes. Its summary and preflight.json stay readable."""
+    if ws.mode == _workspace.MODE_UPLOADED and (ws.result or {}).get("stopped"):
+        why = ((ws.preflight or {}).get("blockers") or [{}])[0].get("message") or "it failed pre-flight"
+        raise HTTPException(409, f"{_gating.UNSUPPORTED_SCHEMA}: this dataset cannot be analysed: {why}")
 
 
 # CSV-injection guard (OWASP): a cell whose raw text starts with one of these
@@ -108,13 +118,46 @@ def taxonomy_categories():
 
 
 # ------------------------------------------------------------- STEP 2 preflight
+def _bad_request(fn):
+    """A request naming a column the file lacks, an unknown chain or an unknown
+    semantic field is a 400, not a server error."""
+    try:
+        return fn()
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    except sqlite3.DatabaseError as e:
+        raise HTTPException(422, f"this is not a readable SQLite database ({e}): it may be corrupt, or still "
+                                 "downloading") from e
+
+
+def _parse_json_object(text: str | None, what: str) -> dict | None:
+    if not text:
+        return None
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as e:
+        raise HTTPException(400, f"invalid {what} JSON: {e}") from e
+    if not isinstance(parsed, dict):
+        raise HTTPException(400, f"{what} must be a JSON object")
+    return parsed
+
+
 @app.post("/api/preflight")
-async def preflight(file: UploadFile = File(...), sample_rows: int = Form(5)):
-    """Inspect an upload before any workspace exists: crypto/non-crypto
-    detection, inferred schema mapping, and a few sample rows for the
-    mapping-confirmation UI (STEP 10). Creates nothing."""
+async def preflight(file: UploadFile = File(...), sample_rows: int = Form(5), mapping: str | None = Form(None),
+                    semantics: str | None = Form(None), chain: str | None = Form(None),
+                    confirmed: bool = Form(False)):
+    """Inspect an upload before any workspace exists: what each column means (a
+    semantic field with a confidence and a validation status), the chain and how
+    it was determined, what is missing, and whether analysis may run. The same
+    `mapping` / `semantics` / `chain` / `confirmed` the analysis endpoints take
+    can be sent here, so the mapping screen shows exactly what would be enforced.
+    Creates nothing."""
+    name = file.filename or ""
+    if _sqlite.is_sqlite_path(name):
+        raise HTTPException(400, "SQLite databases are not uploaded through this endpoint (they are too large to "
+                                 "hold in memory): place the file under THEMIS_DB_DIR and use /api/sqlite/*.")
     data = await file.read()
-    suffix = ".csv.gz" if (file.filename or "").endswith(".gz") else ".csv"
+    suffix = ".csv.gz" if name.endswith(".gz") else ".csv"
     fd, tmp_path = tempfile.mkstemp(suffix=suffix)
     try:
         with os.fdopen(fd, "wb") as f:
@@ -123,15 +166,80 @@ async def preflight(file: UploadFile = File(...), sample_rows: int = Form(5)):
     finally:
         os.remove(tmp_path)
 
-    inferred = _ingest_schema.infer_mapping(rows, fieldnames)
-    return dict(filename=file.filename, fieldnames=fieldnames, n_rows=len(rows),
-               detection=inferred["detection"], mapping=inferred["mapping"],
-               sample_rows=rows[:sample_rows])
+    def run():
+        overrides = _preflight.overrides_from_roles(_parse_json_object(mapping, "mapping"), fieldnames)
+        overrides.update(_parse_json_object(semantics, "semantics") or {})
+        return _preflight.run(rows, fieldnames, filename=name, sha256=_hash_bytes(data), input_type=(
+            "csv.gz" if suffix.endswith(".gz") else "csv"), overrides=overrides, chain=chain or None,
+            confirmed=confirmed)
+    pf = _bad_request(run)
+    return dict(filename=name, fieldnames=fieldnames, n_rows=len(rows), preflight=pf,
+                detection=pf["detection"], mapping=pf["mapping"], sample_rows=rows[:sample_rows],
+                semantic_fields=_semantic_field_options(),
+                chains=sorted(chains_mod.all_adapters()))
+
+
+def _semantic_field_options() -> list[dict]:
+    """The vocabulary the mapping screen offers, straight from config/preflight.yml."""
+    return [dict(id=k, label=v["label"]) for k, v in _preflight.cfg()["semantic_fields"].items()]
+
+
+# ----------------------------------------------------------------- SQLite inputs
+def _db_path(rel: str) -> str:
+    """A database is opened by path RELATIVE to THEMIS_DB_DIR, never by an
+    arbitrary path: this API answers CORS-open requests, so it must not become a
+    way to probe the rest of the filesystem. Unset directory = SQLite disabled."""
+    root = os.environ.get("THEMIS_DB_DIR")
+    if not root:
+        raise HTTPException(409, "SQLite inputs are disabled: set THEMIS_DB_DIR to the directory holding the "
+                                 "database file(s), then pass the file name relative to it.")
+    base = pathlib.Path(root).resolve()
+    p = (base / rel).resolve()
+    if base not in p.parents or not _sqlite.is_sqlite_path(str(p)):
+        raise HTTPException(400, f"{rel!r} is not a .db / .sqlite / .sqlite3 file inside THEMIS_DB_DIR")
+    if not p.is_file():
+        raise HTTPException(404, f"no such database: {rel}")
+    return str(p)
+
+
+@app.get("/api/sqlite/tables")
+def sqlite_tables(db: str, count: bool = True):
+    """Tables (and views) of a database, with exact row counts where they finish
+    within the time limit. Read-only; the database is never loaded."""
+    path = _db_path(db)
+    return _bad_request(lambda: dict(db=db, size_bytes=os.path.getsize(path),
+                                     tables=_sqlite.list_tables(path, count=count)))
+
+
+@app.get("/api/sqlite/columns")
+def sqlite_columns(db: str, table: str):
+    return _bad_request(lambda: dict(db=db, table=table, columns=_sqlite.columns(_db_path(db), table)))
+
+
+@app.post("/api/sqlite/preflight")
+def sqlite_preflight(db: str = Form(...), table: str = Form(...), semantics: str | None = Form(None),
+                     chain: str | None = Form(None), confirmed: bool = Form(False)):
+    """Pre-flight one table on a spread-out sample. The result always carries the
+    blocker that streaming analysis of SQLite inputs is not implemented yet."""
+    path = _db_path(db)
+
+    def run():
+        sample, names = _sqlite.sample_rows(path, table, _preflight.cfg()["sample_size"])
+        with _sqlite.open_readonly(path) as con:
+            total = _sqlite.count_rows(con, table, _sqlite.cfg()["count_timeout_seconds"])
+        overrides = _preflight.overrides_from_roles(None, names)
+        overrides.update(_parse_json_object(semantics, "semantics") or {})
+        pf = _preflight.run(sample, names, filename=db, sha256=None, input_type="sqlite", table=table,
+                            total_rows=total, overrides=overrides, chain=chain or None, confirmed=confirmed)
+        return dict(db=db, table=table, preflight=pf, sample_rows=sample[:5], fieldnames=names,
+                    semantic_fields=_semantic_field_options(), chains=sorted(chains_mod.all_adapters()))
+    return _bad_request(run)
 
 
 # ------------------------------------------------------------ STEP 1/2 analysis
 def _run_upload(data: bytes, filename: str | None, source_id: str, use_reference: bool,
-                mapping_override: dict | None, progress=None) -> dict:
+                mapping_override: dict | None, progress=None, semantics: dict | None = None,
+                chain: str | None = None, confirmed: bool = False) -> dict:
     """Ingest an upload into a new UPLOADED_DATASET workspace. Shared by the
     synchronous endpoint and the background job runner so both go through
     the exact same code path."""
@@ -147,9 +255,10 @@ def _run_upload(data: bytes, filename: str | None, source_id: str, use_reference
             progress("complete", "reference", "reference corpus not available: comparison skipped" if missing
                      else "reference corpus loaded")
         today = datetime.date.today()
-        result = _ingest_pipeline.ingest(tmp_path, source_id, mapping_override=mapping_override,
-                                         reference=reference, analysis_as_of_date=today,
-                                         progress=progress)
+        result = _bad_request(lambda: _ingest_pipeline.ingest(
+            tmp_path, source_id, mapping_override=mapping_override, reference=reference,
+            analysis_as_of_date=today, progress=progress, semantics=semantics, chain=chain,
+            confirmed=confirmed, original_filename=filename))
     finally:
         os.remove(tmp_path)
 
@@ -165,11 +274,13 @@ def _run_upload(data: bytes, filename: str | None, source_id: str, use_reference
         dataset_name=filename or source_id, created_at=_workspace.now_iso(),
         analysis_as_of_date=str(today), reference_corpus=reference,
         input_file_hash=_hash_bytes(data), blockchain=result["detection"].get("blockchain"),
+        preflight=result["dataset_preflight"],
         schema_mapping=result.get("schema_mapping"), claims=result.get("claims", []),
         reference_corpus_version=(_scope_of(reference).lower() if reference is not None else None),
         warnings=result.get("limitations", []),
         result=result,
-        audit_trail=_report.audit_trail(parameters=dict(source_id=source_id, use_reference=use_reference),
+        audit_trail=_report.audit_trail(parameters=dict(source_id=source_id, use_reference=use_reference,
+                                                        chain=chain, confirmed=confirmed),
                                         warnings=result.get("limitations", [])),
     )
     _store.put(ws)
@@ -220,14 +331,18 @@ def _parse_mapping(mapping: str | None) -> dict | None:
 
 @app.post("/api/analysis")
 async def create_analysis(file: UploadFile = File(...), source_id: str = Form("uploaded_dataset"),
-                          use_reference: bool = Form(True), mapping: str | None = Form(None)):
+                          use_reference: bool = Form(True), mapping: str | None = Form(None),
+                          semantics: str | None = Form(None), chain: str | None = Form(None),
+                          confirmed: bool = Form(False)):
     """Confirm the schema mapping and run the audit (STEP 10 step 4): creates
     a new UPLOADED_DATASET workspace and returns its analysis_id. Every
     other page-facing route reads through that id, never through a global
     default corpus."""
     mapping_override = _parse_mapping(mapping)
     data = await file.read()
-    return _run_upload(data, file.filename, source_id, use_reference, mapping_override)
+    return _run_upload(data, file.filename, source_id, use_reference, mapping_override,
+                       semantics=_parse_json_object(semantics, "semantics"), chain=chain or None,
+                       confirmed=confirmed)
 
 
 @app.post("/api/analysis/paper")
@@ -304,14 +419,18 @@ def _finish(job: dict, fn):
 
 @app.post("/api/jobs/analysis")
 async def start_analysis_job(file: UploadFile = File(...), source_id: str = Form("uploaded_dataset"),
-                             use_reference: bool = Form(True), mapping: str | None = Form(None)):
+                             use_reference: bool = Form(True), mapping: str | None = Form(None),
+                             semantics: str | None = Form(None), chain: str | None = Form(None),
+                             confirmed: bool = Form(False)):
     mapping_override = _parse_mapping(mapping)
+    sem = _parse_json_object(semantics, "semantics")
     data = await file.read()
     stages = _UPLOAD_STAGES if use_reference else [s for s in _UPLOAD_STAGES if s[0] != "reference"]
     job = _new_job("upload", stages)
     cb = _progress_for(job)
     threading.Thread(target=_finish, daemon=True, args=(
-        job, lambda: _run_upload(data, file.filename, source_id, use_reference, mapping_override, cb))).start()
+        job, lambda: _run_upload(data, file.filename, source_id, use_reference, mapping_override, cb,
+                                 semantics=sem, chain=chain or None, confirmed=confirmed))).start()
     return dict(job_id=job["job_id"])
 
 
@@ -413,6 +532,7 @@ def analysis_claims(analysis_id: str, offset: int = 0, limit: int = 100,
     address's agreement outcome (null when the address is not comparable).
     """
     ws = _get_workspace(analysis_id)
+    _require_analyzable(ws)
     as_of = _as_of_date(ws)
     claims = ws.claims
     if source:
@@ -464,13 +584,16 @@ def analysis_conflicts(analysis_id: str, kind: str | None = None, source_a: str 
     hierarchical | incomparable (default: all four). A projection of the
     grouping analysis.agreement() already computes - no new classification."""
     ws = _get_workspace(analysis_id)
+    _require_analyzable(ws)
     if kind not in (None, "", "all", "polarity", "entity", "hierarchical", "incomparable"):
         raise HTTPException(400, f"unknown conflict kind {kind!r}")
     if relationship not in (None, "", "distinct_roots", "shared_root", "unresolved"):
         raise HTTPException(400, f"unknown provenance relationship {relationship!r}")
-    return views.conflicts_page(ws, kind=kind or None, source_a=source_a or None,
+    page = views.conflicts_page(ws, kind=kind or None, source_a=source_a or None,
                                 source_b=source_b or None, relationship=relationship or None,
                                 q=q, offset=offset, limit=limit)
+    # "0 conflicts" is only a finding when labels were comparable; otherwise say so
+    return dict(page, **views.state_of(ws, "conflicts"))
 
 
 @app.get("/api/analysis/{analysis_id}/trust-coverage")
@@ -479,6 +602,7 @@ def analysis_trust_coverage(analysis_id: str, rules: str = ""):
     (comma-separated rule ids). Uploaded datasets only: paper mode's
     trust-rule sensitivity is /drift against the ransomware-revenue task."""
     ws = _get_workspace(analysis_id)
+    _require_analyzable(ws)
     if ws.mode != _workspace.MODE_UPLOADED:
         raise HTTPException(409, "Trust-policy coverage preview is for uploaded datasets; "
                                  "a paper reproduction reports trust-rule sensitivity via /drift.")
@@ -492,6 +616,7 @@ def analysis_trust_coverage(analysis_id: str, rules: str = ""):
 @app.get("/api/analysis/{analysis_id}/address/{address:path}")
 def analysis_address(analysis_id: str, address: str):
     ws = _get_workspace(analysis_id)
+    _require_analyzable(ws)
     if ws.mode == _workspace.MODE_PAPER:
         res = analysis.explain(ws.reference_corpus, address, as_of=_as_of_date(ws))
         if res.get("found"):   # same order as the claims explain() just read
@@ -501,15 +626,56 @@ def analysis_address(analysis_id: str, address: str):
     return _explain_in_workspace(ws, address)
 
 
+def _provenance_payload(ws) -> dict:
+    """Two things that must never be blurred (uploaded-vs-reference separation):
+
+    * `uploaded_dataset`: provenance of THIS file's claims, supported only by what
+      the file itself declares plus the relationships measured against the
+      reference corpus (each carrying its evidence). A source the registry has
+      never seen has no provenance rule, so its root is UNRESOLVED, not borrowed
+      from any bundled source.
+    * `reference_corpus`: the bundled research sources' own lineage graph. It
+      describes THEMIS's reference data, not the uploaded file.
+
+    In a paper reproduction the reference corpus is the subject."""
+    ref = ws.reference_corpus
+    ref_graph = _graph.lineage_graph()
+    ref_block = dict(label="THEMIS Reference Corpus", graph=ref_graph,
+                     scope=_scope_of(ref) if ref is not None else None,
+                     note="The seven bundled research sources and where each traces to. This is THEMIS's own "
+                          "reference data, not provenance discovered for an uploaded file.")
+    if ws.mode == _workspace.MODE_PAPER:
+        evidence = ws.result.get("independence") if ws.result else None
+        _annotate_graph(ref_graph, evidence)
+        return dict(subject="reference_corpus", graph=ref_graph, evidence=evidence, inheritance_candidates=[],
+                    uploaded_dataset=None, reference_corpus=ref_block)
+
+    _annotate_graph(ref_graph, None)
+    src = ws.result["source_id"]
+    graph = _graph.lineage_graph({src: dict(display_name=ws.dataset_name)})
+    _annotate_graph(graph, None)
+    declared = collections.Counter((c.get("prov_family") or "").strip() for c in ws.claims)
+    declared.pop("", None)
+    roots = collections.Counter(views.resolution_of(c)["root"] for c in ws.claims)
+    candidates = ws.result.get("target_audit", {}).get("inheritance_candidates", [])
+    uploaded = dict(
+        label="Uploaded dataset provenance", source_id=src, dataset_name=ws.dataset_name, n_claims=len(ws.claims),
+        state=(ws.result.get("analysis_states") or {}).get("provenance"),
+        declared_sources=[dict(value=v, n_claims=n) for v, n in declared.most_common(20)],
+        n_distinct_declared_sources=len(declared),
+        roots=[dict(root=r, n_claims=n, resolved=not provenance.is_unresolved(r)) for r, n in roots.most_common(20)],
+        graph=graph, inheritance_candidates=candidates,
+        note="Only relationships supported by this file's own declared sources, or measured between its "
+             "addresses and the reference corpus, appear here.")
+    return dict(subject="uploaded_dataset", uploaded_dataset=uploaded, reference_corpus=ref_block,
+                graph=graph, inheritance_candidates=candidates, evidence=None)
+
+
 @app.get("/api/analysis/{analysis_id}/provenance")
 def analysis_provenance(analysis_id: str):
     ws = _get_workspace(analysis_id)
-    graph = _graph.lineage_graph()
-    inheritance = ws.result.get("target_audit", {}).get("inheritance_candidates", []) \
-        if ws.mode == _workspace.MODE_UPLOADED and ws.result else []
-    evidence = ws.result.get("independence") if ws.mode == _workspace.MODE_PAPER and ws.result else None
-    _annotate_graph(graph, evidence)
-    return dict(graph=graph, inheritance_candidates=inheritance, evidence=evidence)
+    _require_analyzable(ws)
+    return _provenance_payload(ws)
 
 
 def _annotate_graph(graph: dict, ind: dict | None) -> None:
@@ -652,6 +818,17 @@ def analysis_export(analysis_id: str, name: str):
                              indent=1, default=str)
         return StreamingResponse(iter([payload]), media_type="application/json",
                                  headers={"Content-Disposition": 'attachment; filename="analysis_summary.json"'})
+    if name == "preflight.json":
+        if ws.preflight is None:
+            raise HTTPException(404, "a paper reproduction has no input file, so no pre-flight")
+        payload = json.dumps(dict(ws.preflight, analysis_id=ws.analysis_id, n_claims=len(ws.claims),
+                                  stopped=bool((ws.result or {}).get("stopped")),
+                                  analysis_states=(ws.result or {}).get("analysis_states")),
+                             indent=1, default=str)
+        return StreamingResponse(iter([payload]), media_type="application/json",
+                                 headers={"Content-Disposition": 'attachment; filename="preflight.json"'})
+    if name in ("normalized_claims.csv", "conflicts.csv", "provenance_relationships.json"):
+        _require_analyzable(ws)
     if name == "normalized_claims.csv":
         fields = ["claim_id", "address", "source", "raw_label", "canon", "polarity", "root",
                   "heuristic", "confidence_raw", "lastmod"]
@@ -668,8 +845,10 @@ def analysis_export(analysis_id: str, name: str):
         return _csv_response(rows, header, name)
     if name == "provenance_relationships.json":
         indep = (ws.result or {}).get("independence") or {}
+        prov = _provenance_payload(ws)
         payload = json.dumps(dict(
-            mode=ws.mode, graph=_graph.lineage_graph(),
+            mode=ws.mode, subject=prov["subject"], uploaded_dataset=prov["uploaded_dataset"],
+            reference_corpus=prov["reference_corpus"],
             field_decodes=indep.get("field_decodes"), containment_top=indep.get("containment_top"),
             naming_residues=indep.get("naming_residues"),
             notable_root_propagation=indep.get("notable_root_propagation"),

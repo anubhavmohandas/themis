@@ -32,6 +32,10 @@ class Config:
         self.taxonomy = _load_yaml(root / "taxonomy.yml").get("categories", {})
         self.thresholds = _load_yaml(root / "thresholds.yml")
         self.trust_rules = _load_yaml(root / "trust_rules.yml")
+        # a custom THEMIS_CONFIG_DIR predating the pre-flight has no preflight.yml: use the bundled one
+        # rather than run without the gate
+        pf = root / "preflight.yml"
+        self.preflight = _load_yaml(pf if pf.exists() else PKG_CONFIG / "preflight.yml")
         notable = root / "notable_roots.yml"
         self.notable_roots = (_load_yaml(notable) or []) if notable.exists() else []
         self.sources = {}

@@ -85,6 +85,11 @@ def _unsupported_chain_field(rows: list[dict], fieldnames: list[str], sample_siz
     return None
 
 
+def confidence_of(rate: float) -> str:
+    """The share of sampled values that validate -> HIGH / MEDIUM / LOW / NONE."""
+    return HIGH if rate >= 0.8 else MEDIUM if rate >= 0.3 else LOW if rate >= 0.05 else NONE
+
+
 def detect(rows: list[dict], fieldnames: list[str], sample_size: int = 500) -> dict:
     """Sample-based, so it stays fast on a large file; STEP 4 validation
     later checks every row exactly once a mapping is confirmed."""
@@ -110,7 +115,7 @@ def detect(rows: list[dict], fieldnames: list[str], sample_size: int = 500) -> d
                     sample_hit_rate=0.0, sampled=0, total_rows=len(rows), per_field={})
 
     rate = best["rate"]
-    confidence = HIGH if rate >= 0.8 else MEDIUM if rate >= 0.3 else LOW if rate >= 0.05 else NONE
+    confidence = confidence_of(rate)
     unsupported = None if confidence != NONE else _unsupported_chain_field(rows, fieldnames, sample_size)
     crypto_asset = (None if (confidence != NONE or unsupported)
                     else _crypto_asset_field(rows, fieldnames, sample_size))

@@ -16,37 +16,16 @@ corpus-wide agreement/independence analyses - that would let reference-
 reference relationships the target never touched leak into its numbers.
 """
 from __future__ import annotations
-import csv, gzip
+import csv, gzip, hashlib
 
-from .. import corpus as _corpus, analysis, target_audit, chains
-from . import detect as _detect, schema as _schema, validate as _validate, claims as _claims
+from .. import corpus as _corpus, analysis, target_audit, chains, config_io
+from . import gating as _gating, preflight as _preflight, validate as _validate, claims as _claims
 
-NOT_CRYPTO_MESSAGE = (
-    "This dataset does not appear to contain cryptocurrency attribution data.\n\n"
-    "THEMIS's forensic reliability methodology is designed for cryptocurrency "
-    "attribution datasets.\n\n"
-    "Basic structural data-quality checks can still be performed, but "
-    "provenance-aware cryptocurrency attribution analysis is not applicable."
-)
-
-UNSUPPORTED_CHAIN_MESSAGE = (
-    "Cryptocurrency attribution data appears to be present, but this blockchain "
-    "is not currently supported for full forensic reliability analysis.\n\n"
-    "Column '{field}' contains address-shaped identifiers that no registered "
-    "chain adapter ({supported}) validates. THEMIS V1 only ships full address "
-    "validation, provenance resolution and cross-source comparison for the "
-    "chains it has an adapter for.\n\n"
-    "Basic structural data-quality checks can still be performed."
-)
-
-CRYPTO_NON_ATTRIBUTION_MESSAGE = (
-    "Cryptocurrency data was detected (column '{field}' references a recognized "
-    "cryptocurrency), but no usable attribution-label structure was identified.\n\n"
-    "This looks like price, market, or transaction data rather than an attribution "
-    "dataset (addresses linked to entities or categories). THEMIS's forensic "
-    "reliability methodology audits attribution claims, not raw market data.\n\n"
-    "Basic structural data-quality checks can still be performed."
-)
+# The user-facing stop messages live with the pre-flight that decides them;
+# re-exported so existing callers keep importing them from here.
+NOT_CRYPTO_MESSAGE = _preflight.NOT_CRYPTO_MESSAGE
+UNSUPPORTED_CHAIN_MESSAGE = _preflight.UNSUPPORTED_CHAIN_MESSAGE
+CRYPTO_NON_ATTRIBUTION_MESSAGE = _preflight.CRYPTO_NON_ATTRIBUTION_MESSAGE
 
 
 def load_csv(path: str) -> tuple[list[dict], list[str]]:
@@ -66,48 +45,80 @@ def load_csv(path: str) -> tuple[list[dict], list[str]]:
         return rows, list(reader.fieldnames or [])
 
 
+def input_type_of(path: str) -> str:
+    return "csv.gz" if str(path).endswith(".gz") else "csv"
+
+
+def sha256_file(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _stopped(source_id: str, pf: dict, rows: list, fieldnames: list, validation: dict | None = None) -> dict:
+    """The result for a dataset that must not be analysed: no claims exist."""
+    return dict(source_id=source_id, stopped=True, message=pf["message"], detection=pf["detection"],
+                dataset_preflight=pf, analysis_states=_gating.blocked(pf), claims=[],
+                validation=validation,
+                basic_quality=dict(rows=len(rows), columns=fieldnames,
+                                   empty_rows=sum(1 for r in rows if not any(r.values()))))
+
+
 def ingest(path: str, source_id: str, mapping_override: dict | None = None,
-          reference: "_corpus.Corpus | None" = None, sample_size: int = 500,
-          analysis_as_of_date=None, progress=None) -> dict:
-    """`progress`, when given, is called as progress("start"|"complete", stage_id,
+          reference: "_corpus.Corpus | None" = None, sample_size: int | None = None,
+          analysis_as_of_date=None, progress=None, *, semantics: dict | None = None,
+          chain: str | None = None, confirmed: bool = False, original_filename: str | None = None) -> dict:
+    """`mapping_override` is {role: column} (CLI `--map`, semantic ids or the
+    legacy role names) and `semantics` is {column: semantic type} (the mapping
+    screen). Either way the pre-flight re-validates the choice: a mapping can
+    select columns, it can never waive validation. `chain` is a user-selected
+    chain id; `confirmed` records that the user reviewed low-confidence mappings.
+
+    `progress`, when given, is called as progress("start"|"complete", stage_id,
     detail) around each real stage so a caller (the API's job runner) can
     report genuine pipeline state. It changes nothing about the result."""
     def _p(event, stage, detail=None):
         if progress is not None:
             progress(event, stage, detail)
 
+    if source_id in config_io.load().sources:
+        # such an id would hand this upload the bundled source's provenance rule
+        raise ValueError(f"source id {source_id!r} is a bundled THEMIS reference source; choose another "
+                         "id so the uploaded file is not given that source's provenance")
+
     _p("start", "parse")
     rows, fieldnames = load_csv(path)
     _p("complete", "parse", f"{len(rows):,} rows \u00b7 {len(fieldnames)} columns")
 
     _p("start", "detect")
-    inferred = _schema.infer_mapping(rows, fieldnames, sample_size)
-    detection = inferred["detection"]
-    _p("complete", "detect", f"{detection.get('blockchain') or 'no chain'} \u00b7 confidence {detection.get('confidence')}")
+    overrides = _preflight.overrides_from_roles(mapping_override, fieldnames)
+    overrides.update(semantics or {})
+    pf = _preflight.run(rows, fieldnames, filename=original_filename or str(path).rsplit("/", 1)[-1],
+                        sha256=sha256_file(path), input_type=input_type_of(path), overrides=overrides,
+                        chain=chain, confirmed=confirmed, sample_size=sample_size)
+    detection = pf["detection"]
+    _p("complete", "detect", f"{pf['dataset_type']} \u00b7 {pf['chain']['value'] or 'no chain'} \u00b7 {pf['status']}")
+    if not pf["can_analyze"]:
+        return _stopped(source_id, pf, rows, fieldnames)
 
-    if detection["confidence"] == _detect.NONE and not mapping_override:
-        unsupported_field = detection.get("unsupported_chain_field")
-        crypto_asset_field = detection.get("crypto_asset_field")
-        if unsupported_field:
-            supported = ", ".join(sorted(chains.all_adapters())) or "none registered"
-            message = UNSUPPORTED_CHAIN_MESSAGE.format(field=unsupported_field, supported=supported)
-        elif crypto_asset_field:
-            message = CRYPTO_NON_ATTRIBUTION_MESSAGE.format(field=crypto_asset_field)
-        else:
-            message = NOT_CRYPTO_MESSAGE
-        return dict(source_id=source_id, stopped=True, message=message,
-                    detection=detection,
-                    basic_quality=dict(rows=len(rows), columns=fieldnames,
-                                       empty_rows=sum(1 for r in rows if not any(r.values()))))
-
-    mapping = dict(inferred["mapping"])
-    if mapping_override:
-        mapping.update({k: v for k, v in mapping_override.items() if v is not None})
-
-    chain_id = detection.get("blockchain")
+    mapping, chain_id = pf["mapping"], pf["chain"]["value"]
     _p("start", "validate")
     validation = _validate.validate_rows(rows, mapping, chain_id)
     _p("complete", "validate", f"{len(validation['valid_rows']):,} of {len(rows):,} rows have a valid address")
+    # the sample said the subject looked valid; every row is now checked. A file whose
+    # identifiers mostly fail is not an attribution dataset, whatever its first rows held.
+    floor = _preflight.cfg()["min_identifier_valid_rate"]
+    n_chk, n_bad = validation["n_identifiers_checked"], validation["n_identifiers_invalid"]
+    if not n_chk or (n_chk - n_bad) / n_chk < floor:
+        pf["blockers"].append(dict(code="subject_invalid_full", message=(
+            f"Only {n_chk - n_bad:,} of {n_chk:,} values in '{mapping['address']}' are valid {chain_id} identifiers "
+            f"(minimum {floor:.0%}); no claims were created.")))
+        pf.update(status="blocked", can_analyze=False, message=_preflight._message("blocked", "attribution_claims",
+                                                                                   pf["blockers"], detection))
+        return _stopped(source_id, pf, rows, fieldnames,
+                        {k: v for k, v in validation.items() if k != "valid_rows"})
     _p("start", "normalize")
     claims = _claims.build_claims(validation["valid_rows"], mapping, source_id, blockchain=chain_id)
     _p("complete", "normalize", f"{len(claims):,} claims")
@@ -116,8 +127,10 @@ def ingest(path: str, source_id: str, mapping_override: dict | None = None,
                     "internal_consistency": True}
     limitations = []
 
-    if not mapping.get("timestamp"):
-        limitations.append("Freshness unavailable: no timestamp field was mapped.")
+    basis = pf["currency_basis"]
+    if basis is None:
+        limitations.append("Staleness / currency not computed: no attribution timestamp (last updated or last "
+                           "verified) is mapped. Other date columns are never used for it.")
     else:
         capabilities["freshness"] = True
 
@@ -137,7 +150,7 @@ def ingest(path: str, source_id: str, mapping_override: dict | None = None,
         limitations.append("Cross-source comparison unavailable: no reference corpus was supplied.")
         limitations.append("Provenance extraction limited: this source has no declared "
                            "provenance rule, so every claim's root is UNRESOLVED by default.")
-        fresh = analysis.freshness(claims, as_of=analysis_as_of_date) if mapping.get("timestamp") else None
+        fresh = analysis.freshness(claims, as_of=analysis_as_of_date) if basis else None
         target_result = dict(
             n_target_addresses=len({c["address"] for c in claims}), n_target_claims=len(claims),
             address_comparability={}, address_resolution={},
@@ -149,19 +162,34 @@ def ingest(path: str, source_id: str, mapping_override: dict | None = None,
                 provenance=_unavailable_dim("no reference corpus was supplied"),
                 independence=_unavailable_dim("no reference corpus was supplied"),
                 currency=(dict(available=True, **fresh) if fresh is not None
-                         else _unavailable_dim("no revision-date field was mapped")),
+                         else _unavailable_dim("no attribution timestamp (last updated / last verified) is mapped")),
                 evidence_class=target_audit.evidence_class_tally(claims),
             ),
             limitations=[], inheritance_candidates=[],
         )
 
+    states = _gating.evaluate(pf, claims, target_result, reference)
+    if basis is None:
+        # every claim would be "currency-unknown": that is the absence of a figure, not a finding
+        target_result["profile"]["currency"] = dict(available=False, state=states["staleness"]["state"],
+                                                    reason=states["staleness"]["reason"])
+    else:
+        currency = target_result["profile"]["currency"]
+        currency.update(state=states["staleness"]["state"], basis=basis)   # which field and rule produced these counts
+    if states["conflicts"]["state"] != _gating.COMPUTED:
+        target_result["profile"]["agreement"]["state"] = states["conflicts"]["state"]
+
     _p("complete", "compare",
        "provenance, reference comparison, independence and currency" if reference is not None
        else "internal checks only (no reference corpus)")
+    summary = {k: v for k, v in validation.items() if k not in ("valid_rows", "rejected")}
+    summary["rejected_examples"] = validation["rejected"][:_preflight.cfg()["rejected_examples"]]
+    pf["validation"] = summary
+    pf["analysis_states"] = states
     return dict(
         source_id=source_id, stopped=False,
-        detection=detection, schema_mapping=mapping,
-        validation={k: v for k, v in validation.items() if k != "valid_rows"},
+        detection=detection, schema_mapping=mapping, dataset_preflight=pf, analysis_states=states,
+        validation=summary,
         claims=claims, capabilities=capabilities, limitations=limitations,
         target_audit=target_result, reliability_profile=target_result["profile"],
     )
