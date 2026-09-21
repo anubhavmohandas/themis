@@ -133,7 +133,9 @@ class TestSchemaMapping(unittest.TestCase):
         self.assertEqual(m["address"], "wallet_address")
         self.assertEqual(m["label"], "entity_type")
         self.assertEqual(m["source"], "notes_url")
-        self.assertEqual(m["timestamp"], "last_seen")
+        # `last_seen` dates an observation, not the attribution: it must never become the
+        # revision date that staleness is computed from
+        self.assertIsNone(m["timestamp"])
 
     def test_missing_optional_columns_report_none_not_a_guess(self):
         rows = [{"wallet_address": "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2"}]
@@ -154,9 +156,14 @@ class TestValidation(unittest.TestCase):
 
     def test_empty_address_column_rejects_every_row(self):
         rows = [{"a": "", "b": "x"}]
-        v = validate.validate_rows(rows, dict(address="a", label="b"), None)
+        v = validate.validate_rows(rows, dict(address="a", label="b"), "bitcoin")
         self.assertEqual(v["n_valid"], 0)
         self.assertEqual(v["rejected"][0]["reason"], "empty address")
+
+    def test_address_validation_without_a_chain_is_refused_not_skipped(self):
+        # the old behaviour accepted every non-empty string as an address when no chain was known
+        with self.assertRaises(ValueError):
+            validate.validate_rows([{"a": "1000", "b": "x"}], dict(address="a", label="b"), None)
 
     def test_duplicate_rows_are_flagged_not_silently_dropped(self):
         rows = [CRYPTO_ROWS[0], dict(CRYPTO_ROWS[0])]
