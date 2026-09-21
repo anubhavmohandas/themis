@@ -107,7 +107,9 @@ function UploadTrust() {
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 12.5, fontWeight: 500 }}>{r.label}</div>
                       <div className="rl-desc">{r.help}</div>
-                      <div className="mono mut" style={{ fontSize: 11, marginTop: 4 }}>alone keeps {fmt(r.claims)} / {fmt(data.universe.claims)} claims ({pct(r.claims_share)})</div>
+                      {r.state === "computed"
+                        ? <div className="mono mut" style={{ fontSize: 11, marginTop: 4 }}>alone keeps {fmt(r.claims)} / {fmt(data.universe.claims)} claims ({pct(r.claims_share)})</div>
+                        : <div className="hot" style={{ fontSize: 11.5, marginTop: 4 }}>Not applicable — {r.reason}. This rule is skipped, not counted as keeping every claim.</div>}
                     </div>
                   </label>
                 ))}
@@ -116,7 +118,7 @@ function UploadTrust() {
 
             <Section title="Retention under each rule on its own" meta={`${fmt(data.universe.claims)} claims`}>
               <div className="panel pad">
-                <BarRows cols="260px 1fr 74px 130px" rows={data.rules.map((r) => ({
+                <BarRows cols="260px 1fr 74px 130px" rows={data.rules.filter((r) => r.state === "computed").map((r) => ({
                   key: r.id, label: r.label, share: r.claims_share, pct: pct(r.claims_share), n: `${fmt(r.claims)} / ${fmt(data.universe.claims)}`,
                   fill: selected.includes(r.id) ? "var(--ac)" : "var(--nt2)" }))} />
               </div>
@@ -138,7 +140,7 @@ function UploadTrust() {
                 <div className="steps">
                   {data.steps.map((s) => (
                     <div key={s.rule} className="step"><span className="mk">→</span>
-                      <div>{data.rules.find((r) => r.id === s.rule)?.label}<div className="d">{fmt(s.claims)} claims · {fmt(s.addresses)} addresses remain</div></div></div>
+                      <div>{data.rules.find((r) => r.id === s.rule)?.label}<div className="d">{s.state === "computed" ? `${fmt(s.claims)} claims · ${fmt(s.addresses)} addresses remain` : `not applicable — ${s.reason}; skipped`}</div></div></div>
                   ))}
                 </div>
               </div>

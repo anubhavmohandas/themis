@@ -24,12 +24,14 @@ const postEmpty = (path) => fetch(`${BASE}${path}`, { method: "POST" }).then(par
 const qs = (params = {}) =>
   new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "")).toString();
 
-function analysisForm({ file, sourceId, useReference, mapping }) {
+function analysisForm({ file, sourceId, useReference, semantics, chain, confirmed }) {
   const form = new FormData();
   form.append("file", file);
   form.append("source_id", sourceId || "uploaded_dataset");
   form.append("use_reference", useReference ? "true" : "false");
-  if (mapping) form.append("mapping", JSON.stringify(mapping));
+  if (semantics && Object.keys(semantics).length) form.append("semantics", JSON.stringify(semantics));
+  if (chain) form.append("chain", chain);
+  form.append("confirmed", confirmed ? "true" : "false");
   return form;
 }
 
@@ -39,10 +41,24 @@ export const api = {
   sources: () => getJSON("/api/sources"),
   taxonomy: () => getJSON("/api/taxonomy"),
 
-  preflight: (file) => {
+  // Pre-flight: what each column means, the chain, and whether analysis may run. `semantics` is the
+  // user's {column: semantic field} corrections; the server re-validates them, it never trusts them.
+  preflight: (file, { semantics, chain, confirmed } = {}) => {
     const form = new FormData();
     form.append("file", file);
+    if (semantics && Object.keys(semantics).length) form.append("semantics", JSON.stringify(semantics));
+    if (chain) form.append("chain", chain);
+    form.append("confirmed", confirmed ? "true" : "false");
     return postForm("/api/preflight", form);
+  },
+  sqliteTables: (db) => getJSON(`/api/sqlite/tables?${qs({ db })}`),
+  sqlitePreflight: ({ db, table, semantics, chain, confirmed }) => {
+    const form = new FormData();
+    form.append("db", db); form.append("table", table);
+    if (semantics && Object.keys(semantics).length) form.append("semantics", JSON.stringify(semantics));
+    if (chain) form.append("chain", chain);
+    form.append("confirmed", confirmed ? "true" : "false");
+    return postForm("/api/sqlite/preflight", form);
   },
 
   // Background jobs: start returns {job_id}; poll job(id) for real stage state.

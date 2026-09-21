@@ -6,56 +6,13 @@ import { useJob } from "../lib/useJob.js";
 import { bytes, fmt, pct } from "../lib/format.js";
 import { ErrorBox, PageHead, Section } from "../components/ui.jsx";
 import Pipeline from "../components/Pipeline.jsx";
-
-const ROLES = [
-  { key: "address", label: "Address", required: true },
-  { key: "label", label: "Label" },
-  { key: "category", label: "Category" },
-  { key: "actor", label: "Actor" },
-  { key: "source", label: "Declared source / URL" },
-  { key: "timestamp", label: "Revision date" },
-  { key: "confidence", label: "Confidence" },
-];
+import { ChainPicker, ConfirmMapping, MappingTable, PreflightChecks, PreflightVerdict } from "../components/Preflight.jsx";
 
 async function sha256(file) {
   if (!window.crypto?.subtle) return null;
   const digest = await window.crypto.subtle.digest("SHA-256", await file.arrayBuffer());
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
-
-// Live checks derived from the pre-flight response and the current mapping
-// (so editing a select updates them). Detection figures are the backend's.
-function checksFor(pf, mapping) {
-  const d = pf.detection;
-  const out = [];
-  const detected = d.confidence && d.confidence !== "NONE" && d.blockchain;
-  out.push({
-    ok: detected ? "ok" : "fail",
-    text: detected
-      ? `Cryptocurrency addresses detected: ${d.blockchain}, confidence ${d.confidence}`
-      : d.unsupported_chain_field
-        ? `Address-shaped values on a chain THEMIS does not support, in “${d.unsupported_chain_field}”: THEMIS analyses Bitcoin only`
-        : d.crypto_asset_field
-          ? `Cryptocurrency-related column “${d.crypto_asset_field}”, but no Bitcoin addresses: this is not attribution data`
-          : "No cryptocurrency addresses detected in any column",
-    sub: detected ? `${pct(d.sample_hit_rate, 1)} of ${fmt(d.sampled)} sampled rows in “${d.address_field}” are valid ${d.blockchain} addresses (${fmt(d.total_rows)} rows in file)` : null,
-  });
-  const structured = mapping.address && (mapping.label || mapping.category);
-  out.push({
-    ok: structured ? "ok" : "fail",
-    text: structured ? "Attribution structure found: an address column and a label or category column" : "Attribution structure missing: map an address column and a label or category column",
-  });
-  if (d.unsupported_chain_field && detected) out.push({ ok: "warn", text: `Column “${d.unsupported_chain_field}” looks like an unsupported chain and will not be analysed` });
-  out.push(mapping.timestamp
-    ? { ok: "ok", text: `Revision date mapped to “${mapping.timestamp}”: currency can be assessed` }
-    : { ok: "warn", text: "No revision-date column mapped: every label will be reported as currency-unknown" });
-  out.push(mapping.source
-    ? { ok: "ok", text: `Declared source mapped to “${mapping.source}”` }
-    : { ok: "warn", text: "No declared-source column mapped" });
-  return out;
-}
-const MK = { ok: "✓", warn: "!", fail: "✕" };
-const TONE = { ok: "ok", warn: "flag", fail: "hot" };
 
 export default function HomePage() {
   const nav = useNavigate();
@@ -65,7 +22,9 @@ export default function HomePage() {
   const [hash, setHash] = useState(undefined);        // undefined: computing, null: unavailable
   const [pf, setPf] = useState(null);
   const [pfBusy, setPfBusy] = useState(false);
-  const [mapping, setMapping] = useState({});
+  const [edits, setEdits] = useState({});            // the analyst's {column: semantic field} corrections
+  const [chain, setChain] = useState(null);           // a chain the analyst chose
+  const [confirmed, setConfirmed] = useState(false);
   const [sourceId, setSourceId] = useState("uploaded_dataset");
   const [useReference, setUseReference] = useState(true);
   const [error, setError] = useState(null);
@@ -76,32 +35,42 @@ export default function HomePage() {
   const started = !!upload.job;
   useEffect(() => { if (started) pipeRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }, [started]);
 
-  // choose a file -> client-side hash + live pre-flight, immediately
+  // choose a file -> client-side hash
   useEffect(() => {
     if (!file) return undefined;
     let cancelled = false;
-    setHash(undefined); setPf(null); setError(null); upload.reset();
+    setHash(undefined);
     sha256(file).then((h) => { if (!cancelled) setHash(h); }).catch(() => { if (!cancelled) setHash(null); });
-    setPfBusy(true);
-    api.preflight(file)
-      .then((r) => { if (!cancelled) { setPf(r); setMapping(r.mapping); } })
-      .catch((e) => { if (!cancelled) setError(e.message); })
-      .finally(() => { if (!cancelled) setPfBusy(false); });
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file]);
 
-  const pick = (f) => { if (f) { setFile(f); setSourceId((f.name || "uploaded_dataset").replace(/\.(csv|gz)+$/i, "") || "uploaded_dataset"); } };
+  // the file, or any correction to it -> the server re-runs the pre-flight; what it returns is what will be enforced
+  const editKey = JSON.stringify(edits);
+  useEffect(() => {
+    if (!file) return undefined;
+    let cancelled = false;
+    setError(null); upload.reset(); setPfBusy(true);
+    const t = setTimeout(() => {
+      api.preflight(file, { semantics: edits, chain, confirmed })
+        .then((r) => { if (!cancelled) setPf(r); })
+        .catch((e) => { if (!cancelled) { setPf(null); setError(e.message); } })
+        .finally(() => { if (!cancelled) setPfBusy(false); });
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file, editKey, chain, confirmed]);
+
+  const pick = (f) => { if (f) { setEdits({}); setChain(null); setConfirmed(false); setPf(null); setFile(f); setSourceId((f.name || "uploaded_dataset").replace(/\.(csv|gz)+$/i, "") || "uploaded_dataset"); } };
 
   const finish = (j) => {
     if (j.status === "complete") { activate(j.analysis_id, j.meta); nav("/overview"); }
   };
-  const runAnalysis = () => upload.run(() => api.startAnalysisJob({ file, sourceId, useReference, mapping }), finish);
+  const runAnalysis = () => upload.run(() => api.startAnalysisJob({ file, sourceId, useReference, semantics: edits, chain, confirmed }), finish);
   const runPaper = () => paper.run(() => api.startPaperJob(), finish);
 
   const uploading = upload.job?.status === "running";
-  const checks = pf ? checksFor(pf, mapping) : [];
-  const blocked = !pf || !mapping.address || uploading;
+  const p = pf?.preflight;
+  const blocked = !p || !p.can_analyze || uploading || pfBusy;
 
   return (
     <div>
@@ -146,40 +115,19 @@ export default function HomePage() {
           {error && <ErrorBox title="Pre-flight failed">{error}</ErrorBox>}
           {pfBusy && <div className="loading">Inspecting file…</div>}
 
-          {pf && (
+          {p && (
             <>
-              <Section title="2 · Pre-flight" meta={`${fmt(pf.n_rows)} rows`}>
-                <div className="panel pad">
-                  {checks.map((c, i) => (
-                    <div key={i} className="checkline">
-                      <span className={`mk ${TONE[c.ok]}`}>{MK[c.ok]}</span>
-                      <div><div>{c.text}</div>{c.sub && <div className="mut" style={{ fontSize: 11.5 }}>{c.sub}</div>}</div>
-                    </div>
-                  ))}
-                </div>
+              <Section title="2 · Pre-flight" meta={`${fmt(pf.n_rows)} rows`}
+                note="Nothing is analysed until the file has a defensible attribution schema: a claim subject that validates on a known chain, and something claimed about it.">
+                <PreflightChecks p={p} />
+                <PreflightVerdict p={p} />
+                <ChainPicker p={p} chains={pf.chains} value={chain} onChange={setChain} />
               </Section>
 
-              <Section title="3 · Schema mapping" note="THEMIS’s best guess at which column plays which role. Correct anything before running: nothing is analysed until you confirm.">
-                <div className="tablewrap">
-                  <table>
-                    <thead><tr><th>Role</th><th>Column</th><th>First row</th></tr></thead>
-                    <tbody>
-                      {ROLES.map((r) => (
-                        <tr key={r.key}>
-                          <td>{r.label}{r.required && <span className="hot"> *</span>}</td>
-                          <td>
-                            <select className="plain" value={mapping[r.key] || ""} aria-label={`${r.label} column`}
-                              onChange={(e) => setMapping({ ...mapping, [r.key]: e.target.value || null })}>
-                              <option value="">— not present —</option>
-                              {pf.fieldnames.map((f) => <option key={f} value={f}>{f}</option>)}
-                            </select>
-                          </td>
-                          <td className="mono small mut">{mapping[r.key] && pf.sample_rows[0] ? String(pf.sample_rows[0][mapping[r.key]] ?? "").slice(0, 48) : ""}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+              <Section title="3 · Schema mapping" note="What THEMIS took each column to mean, from its name and its values. Correct anything: the server re-validates every choice, and a mapping can never waive validation.">
+                <MappingTable p={p} fields={pf.semantic_fields}
+                  onChange={(col, sem) => setEdits({ ...edits, [col]: sem })} />
+                <ConfirmMapping p={p} confirmed={confirmed} onChange={setConfirmed} />
                 <details className="more">
                   <summary>Show {pf.sample_rows.length} sample rows</summary>
                   <div className="tablewrap"><table>
@@ -191,13 +139,8 @@ export default function HomePage() {
                   <button type="button" className="btn" disabled={blocked} aria-disabled={blocked} onClick={runAnalysis}>
                     {uploading ? "Running…" : "Run analysis"}
                   </button>
-                  {!mapping.address && <span className="hot" style={{ fontSize: 12 }}>Map an address column to continue.</span>}
+                  {!p.can_analyze && <span className="hot" style={{ fontSize: 12 }}>Analysis is blocked until the items above are resolved.</span>}
                 </div>
-                {mapping.address && !(pf.detection.confidence && pf.detection.confidence !== "NONE" && pf.detection.blockchain) && (
-                  <div className="inline-note" role="alert">
-                    Pre-flight found no cryptocurrency addresses in this file. If you run anyway, THEMIS cannot validate the values in “{mapping.address}” as addresses of any chain, and the results will not be meaningful.
-                  </div>
-                )}
               </Section>
             </>
           )}

@@ -145,7 +145,7 @@ export function Empty({ eyebrow = "No active analysis", children, action }) {
 
 // Every analysis page starts here: no analysis / loading / error / stopped, else children.
 export function Gate({ children, needSummary = true }) {
-  const { analysisId, ready, summary, summaryError, stopped } = useAnalysis();
+  const { analysisId, ready, summary, summaryError, stopped, result } = useAnalysis();
   if (!ready) return <Loading />;
   if (!analysisId) {
     return (
@@ -159,7 +159,8 @@ export function Gate({ children, needSummary = true }) {
   if (needSummary && stopped) {
     return (
       <Empty eyebrow="Analysis stopped at pre-flight" action={<Link className="btn" to="/">New analysis</Link>}>
-        This dataset did not pass pre-flight, so no audit was produced for it.
+        <span style={{ whiteSpace: "pre-line" }}>{result?.message || "This dataset did not pass pre-flight."}</span>
+        {"\n"}No claims were created and no analysis was run, so there is nothing to show on this screen.
       </Empty>
     );
   }

@@ -6,7 +6,7 @@ import { api } from "../lib/api.js";
 import { useApiData } from "../lib/useApi.js";
 import { useAnalysis } from "../lib/AnalysisContext.jsx";
 import { fmt, pct } from "../lib/format.js";
-import { Drawer, ErrorBox, Gate, Loading, PageHead, Section, Status, Tag } from "../components/ui.jsx";
+import { Drawer, ErrorBox, Gate, Loading, PageHead, RadioRow, Section, Status, Tag } from "../components/ui.jsx";
 
 export default function ProvenancePage() {
   return <Gate><ReactFlowProvider><Body /></ReactFlowProvider></Gate>;
@@ -49,8 +49,12 @@ function Body() {
   const [iso, setIso] = useState(null);          // {address, datasets, roots} or {error}
   const [selNode, setSelNode] = useState(null);
   const [selEdge, setSelEdge] = useState(null);
+  // an uploaded file's own provenance and THEMIS's bundled reference corpus are different subjects
+  const [view, setView] = useState("uploaded");
+  const showRef = !isPaper && view === "reference";
+  const up = data?.uploaded_dataset;
 
-  const graph = data?.graph;
+  const graph = showRef ? data?.reference_corpus?.graph : data?.graph;
   const nodeById = useMemo(() => Object.fromEntries((graph?.nodes || []).map((n) => [n.id, n])), [graph]);
 
   // visible edges = class filter AND circular-only AND isolated address
@@ -125,8 +129,24 @@ function Body() {
   const ev = data?.evidence;
   return (
     <div>
-      <PageHead kicker="Provenance Explorer" title="Datasets → declared sources → roots"
-        lead="Built from the source registry. No edge is drawn as fact beyond what the registry states; inferred and unresolved edges differ by line style, not colour alone. Pan, zoom, click a node to trace it, click an edge for its evidence." />
+      <PageHead kicker={isPaper ? "Provenance Explorer · THEMIS Reference Corpus" : showRef ? "Provenance Explorer · THEMIS Reference Corpus" : "Provenance Explorer · uploaded dataset"}
+        title="Datasets → declared sources → roots"
+        lead={showRef || isPaper
+          ? "Built from the source registry. No edge is drawn as fact beyond what the registry states; inferred and unresolved edges differ by line style, not colour alone. Pan, zoom, click a node to trace it, click an edge for its evidence."
+          : "Only what your file itself declares, and what was measured between its addresses and the reference corpus, is shown as its provenance. A source THEMIS has never seen has no provenance rule, so its root is unresolved: it is never borrowed from a bundled source."} />
+      {!isPaper && data && (
+        <div className="controls" style={{ marginBottom: 14 }}>
+          <RadioRow name="Provenance subject" value={view} onChange={setView}
+            options={[{ key: "uploaded", label: "Uploaded dataset provenance" }, { key: "reference", label: "THEMIS Reference Corpus" }]} />
+        </div>
+      )}
+      {showRef && (
+        <div className="callout" style={{ marginBottom: 18 }}><div className="co-body">
+          <span className="eyebrow" style={{ display: "block", marginBottom: 7, color: "var(--ink)" }}>Not your file</span>
+          {data.reference_corpus.note}{data.reference_corpus.scope ? ` Loaded scope: ${data.reference_corpus.scope.toLowerCase().replace("_", " ")}.` : ""}
+        </div></div>
+      )}
+      {!isPaper && !showRef && up && <UploadedProvenance u={up} />}
       {loading && <Loading>Loading provenance graph…</Loading>}
       {error && <ErrorBox title="Could not load provenance">{error}</ErrorBox>}
 
@@ -201,7 +221,7 @@ function Body() {
       )}
 
       {ev && <PaperEvidence ev={ev} />}
-      {!isPaper && data && <Inheritance items={data.inheritance_candidates} />}
+      {!isPaper && !showRef && data && <Inheritance items={data.inheritance_candidates} />}
       {selEdge && <EdgeDrawer edge={selEdge} nodeById={nodeById} cls={edgeClass(selEdge, nodeById)} onClose={() => setSelEdge(null)} />}
     </div>
   );
@@ -344,6 +364,29 @@ function PaperEvidence({ ev }) {
         </Section>
       )}
     </>
+  );
+}
+
+function UploadedProvenance({ u }) {
+  const st = u.state;
+  return (
+    <Section title="Provenance of this file’s claims" meta={`${fmt(u.n_claims)} claims`}>
+      <div className="panel pad">
+        {st && st.state !== "computed"
+          ? <p style={{ margin: 0 }}><strong>{st.state === "insufficient_data" ? "Insufficient data — " : "Not applicable — "}{st.reason}.</strong></p>
+          : <p style={{ margin: 0 }}>{st?.reason}. {fmt(u.n_distinct_declared_sources)} distinct declared source value{u.n_distinct_declared_sources === 1 ? "" : "s"}.</p>}
+        {u.declared_sources.length > 0 && (
+          <div className="tablewrap" style={{ marginTop: 12 }}><table>
+            <thead><tr><th>Declared source (as written in the file)</th><th className="num">Claims</th></tr></thead>
+            <tbody>{u.declared_sources.map((d) => <tr key={d.value}><td className="mono small" style={{ wordBreak: "break-all" }}>{d.value}</td><td className="num">{fmt(d.n_claims)}</td></tr>)}</tbody>
+          </table></div>
+        )}
+        <div className="tablewrap" style={{ marginTop: 12 }}><table>
+          <thead><tr><th>Provenance root</th><th>Status</th><th className="num">Claims</th></tr></thead>
+          <tbody>{u.roots.map((r) => <tr key={r.root}><td className="mono small">{r.root}</td><td><Status tone={r.resolved ? "ok" : "mut"}>{r.resolved ? "identified" : "unresolved"}</Status></td><td className="num">{fmt(r.n_claims)}</td></tr>)}</tbody>
+        </table></div>
+      </div>
+    </Section>
   );
 }
 

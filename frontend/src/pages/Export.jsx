@@ -4,6 +4,7 @@ import { dateTime, fmt, shortId } from "../lib/format.js";
 import { Gate, MetricStrip, PageHead, Section } from "../components/ui.jsx";
 
 const FILES = [
+  { name: "preflight.json", desc: "What the pre-flight decided and on what evidence: input hash, original columns, each column’s semantic meaning and confidence, your confirmations, the chain and how it was determined, rejected-record counts, blockers, and the parser / schema version. Uploaded datasets only.", uploadOnly: true },
   { name: "analysis_summary.json", desc: "Meta, the canonical result object and the audit trail for this analysis: the same object every screen renders." },
   { name: "normalized_claims.csv", desc: "Every claim after schema mapping and normalization: address, source, raw label, canonical category, polarity, provenance root and last-revised date. In a paper reproduction this is the bundled sample’s claims." },
   { name: "conflicts.csv", desc: "One row per conflicting or refined address, with both claims and their provenance relationship." },
@@ -32,7 +33,7 @@ function Body() {
       <Section title="Files">
         <div className="panel">
           <div className="rowlist">
-            {FILES.map((f) => (
+            {FILES.filter((f) => !(f.uploadOnly && isPaper)).map((f) => (
               <div key={f.name}>
                 <div><div className="rl-title mono">{f.name}</div><div className="rl-desc">{f.desc}</div></div>
                 <a className="btn small secondary" href={api.exportUrl(analysisId, f.name)} download={f.name}>Download</a>

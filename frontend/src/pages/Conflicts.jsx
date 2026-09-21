@@ -58,7 +58,14 @@ function Body() {
 
       {isPaper && <RecordsNote table={scopePopulation(corpusScope)} asked={get("population")} />}
 
-      {counts && (
+      {data && data.state && data.state !== "computed" && (
+        <div className="empty" style={{ maxWidth: "none", marginBottom: 18 }} role="status">
+          <div className="eyebrow">{data.state === "not_applicable" ? "Not applicable" : "Insufficient data"}</div>
+          <p><strong>{data.state === "not_applicable" ? "Not applicable — " : ""}{data.reason}.</strong>{data.detail ? ` ${data.detail[0].toUpperCase()}${data.detail.slice(1)}.` : ""}{" "}
+            No attribution conflicts were computed, which is different from finding none.</p>
+        </div>
+      )}
+      {counts && !(data.state && data.state !== "computed") && (
         <MetricStrip items={[
           { label: "Licit / illicit", value: fmt(counts.polarity), tone: "hot", top: "hot", sub: `${pct(share("polarity"))} ${denom}`, to: "/conflicts?kind=polarity" },
           { label: "Entity type", value: fmt(counts.entity), top: "hot", sub: `${pct(share("entity"))} ${denom}`, to: "/conflicts?kind=entity" },
