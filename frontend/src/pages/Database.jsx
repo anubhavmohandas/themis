@@ -101,7 +101,7 @@ export default function DatabasePage() {
       <Section title="1 · Database" note="Opened by path relative to THEMIS_DB_DIR (set on the server) - the file itself is never uploaded.">
         <div className="controls">
           <label className="field grow">Path:
-            <input type="text" value={db} onChange={(e) => setDb(e.target.value)} placeholder="WalletClassification.db" style={{ minWidth: 280 }} />
+            <input type="text" value={db} onChange={(e) => setDb(e.target.value)} placeholder="dataset.sqlite" style={{ minWidth: 280 }} />
           </label>
           <button type="button" className="btn" disabled={!db.trim() || busy} onClick={inspect}>{busy ? "Inspecting…" : "Inspect"}</button>
         </div>

@@ -254,6 +254,10 @@ function PaperOverview() {
 // --------------------------------------------------------------------- upload
 const uploadCurrencyParts = (f) => ["current", "stale", "currency_unknown"].map((k) => ({ key: k, n: f[k], share: f[`${k}_share`] }));
 
+// True when the analyst's own declaration says the data is a recovered subset. The declaration is free text, so
+// this errs toward warning: any mention of "recover" in the two fields that say how the data was obtained.
+const declaresRecovery = (m) => ["recovery_status", "analysis_origin"].some((k) => /recover/i.test(m[k] || ""));
+
 function UploadOverview() {
   const { result: r, meta } = useAnalysis();
   const ta = r.target_audit;
@@ -271,6 +275,8 @@ function UploadOverview() {
 
   const caseMeta = r.dataset_preflight?.case_metadata;
   const relProv = r.relational_provenance;
+  // "available" only says the comparison ran; independence is established only where it found confirmed multi-root addresses
+  const independenceEstablished = !!(p.independence?.available && p.independence.confirmed_independent_multi_root > 0);
   const deps = r.dependency_candidates;
   const dp = r.dataset_profile;
 
@@ -280,7 +286,7 @@ function UploadOverview() {
         lead={`${meta.dataset_name}: provenance, agreement with the reference corpus, independence and currency for the addresses in your file. Every figure carries its denominator; click a figure to open the records behind it.`} />
 
       <MetricStrip items={[
-        { label: "Target claims", value: fmt(ta.n_target_claims), sub: `${fmt(v.n_valid)} of ${fmt(v.n_input)} rows valid` },
+        { label: "Target claims", value: fmt(ta.n_target_claims), sub: `${fmt(v.n_valid)} of ${fmt(v.n_input)} rows became claims (address syntax checked; not a verification)` },
         { label: "Target addresses", value: nT, sub: "distinct addresses in the file" },
         hasReference
           ? { label: "Reference match", value: pct(rc.comparable_share), sub: `${fmt(rc.comparable)} / ${nT} also named in the reference corpus`, to: "/claims?comparable=yes", top: true }
@@ -291,14 +297,23 @@ function UploadOverview() {
       ]} />
 
       {caseMeta && Object.keys(caseMeta).length > 0 && (
-        <div className="inline-note" role="alert" style={{ whiteSpace: "pre-line" }}>
-          {(caseMeta.recovery_status || caseMeta.analysis_origin) && (
-            <>
+        <div className="inline-note" role="alert">
+          {declaresRecovery(caseMeta) && (
+            <div style={{ marginBottom: 10 }}>
               <strong>RECOVERED DATASET SUBSET</strong>
-              {"\n"}This analysis does not represent the complete original database.{"\n\n"}
-            </>
+              <div>This analysis does not represent the complete original database.</div>
+            </div>
           )}
-          {Object.entries(caseMeta).map(([k, val]) => `${k.replace(/_/g, " ")}: ${val}`).join("\n")}
+          <div className="mut" style={{ fontSize: 11.5, marginBottom: 6 }}>
+            Declared by the analyst who supplied this database. THEMIS carries it as text and did not verify it.
+          </div>
+          {/* one element per field, values as plain text: a value containing a newline or "field: x" cannot pose as another field */}
+          {Object.entries(caseMeta).map(([k, val]) => (
+            <div key={k} style={{ display: "flex", gap: 8 }}>
+              <strong style={{ whiteSpace: "nowrap" }}>{k.replace(/_/g, " ")}:</strong>
+              <span style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{val}</span>
+            </div>
+          ))}
         </div>
       )}
 
@@ -313,8 +328,9 @@ function UploadOverview() {
               sub: `${fmt(dp.scale.unique_labels)} distinct label(s)` },
             { label: "Provenance", value: Object.entries(relProv.counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "unresolved",
               sub: Object.entries(relProv.counts).map(([k2, n2]) => `${k2}: ${fmt(n2)}`).join(" · ") },
-            { label: "Independent corroboration", value: ind?.available ? "established" : "not established",
-              sub: ind?.available ? `${fmt(ind.confirmed_independent_multi_root)} confirmed independent multi-root` : ind?.reason, tone: ind?.available ? undefined : "hot" },
+            { label: "Independent corroboration", value: independenceEstablished ? "established" : "not established",
+              sub: ind?.available ? `${fmt(ind.confirmed_independent_multi_root)} address(es) with confirmed independent multi-root, against the reference corpus` : ind?.reason,
+              tone: independenceEstablished ? undefined : "hot" },
             { label: "Source descriptors", value: dp.scale.unique_sources ? "present" : "absent",
               sub: `${fmt(dp.scale.unique_sources)} declared source string(s)` },
             { label: "Confirmed independent roots", value: ind?.available ? fmt(ind.confirmed_independent_multi_root) : "not established",
@@ -323,19 +339,21 @@ function UploadOverview() {
 
           {deps && deps.length > 0 && (
             <div className="panel pad" style={{ marginTop: 12 }}>
-              <strong>Declared source descriptor vs. confirmed provenance root</strong>
+              <strong>DECLARED SOURCE DESCRIPTOR vs. confirmed provenance root</strong>
               <p className="mut" style={{ fontSize: 12 }}>
                 N distinct declared-source strings are not N independent evidential roots. THEMIS found the
-                following potential / documented dependencies among this dataset's own declared-source values
-                (never applied to any independence or corroboration count):
+                following POTENTIAL / DOCUMENTED DEPENDENCY among this dataset's own declared-source values. It is
+                a textual match between two declared strings: unverified, not a confirmed lineage, and never applied to
+                any provenance, independence or corroboration count.
+                {relProv.dependency_candidate_claims > 0 && <> {fmt(relProv.dependency_candidate_claims)} claim(s) carry a declared source that is on the citing side.</>}
               </p>
               <ul style={{ margin: "4px 0 0", paddingLeft: 18, fontSize: 12.5 }}>
-                {deps.map((d, i) => <li key={i}><span className="mono">{d.citing}</span> - potential/documented dependency on <span className="mono">{d.cited}</span></li>)}
+                {deps.map((d, i) => <li key={i}><span className="mono">{d.citing}</span>: POTENTIAL / DOCUMENTED DEPENDENCY on <span className="mono">{d.cited}</span></li>)}
               </ul>
             </div>
           )}
 
-          {!ind?.available && (
+          {relProv.counts.resolved === 0 && (
             <p className="mut" style={{ fontSize: 12.5, marginTop: 10 }}>
               <strong>Investigative interpretation.</strong> The dataset contains usable attribution records, but
               the evidence needed to treat its source descriptors as independent forensic corroboration is not established.

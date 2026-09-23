@@ -23,12 +23,54 @@ this repository.
   exact lineage for this recovered file - THEMIS surfaces it as such (see
   `dependency_candidates` below) and never converts it into a fabricated
   independence count.
-- Because of that documented dependency, WE / BABD / Harvard cannot be
-  treated as three independent evidential roots just because they are three
-  distinct strings in a `Source` column.
+- WE / BABD / Harvard cannot be treated as three independent evidential
+  roots just because they are three distinct strings in a `Source` column:
+  a string is a claim about origin, not a root.
 - Exact provenance semantics (what a `Source` value legally asserts about
   chain of custody) are not sufficiently documented for this recovered file
   to resolve any of the above.
+
+## Independence: what is and is not established
+
+**INDEPENDENCE NOT ESTABLISHED.** Nothing in this dataset, or in what is
+documented about it, establishes that any two of its declared source
+descriptors are independent of each other.
+
+**A DOCUMENTED DEPENDENCY EXISTS BETWEEN AT LEAST ONE PAIR OF DECLARED SOURCE
+DESCRIPTORS: BABD / WalletExplorer.** That is the only relationship the
+documentation speaks to. It is not a statement about the other pairs
+(nothing is established about them either way), and it is a statement about
+the *sources*, not a reconstructed lineage for any recovered row. No exact
+lineage is asserted for any recovered record.
+
+## Original corpus size
+
+**THE FULL ORIGINAL CORPUS SIZE CANNOT BE ESTABLISHED FROM THE RECOVERED
+SUBSET.** The values below are what was observed in the recovery, reported as
+observations and nothing more; none of them is an original row count.
+
+| observation | value |
+|---|---|
+| full wallet rows recovered | 1,032,288 |
+| index-fragment `(Address, rowid)` pairs recovered | 1,632,364 |
+| largest `rowid` seen in those fragments | 37,464,413 |
+
+A `rowid` is a key, not a count: keys can be sparse, reused or skipped, so the
+largest one seen bounds nothing about how many rows the original held.
+
+## Status of each statement
+
+| statement | status |
+|---|---|
+| The recovered addresses are syntactically valid Bitcoin addresses (1,032,288 of 1,032,288, per THEMIS's own address validator) | OBSERVED, as recorded by the recovery investigation; the raw file is not in this repository and was not re-checked for this document |
+| The label vocabulary resembles BABD-13's 13 categories | OBSERVED (the labels) / INFERRED (that they are BABD-13's) |
+| The `Source` field contains WE, BABD and a Harvard-resembling value | OBSERVED in the recovered rows |
+| BABD-13 names WalletExplorer among its own sources | DOCUMENTED BY SOURCE (BABD-13's own paper) |
+| That dependency applies to the rows of this recovered file | INFERRED; not confirmed lineage |
+| The `SW` values are SA/WA as in BABD-13 but with the opposite proportions for `Source=BABD` (99.3% WA here; 97.8% SA published) | OBSERVED against DOCUMENTED; whether the fields mean the same thing is NOT CONFIRMED |
+| Any source descriptor is a confirmed provenance root | NOT ESTABLISHED |
+| Any label is verified | NOT ESTABLISHED |
+| The database file is truncated and fails its integrity check | CONFIRMED BY THEMIS (`sqlite_source.integrity_check`) on the file as supplied |
 
 Put together: **a dataset can contain valid identifiers, plausible labels,
 and named source fields, and still not amount to forensically defensible
@@ -46,12 +88,16 @@ study is the clearest example of it encountered so far.
   (`themis/ingest/relational.py:conflicts`).
 - The presence of declared source-descriptor strings, and whether one
   declared-source string appears to textually cite another present in the
-  same extraction (`relational.py:dependency_candidates`).
+  same extraction (`relational.py:dependency_candidates`). Such a match is a
+  textual observation between two strings: it is reported, and the claims
+  concerned are counted on their own line (`dependency_candidate_claims`), but
+  it moves no claim out of `unresolved` and enters no independence figure.
 
 ## What THEMIS cannot establish
 
-- The full original corpus size - only the truncated file's own row count is
-  ever reported; THEMIS never estimates or backfills an "original total."
+- The full original corpus size - only the recovered file's own row count is
+  ever reported; THEMIS never estimates or backfills an "original total," and
+  a key value such as a maximum `rowid` is never read as one.
 - Complete dataset provenance - the recovery is partial and its chain of
   custody before reaching THEMIS is not documented.
 - Independent source roots - a declared-source string is a claim, not a
@@ -61,9 +107,9 @@ study is the clearest example of it encountered so far.
 - Source accuracy - THEMIS has no independent means to verify a `Source`
   column's claims against reality.
 - Investigative reliability as a single percentage - THEMIS deliberately
-  never collapses this case into one number (see Phase 5's stopping rule
-  against "0% reliable" / "unreliable dataset" framings; a rate would imply
-  a denominator this case study does not have).
+  never collapses this case into one number and never describes it as
+  "0% reliable" or as an "unreliable dataset": nothing here supports such a
+  claim, and a rate would imply a denominator this case study does not have.
 
 ## Investigative interpretation
 
@@ -97,11 +143,16 @@ established.
 
   This is carried on `dataset_preflight.case_metadata` and rendered as a
   prominent "RECOVERED DATASET SUBSET - this analysis does not represent the
-  complete original database" banner (`frontend/src/pages/Overview.jsx`).
+  complete original database" banner (`frontend/src/pages/Overview.jsx`),
+  worded as the analyst's declaration, which THEMIS did not verify. The banner
+  appears when `recovery_status` or `analysis_origin` mentions recovery; the
+  declared fields are listed beneath it, one row each, as plain text.
 - **Evidence profile**: the Overview page's "Evidence profile" section
   (populated for every relational/SQLite extraction, not only this case
   study) reports address validity, label coverage, provenance-state counts,
-  whether independent corroboration is established, and any documented
+  whether independent corroboration is established (only when the comparison
+  against a reference corpus found confirmed independent roots; a comparison
+  that merely ran establishes nothing), and any documented
   source-descriptor dependencies - reusing `relational_provenance`,
   `dependency_candidates`, and `dataset_profile`, all already generic,
   dataset-agnostic outputs.
