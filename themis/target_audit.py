@@ -77,10 +77,11 @@ def discover_inheritance_candidates(target_claims: list[dict], reference_corpus,
 def _naming_residue(target_claims: list[dict], sources_cfg: dict) -> dict:
     hits = collections.Counter()
     names = {}
+    min_len = config_io.load().preflight["target_audit"]["min_source_name_length"]
     for sid, scfg in sources_cfg.items():
         candidates = {sid.lower(), str(scfg.get("display_name", "")).lower(),
                      str(scfg.get("citation", "")).lower()}
-        names[sid] = {n for n in candidates if len(n) > 3}
+        names[sid] = {n for n in candidates if len(n) >= min_len}
     for c in target_claims:
         text = " ".join(str(c.get(f) or "") for f in ("prov_family", "source_url", "notes")).lower()
         if not text.strip():

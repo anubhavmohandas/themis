@@ -19,6 +19,7 @@ from __future__ import annotations
 import datetime, hashlib, json, re
 
 from .. import chains, config_io
+from ..errors import InputError
 from . import detect as _detect
 
 _NUM_RE = re.compile(r"^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$")
@@ -109,7 +110,7 @@ class _Profile:
         self.distinct = len(set(sample))
         ints = [int(v) for v, isnum in zip(sample, num) if isnum and re.fullmatch(r"[+-]?\d+", v.strip())]
         # a 0,1,2,3... (or 1,2,3...) counter is a row index, whatever it is called
-        self.sequential = (self.n >= 3 and len(ints) == self.n
+        self.sequential = (self.n >= cfg()["min_sequence_sample"] and len(ints) == self.n
                            and all(b - a == 1 for a, b in zip(ints, ints[1:])))
 
     def is_numeric(self, c) -> bool:
@@ -221,11 +222,11 @@ def overrides_from_roles(role_map: dict | None, fieldnames: list[str]) -> dict:
             continue
         sem = c["legacy_roles"].get(role, role)
         if sem not in c["semantic_fields"]:
-            raise ValueError(f"unknown mapping role {role!r}")
+            raise InputError(f"unknown mapping role {role!r}")
         if col not in fieldnames:
-            raise ValueError(f"mapping names column {col!r}, which is not in the file")
+            raise InputError(f"mapping names column {col!r}, which is not in the file")
         if out.get(col, sem) != sem:
-            raise ValueError(f"column {col!r} is mapped to two roles")
+            raise InputError(f"column {col!r} is mapped to two roles")
         out[col] = sem
     return out
 
@@ -234,13 +235,13 @@ def _check_overrides(overrides: dict, fieldnames: list[str], c: dict) -> None:
     seen: dict[str, str] = {}
     for col, sem in overrides.items():
         if col not in fieldnames:
-            raise ValueError(f"mapping names column {col!r}, which is not in the file")
+            raise InputError(f"mapping names column {col!r}, which is not in the file")
         if sem not in c["semantic_fields"]:
-            raise ValueError(f"unknown semantic field {sem!r}")
+            raise InputError(f"unknown semantic field {sem!r}")
         if _is_unique(sem, c):
             g = _group(sem)
             if g in seen and seen[g] != col:
-                raise ValueError(f"columns {seen[g]!r} and {col!r} are both mapped to {sem!r}")
+                raise InputError(f"columns {seen[g]!r} and {col!r} are both mapped to {sem!r}")
             seen[g] = col
 
 
@@ -259,7 +260,7 @@ def run(rows: list[dict], fieldnames: list[str], *, filename: str | None = None,
     overrides = dict(overrides or {})
     _check_overrides(overrides, fieldnames, c)
     if chain is not None and chain not in chains.all_adapters():
-        raise ValueError(f"unknown chain {chain!r}; supported: {', '.join(sorted(chains.all_adapters())) or 'none'}")
+        raise InputError(f"unknown chain {chain!r}; supported: {', '.join(sorted(chains.all_adapters())) or 'none'}")
 
     n_total = total_rows if total_rows is not None else len(rows)
     n_sample = sample_size or c["sample_size"]
@@ -404,7 +405,7 @@ def _column_record(col: str, a: dict, p: _Profile, ctx: _Ctx, rej) -> dict:
     elif user and sem.startswith("ts_") and sem not in _SHAPE_ONLY and sem != "ts_unclassified" and not p.is_date(c):
         status = "invalid"
         notes.append(f"only {p.date:.0%} of sampled values are ISO dates: this column cannot date a claim")
-    elif user and value is not None and value < 0.5:
+    elif user and value is not None and value < c["review_confidence"]:
         notes.append(f"the values look unlike '{fld['label']}' ({value:.0%} fit); kept because you set it")
     elif not user and sem == "ts_unclassified":
         status = "review"

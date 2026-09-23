@@ -3,6 +3,7 @@ reason and kept available for inspection; nothing is silently dropped.
 """
 from __future__ import annotations
 from .. import chains
+from ..errors import InputError
 
 
 def validate_rows(rows: list[dict], mapping: dict, chain_id: str | None, dedupe: bool = True) -> dict:
@@ -12,7 +13,7 @@ def validate_rows(rows: list[dict], mapping: dict, chain_id: str | None, dedupe:
     adapter = chains.get(chain_id) if chain_id else None
     addr_field = mapping.get("address")
     if addr_field and adapter is None:
-        raise ValueError("address validation needs a supported chain; none was given or detected")
+        raise InputError("address validation needs a supported chain; none was given or detected")
     # a claim needs something claimed about the subject: a label, or failing that a category
     label_field = mapping.get("label") or mapping.get("category")
 

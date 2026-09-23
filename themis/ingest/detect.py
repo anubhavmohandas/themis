@@ -57,9 +57,9 @@ def _crypto_asset_field(rows: list[dict], fieldnames: list[str], sample_size: in
 
 
 def _looks_like_unrecognized_address(sample: list[str]) -> bool:
-    if len(sample) < 3:
-        return False
     shape = cfg()["detect"]["unsupported_chain_shape"]
+    if len(sample) < shape["min_sample"]:
+        return False
     lengths = {len(v) for v in sample}
     if len(lengths) > shape["max_distinct_lengths"] or not all(shape["min_len"] <= len(v) <= shape["max_len"] for v in sample):
         return False

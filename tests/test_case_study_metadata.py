@@ -163,5 +163,34 @@ class TestDeclaredSourceIsNotAConfirmedRoot(unittest.TestCase):
         self.assertFalse(res["target_audit"]["profile"]["independence"]["available"])
 
 
+class TestCaseStudyWording(unittest.TestCase):
+    """The case study's own text keeps the distinctions the code keeps: what was observed vs documented vs
+    inferred, and nothing asserted beyond it."""
+    DOC = (pathlib.Path(__file__).resolve().parent.parent / "docs" / "case_studies" / "walletclassification.md").read_text()
+
+    def test_the_required_statements_are_present(self):
+        import re
+        flat = re.sub(r"\s+", " ", self.DOC)      # the doc is hard-wrapped; a phrase may span lines
+        for phrase in ("UNRESOLVED-PROVENANCE CASE STUDY", "INDEPENDENCE NOT ESTABLISHED",
+                       "A DOCUMENTED DEPENDENCY EXISTS BETWEEN AT LEAST ONE PAIR OF DECLARED SOURCE DESCRIPTORS: BABD / WalletExplorer",
+                       "THE FULL ORIGINAL CORPUS SIZE CANNOT BE ESTABLISHED FROM THE RECOVERED SUBSET",
+                       "The dataset contains usable attribution records, but the evidence needed to treat its source "
+                       "descriptors as independent forensic corroboration is not established."):
+            self.assertIn(phrase, flat)
+        for status in ("OBSERVED", "INFERRED", "DOCUMENTED BY SOURCE", "CONFIRMED BY THEMIS"):
+            self.assertIn(status, flat)
+
+    def test_nothing_overclaims_independence_or_size_or_reliability(self):
+        import re
+        flat = re.sub(r"\s+", " ", self.DOC)
+        for banned in (r"independence is contradicted", r"actively contradicted", r"likely tens of millions",
+                       r"original (table|corpus|database) (had|held|contained) [\d,]+", r"\bis unreliable\b",
+                       r"\binvalid attribution\b", r"\bfalse attribution\b"):
+            self.assertIsNone(re.search(banned, flat, re.I), banned)
+        # "0% reliable" / "unreliable dataset" may only appear as things THEMIS does NOT say
+        for m in re.finditer(r"0% reliable|unreliable dataset", flat):
+            self.assertRegex(flat[max(0, m.start() - 80):m.start()], r"never|not")
+
+
 if __name__ == "__main__":
     unittest.main()

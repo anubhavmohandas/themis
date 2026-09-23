@@ -15,6 +15,7 @@ import contextlib, pathlib, sqlite3, time
 from collections.abc import Iterator
 
 from .. import config_io
+from ..errors import InputError
 
 
 def cfg() -> dict:
@@ -32,7 +33,9 @@ def open_readonly(path: str):
     p = pathlib.Path(path)
     if not p.is_file():
         raise FileNotFoundError(f"no such database: {path}")
-    con = sqlite3.connect(f"file:{p.resolve().as_posix()}?mode=ro", uri=True)
+    # as_uri() percent-encodes the path: a raw "?", "#" or "%" in a file name would
+    # otherwise be read by SQLite as URI syntax and could open a different file
+    con = sqlite3.connect(f"{p.resolve().as_uri()}?mode=ro", uri=True)
     try:
         yield con
     finally:
@@ -47,7 +50,7 @@ def _require_table(con: sqlite3.Connection, table: str) -> None:
     # identifiers cannot be bound as parameters, so a table name is only ever
     # used after it has been found in the database's own catalogue
     if not con.execute("SELECT 1 FROM sqlite_master WHERE type IN ('table','view') AND name = ?", (table,)).fetchone():
-        raise ValueError(f"no table {table!r} in this database")
+        raise InputError(f"no table {table!r} in this database")
 
 
 def count_rows(con: sqlite3.Connection, table: str, timeout_s: float) -> int | None:
@@ -66,7 +69,7 @@ def count_rows(con: sqlite3.Connection, table: str, timeout_s: float) -> int | N
 def list_tables(path: str, count: bool = True) -> list[dict]:
     with open_readonly(path) as con:
         rows = con.execute(
-            "SELECT name, type FROM sqlite_master WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%' ORDER BY name")
+            "SELECT name, type FROM sqlite_master WHERE type IN ('table','view') AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ORDER BY name")
         out = []
         for n, kind in rows.fetchall():
             cols = con.execute(f"PRAGMA table_info({_quote(n)})").fetchall()

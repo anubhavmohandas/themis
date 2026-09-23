@@ -78,7 +78,7 @@ def cmd_audit(args):
         verdict = "CLEAN SPLIT" if fd["clean_split"] else "inconclusive"
         print(f"  decoding {fd['dataset']}.{fd.get('field','source')} against {fd['candidate']}: "
               f"{_c(verdict, GRN if fd['clean_split'] else YEL)}")
-        for v, g in list(fd["groups"].items())[:12]:
+        for v, g in list(fd["groups"].items())[:config_io.load().thresholds.get("decode_report_limit", 12)]:
             mark = "inherited" if g["verdict"] == "inherited" else g["verdict"]
             print(f"    group {v or '(blank)':<6} n={g['n']:>7,}  "
                   f"{100*g['share_in_candidate']:6.1f}% inside  {mark}")

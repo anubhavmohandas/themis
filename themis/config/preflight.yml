@@ -195,7 +195,7 @@ detect:
   # an address-named column of uniform-length, restricted-alphabet tokens
   # this opaque/shaped, with no more than this many distinct lengths, is
   # reported as "unsupported chain" rather than "no crypto signal at all"
-  unsupported_chain_shape: {min_len: 18, max_len: 100, max_distinct_lengths: 2}
+  unsupported_chain_shape: {min_len: 18, max_len: 100, max_distinct_lengths: 2, min_sample: 3}
 
 # A market-data (OHLCV) signature: when at least `min_present` columns are named
 # exactly one of these and hold numbers, the file is market data: its numeric
@@ -210,6 +210,15 @@ market_signature:
 # when at least numeric_share_min of its values are numbers.
 date_shape_min_share: 0.8
 numeric_share_min: 0.9
+# a column of consecutive integers is a row counter, whatever it is called, but only with at least
+# this many values to show it (two values are always "consecutive")
+min_sequence_sample: 3
+
+# Uploaded-dataset audit against the reference corpus (themis/target_audit.py).
+# A reference source's name (id, display name, citation) counts as cited inside a claim's provenance
+# text only when the name is at least this many characters, so a short name cannot match by accident.
+target_audit:
+  min_source_name_length: 4
 # how many rejected rows preflight.json keeps as examples (the counts are always complete)
 rejected_examples: 50
 # a confidence column holds numbers, or a small closed set of grades
@@ -235,6 +244,21 @@ sqlite:
   # referenced column is unique enough, over its sampled values, to be a real
   # key rather than a coincidentally-matching free-text field
   inferred_relationship_min_distinct_share: 0.95
+  # Fixed ranks shown beside a proposal so the strongest are listed first. They are NOT probabilities and
+  # are not computed from the data: a small table with a key but no claim columns is proposed as a lookup
+  # table at lookup_role_confidence; an undeclared relationship is proposed at
+  # inferred_relationship_confidence. A declared foreign key is never ranked this way.
+  lookup_role_confidence: 0.5
+  inferred_relationship_confidence: 0.6
+  # longest value of one case_metadata field (a person's note about the dataset), in characters;
+  # a longer one is refused, never truncated
+  case_metadata_max_chars: 4000
+  # a join on a column with no index or primary key is only worth a warning when the joined table has
+  # more rows than this (a full scan of a small table is instant)
+  unindexed_join_warn_rows: 1000
+  # shortest declared-source string whose appearance inside another declared-source string is reported
+  # as a POSSIBLE citation (relational.dependency_candidates); shorter strings match by accident
+  dependency_min_descriptor_length: 3
   # shown, and extraction refused, when integrity_check() finds the file
   # malformed/unreadable/unfinished (relational.extract's integrity gate)
   integrity_gate_message: |-

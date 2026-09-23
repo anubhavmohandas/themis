@@ -20,10 +20,11 @@ an uploaded CSV works on a relationally-extracted SQLite claim set with no
 changes.
 """
 from __future__ import annotations
-import time
+import re, sqlite3, time
 from collections.abc import Iterator
 
 from .. import chains, config_io, provenance as _provenance, taxonomy
+from ..errors import InputError
 from . import claims as _claims, gating as _gating, preflight as _preflight, sqlite_source as _sq
 from .pipeline import sha256_file as _sha256_file
 
@@ -62,14 +63,34 @@ CASE_METADATA_FIELDS = ("analysis_origin", "integrity_status", "recovery_status"
                         "source_identity_status", "provenance_resolution_status", "limitations")
 
 
+#: control characters other than tab / newline / carriage return: never legitimate in a note a person wrote
+_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
 def _validate_case_metadata(case_metadata: dict | None) -> dict | None:
+    """Descriptive text only: known field names and text values of bounded length with no
+    control characters (markup and newlines are fine - they are only ever rendered as text).
+    An empty value is no value; a request whose every value is empty carries no metadata."""
     if not case_metadata:
         return None
     unknown = sorted(set(case_metadata) - set(CASE_METADATA_FIELDS))
     if unknown:
-        raise ValueError(f"unknown case_metadata field(s): {', '.join(unknown)} "
+        raise InputError(f"unknown case_metadata field(s): {', '.join(unknown)} "
                          f"(allowed: {', '.join(CASE_METADATA_FIELDS)})")
-    return case_metadata
+    limit = cfg()["case_metadata_max_chars"]
+    out = {}
+    for field, value in case_metadata.items():
+        if value is None:
+            continue
+        if not isinstance(value, str):
+            raise InputError(f"case_metadata field {field!r} must be text")
+        if len(value) > limit:
+            raise InputError(f"case_metadata field {field!r} is longer than {limit:,} characters")
+        if _CONTROL_CHARS.search(value):
+            raise InputError(f"case_metadata field {field!r} contains control characters")
+        if value.strip():
+            out[field] = value
+    return out or None
 
 
 # --------------------------------------------------------------- table roles
@@ -97,15 +118,15 @@ def candidate_roles(path: str, sample_size: int | None = None) -> list[dict]:
         if subject and subject["status"] != "invalid":
             role, why = "claim_subject", (f"a valid claim-subject column ('{subject['column']}', "
                                           f"{pf['dataset_type_label'].lower()})")
-            confidence = subject["confidence"] or 0.6
+            confidence = subject["confidence"] or 0.0
         elif label:
             role, why = "attribution", f"an attribution label/category column ('{label['column']}')"
-            confidence = label["confidence"] or 0.6
+            confidence = label["confidence"] or 0.0
         elif small and pk_cols:
             role, why = "lookup_or_provenance", (
                 f"small ({t['n_rows'] if t['n_rows'] is not None else 'unknown'} rows), keyed by "
                 f"{', '.join(pk_cols)}, with no claim-subject or attribution column of its own")
-            confidence = 0.5
+            confidence = c["lookup_role_confidence"]
         else:
             role, why = "unknown", "no claim-subject, attribution, or small-lookup shape was detected"
             confidence = 0.0
@@ -154,7 +175,7 @@ def infer_relationships(path: str, sample_size: int = 200) -> list[dict]:
                     if _sample_distinct_share(samples[key]) >= c["inferred_relationship_min_distinct_share"] \
                             and cb["primary_key"]:
                         out.append(dict(from_table=a, from_column=ca["name"], to_table=b, to_column=cb["name"],
-                                        kind="inferred", confidence=0.6,
+                                        kind="inferred", confidence=c["inferred_relationship_confidence"],
                                         reason=f"same normalized column name; '{b}.{cb['name']}' is a primary key "
                                                f"and looks unique over its sample"))
     return out
@@ -171,7 +192,7 @@ def validate_join_spec(path: str, spec: dict) -> dict:
     local table was never introduced); returns `{ok, warnings}` for one that
     can run but may be slow (an unindexed join key on a large table)."""
     if "driving_table" not in spec:
-        raise ValueError("a join spec needs a driving_table")
+        raise InputError("a join spec needs a driving_table")
     tables = _table_names(spec)
     all_counts = {x["table"]: x["n_rows"] for x in _sq.list_tables(path, count=True)}
     cols_by_table = {}
@@ -185,14 +206,14 @@ def validate_join_spec(path: str, spec: dict) -> dict:
     for j in spec.get("joins", []):
         local_table = j.get("local_table", spec["driving_table"])
         if local_table not in introduced:
-            raise ValueError(f"join on {j['table']!r} uses local_table {local_table!r}, "
+            raise InputError(f"join on {j['table']!r} uses local_table {local_table!r}, "
                              "which is not the driving table or an earlier join")
         for side, table, col in ((local_table, local_table, j["local_key"]), (j["table"], j["table"], j["foreign_key"])):
             if col not in cols_by_table.get(table, {}):
-                raise ValueError(f"{table}.{col} does not exist")
+                raise InputError(f"{table}.{col} does not exist")
         idx_cols = {c for ix in _sq.indexes(path, j["table"]) for c in ix["columns"]}
         pk_cols = {n for n, c in cols_by_table[j["table"]].items() if c["primary_key"]}
-        if j["foreign_key"] not in idx_cols and j["foreign_key"] not in pk_cols and (row_counts.get(j["table"]) or 0) > 1000:
+        if j["foreign_key"] not in idx_cols and j["foreign_key"] not in pk_cols and (row_counts.get(j["table"]) or 0) > cfg()["unindexed_join_warn_rows"]:
             warnings.append(f"'{j['table']}.{j['foreign_key']}' has no index or primary key: this join will scan "
                             f"the table ({row_counts[j['table']]:,} rows) for every driving-table row")
         introduced.add(j["table"])
@@ -204,13 +225,15 @@ def _select_list(con, table: str, alias_prefix: str) -> tuple[list[str], str | N
     identity expression to use for provenance (rowid, or the PK columns for a
     WITHOUT ROWID table)."""
     cols = con.execute(f"PRAGMA table_info({_quote(table)})").fetchall()
-    select = [f'{_quote(table)}."{c[1]}" AS "{alias_prefix}__{c[1]}"' for c in cols]
+    # every identifier goes through _quote: a column called  a"b  (or worse) is data from the file, never SQL
+    select = [f'{_quote(table)}.{_quote(c[1])} AS {_quote(f"{alias_prefix}__{c[1]}")}' for c in cols]
+    rowid_alias = _quote(f"{alias_prefix}__rowid")
     try:
         con.execute(f"SELECT rowid FROM {_quote(table)} LIMIT 0")
-        return select, f'{_quote(table)}.rowid AS "{alias_prefix}__rowid"'
-    except Exception:
+        return select, f"{_quote(table)}.rowid AS {rowid_alias}"
+    except sqlite3.OperationalError:     # WITHOUT ROWID table or a view: identify a row by its first key column
         pk = [c[1] for c in cols if c[5]]
-        return select, None if not pk else f'{_quote(table)}."{pk[0]}" AS "{alias_prefix}__rowid"'
+        return select, None if not pk else f"{_quote(table)}.{_quote(pk[0])} AS {rowid_alias}"
 
 
 def _build_sql(con, spec: dict) -> tuple[str, list[str]]:
@@ -224,17 +247,27 @@ def _build_sql(con, spec: dict) -> tuple[str, list[str]]:
         jtype = "LEFT" if j.get("type", "left") == "left" else "INNER"
         sel, ident = _select_list(con, j["table"], j["table"])
         select_all += sel + ([ident] if ident else [])
-        join_clauses.append(f'{jtype} JOIN {_quote(j["table"])} ON {_quote(local_table)}."{j["local_key"]}" '
-                            f'= {_quote(j["table"])}."{j["foreign_key"]}"')
+        join_clauses.append(f'{jtype} JOIN {_quote(j["table"])} ON {_quote(local_table)}.{_quote(j["local_key"])} '
+                            f'= {_quote(j["table"])}.{_quote(j["foreign_key"])}')
     sql = f"SELECT {', '.join(select_all)}\nFROM {_quote(driving)}\n" + "\n".join(join_clauses)
     return sql, _table_names(spec)
+
+
+def _names_of(cur) -> list[str]:
+    """The joined column aliases. Two columns can only share one when table and column names
+    contain the "__" separator in a colliding way; zipping them into a row dict would silently
+    let one column's value overwrite the other's, so refuse instead."""
+    names = [d[0] for d in cur.description]
+    dup = sorted({n for n in names if names.count(n) > 1})
+    if dup:
+        raise InputError(f"these tables have column names that collide once joined: {', '.join(dup)}")
+    return names
 
 
 def joined_fieldnames(path: str, spec: dict) -> list[str]:
     with _sq.open_readonly(path) as con:
         sql, _ = _build_sql(con, spec)
-        cur = con.execute(sql + " LIMIT 0")
-        return [d[0] for d in cur.description]
+        return _names_of(con.execute(sql + " LIMIT 0"))
 
 
 def joined_sample(path: str, spec: dict, n: int) -> tuple[list[dict], list[str]]:
@@ -243,7 +276,7 @@ def joined_sample(path: str, spec: dict, n: int) -> tuple[list[dict], list[str]]
     with _sq.open_readonly(path) as con:
         sql, _ = _build_sql(con, spec)
         cur = con.execute(sql + " LIMIT ?", (n,))
-        names = [d[0] for d in cur.description]
+        names = _names_of(cur)
         return [dict(zip(names, map(_sq._as_text, r))) for r in cur.fetchall()], names
 
 
@@ -257,7 +290,7 @@ def iter_joined_rows(path: str, spec: dict, chunk_rows: int | None = None) -> It
     with _sq.open_readonly(path) as con:
         sql, _ = _build_sql(con, spec)
         cur = con.execute(sql)
-        names = [d[0] for d in cur.description]
+        names = _names_of(cur)
         while True:
             batch = cur.fetchmany(size)
             if not batch:
@@ -555,12 +588,17 @@ def profile_dataset(path: str, spec: dict, claims: list[dict], mapping: dict, va
     driving = spec["driving_table"]
     unique_raw = None
     if addr_field and total_records is not None:
-        col = addr_field.split("__", 1)[1] if "__" in addr_field else addr_field
-        table_of_col = addr_field.split("__", 1)[0] if "__" in addr_field else driving
+        # the alias is "<table>__<column>"; recover the pair by the table's known name, not by splitting
+        # on "__" (a table or column name may contain it)
+        table_of_col = next((t for t in _table_names(spec) if addr_field.startswith(f"{t}__")), None)
         try:
+            if table_of_col is None:
+                raise sqlite3.OperationalError("address column is not a joined column")
+            col = addr_field[len(table_of_col) + 2:]
             with _sq.open_readonly(path) as con:
-                unique_raw = con.execute(f'SELECT COUNT(DISTINCT "{col}") FROM {_quote(table_of_col)}').fetchone()[0]
-        except Exception:
+                unique_raw = con.execute(
+                    f"SELECT COUNT(DISTINCT {_quote(col)}) FROM {_quote(table_of_col)}").fetchone()[0]
+        except sqlite3.DatabaseError:
             unique_raw = None
 
     blockchain_dist: dict = {}
@@ -590,14 +628,13 @@ def profile_dataset(path: str, spec: dict, claims: list[dict], mapping: dict, va
         with _sq.open_readonly(path) as con:
             try:
                 local_table = j.get("local_table", driving)
+                lk, fk = _quote(local_table) + "." + _quote(j["local_key"]), _quote(j["table"]) + "." + _quote(j["foreign_key"])
                 n = con.execute(
                     f'SELECT COUNT(*) FROM {_quote(local_table)} LEFT JOIN {_quote(j["table"])} '
-                    f'ON {_quote(local_table)}."{j["local_key"]}" = {_quote(j["table"])}."{j["foreign_key"]}" '
-                    f'WHERE {_quote(local_table)}."{j["local_key"]}" IS NOT NULL '
-                    f'AND {_quote(j["table"])}."{j["foreign_key"]}" IS NULL').fetchone()[0]
+                    f"ON {lk} = {fk} WHERE {lk} IS NOT NULL AND {fk} IS NULL").fetchone()[0]
                 orphan_joins.append(dict(table=j["table"], local_key=j["local_key"],
                                         foreign_key=j["foreign_key"], orphan_rows=n))
-            except Exception:
+            except sqlite3.DatabaseError:
                 pass
 
     return dict(
@@ -628,30 +665,35 @@ def provenance_states(claims: list[dict], dependencies: list[dict] | None = None
     strictly separate. A claim that names a label with no evidence for why
     (THEMIS's own "Binance" example) is `unresolved`, whatever the label is.
 
-    `dependencies` (from `dependency_candidates`) reclassifies a claim from
-    unresolved to inherited only when ITS OWN declared source is a `citing`
-    side of a discovered relationship - never applied blanket to a source
-    just because *some* dependency exists in the dataset."""
+    `inherited` needs a CONFIRMED lineage from a resolved root, which a claim
+    extracted from a database has no way to show: it is 0 here. A dependency
+    candidate (one declared-source string containing another; unverified text
+    matching, see `dependency_candidates`) is not a lineage, so it moves no
+    claim out of `unresolved` - it is counted on its own line,
+    `dependency_candidate_claims`, so the two are never mistaken for each other."""
     _cfg = config_io.load()
     citing_sources = {d["citing"] for d in (dependencies or [])}
     counts = {"resolved": 0, "inherited": 0, "inferred": 0, "unresolved": 0}
     by_state: dict[str, list[str]] = {k: [] for k in counts}
+    n_candidate = 0
     for c in claims:
         r = _provenance.resolve(c, _cfg.sources)
         if r["kind"] == "DECLARED" and r["resolved"]:
             state = "resolved"
         elif r["kind"] == "INFERRED":
             state = "inferred"
-        elif (c.get("prov_family") or "").strip() in citing_sources:
-            state = "inherited"
         else:
             state = "unresolved"
         counts[state] += 1
+        if (c.get("prov_family") or "").strip() in citing_sources:
+            n_candidate += 1
         if len(by_state[state]) < 20:
             by_state[state].append(c["claim_id"])
-    return dict(counts=counts, examples=by_state,
-                note="'inherited' means this claim's declared source itself appears to cite another declared "
-                     "source present in the same extraction (see dependency_candidates); it is not corroboration.")
+    return dict(counts=counts, examples=by_state, dependency_candidate_claims=n_candidate,
+                note="'inherited' requires a confirmed lineage and is 0 for a database extraction. "
+                     "dependency_candidate_claims counts claims whose declared source appears to cite another "
+                     "declared source in the same extraction: a possible dependency, unverified, that moves no "
+                     "claim out of its provenance state and is not corroboration.")
 
 
 def dependency_candidates(declared_sources: list[str]) -> list[dict]:
@@ -659,13 +701,14 @@ def dependency_candidates(declared_sources: list[str]) -> list[dict]:
     another declared-source string also present in this dataset? Stored as a
     candidate relationship only - never used to shrink an independence count."""
     distinct = sorted({s.strip() for s in declared_sources if s and s.strip()})
+    min_len = cfg()["dependency_min_descriptor_length"]
     out = []
     low = {s: s.lower() for s in distinct}
     for a in distinct:
         for b in distinct:
             if a == b:
                 continue
-            if low[b] in low[a] and len(b) >= 3:
+            if low[b] in low[a] and len(b) >= min_len:
                 out.append(dict(citing=a, cited=b,
                                 relation="citing may contain/reference cited; unverified, not applied to any "
                                          "independence or corroboration count"))

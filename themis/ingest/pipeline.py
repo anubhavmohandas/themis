@@ -19,6 +19,7 @@ from __future__ import annotations
 import csv, gzip, hashlib
 
 from .. import corpus as _corpus, analysis, target_audit, chains, config_io
+from ..errors import InputError
 from . import gating as _gating, preflight as _preflight, validate as _validate, claims as _claims
 
 # The user-facing stop messages live with the pre-flight that decides them;
@@ -85,7 +86,7 @@ def ingest(path: str, source_id: str, mapping_override: dict | None = None,
 
     if source_id in config_io.load().sources:
         # such an id would hand this upload the bundled source's provenance rule
-        raise ValueError(f"source id {source_id!r} is a bundled THEMIS reference source; choose another "
+        raise InputError(f"source id {source_id!r} is a bundled THEMIS reference source; choose another "
                          "id so the uploaded file is not given that source's provenance")
 
     _p("start", "parse")
