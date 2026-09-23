@@ -43,9 +43,25 @@ __MACOSX/
 # directory elsewhere is never hidden by accident
 /HARDENING_LOG.md
 /RECONCILIATION_REPORT.md
+/provenance_register.html
+/WALLETCLASSIFICATION_CASE_STUDY_REPORT.md
 /results/
 /external_data/
 /release/
+
+# Databases and archives: third-party datasets are not redistributable
+# (THIRD_PARTY_DATA.md) and generated demo DBs are reproducible from scripts/
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+*.zip
+
+# Vite / frontend caches
+frontend/.vite/
+*.tsbuildinfo
 
 # The manuscript is the author's paper, not code: never tracked or released
 /paper/*.pdf
