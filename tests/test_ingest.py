@@ -175,6 +175,26 @@ class TestValidation(unittest.TestCase):
         self.assertEqual(v["n_valid"], 0)
         self.assertEqual(v["rejected"][0]["reason"], "empty address")
 
+    def _dup_rows(self, sources):
+        return [dict(wallet_address=CRYPTO_ROWS[0]["wallet_address"], entity_type="exchange", src=s, seen=str(i))
+                for i, s in enumerate(sources)]           # `seen` differs, so these are duplicate CLAIMS, not duplicate rows
+
+    def test_same_claim_from_the_same_declared_source_is_one_claim(self):
+        m = dict(address="wallet_address", label="entity_type", source="src")
+        v = validate.validate_rows(self._dup_rows(["A", "A", "A"]), m, "bitcoin")
+        self.assertEqual((v["n_valid"], v["rejected_by_reason"]), (1, {"duplicate claim": 2}))
+
+    def test_same_claim_from_different_declared_sources_is_kept_per_source(self):
+        m = dict(address="wallet_address", label="entity_type", source="src")
+        v = validate.validate_rows(self._dup_rows(["A", "B", "A", "C", " B "]), m, "bitcoin")
+        self.assertEqual([r["src"] for r in v["valid_rows"]], ["A", "B", "C"])   # first of each; whitespace is not a new source
+        self.assertEqual(v["rejected_by_reason"], {"duplicate claim": 2})
+
+    def test_without_a_mapped_source_column_the_key_is_still_address_and_label(self):
+        m = dict(address="wallet_address", label="entity_type")
+        v = validate.validate_rows(self._dup_rows(["A", "B"]), m, "bitcoin")
+        self.assertEqual((v["n_valid"], v["rejected_by_reason"]), (1, {"duplicate claim": 1}))
+
     def test_address_validation_without_a_chain_is_refused_not_skipped(self):
         # the old behaviour accepted every non-empty string as an address when no chain was known
         with self.assertRaises(ValueError):

@@ -277,13 +277,13 @@ class TestClaimsInsideOneDatabase(_Db):
         con.close()
         return self.extract(p)
 
-    def test_duplicate_claims_are_counted_once(self):
+    def test_duplicate_claims_are_counted_once_per_declared_source(self):
         a = btc_address(1)
         res = self._rows([(a, "exchange", "S")] * 5 + [(a, "exchange", "T")])
-        # a repeated (address, label) is one claim; the rest are counted, not silently dropped. NOTE the
-        # declared source is not part of the key (see THEMIS_RELEASE_READINESS_REPORT.md, author decisions)
-        self.assertEqual(res["validation"]["rejected_by_reason"], {"duplicate claim": 5})
-        self.assertEqual(len(res["claims"]), 1)
+        # a repeated (address, label, declared source) is one claim; the rest are counted, not silently
+        # dropped. The same claim from a second declared source is kept: it is provenance, not a repeat.
+        self.assertEqual(res["validation"]["rejected_by_reason"], {"duplicate claim": 4})
+        self.assertEqual(sorted(c["prov_family"] for c in res["claims"]), ["S", "T"])
 
     def test_conflicting_claims_are_both_kept_and_reported_as_a_conflict_not_resolved(self):
         a = btc_address(1)

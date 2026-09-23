@@ -16,6 +16,11 @@ def normalize_date(value: str) -> str:
     return v[:10] if v else ""
 
 
+def declared_source(row: dict, mapping: dict) -> str:
+    """What the row itself says its source is (the mapped `source` column), or "" when none is mapped."""
+    return (row.get(mapping.get("source")) or "").strip() if mapping.get("source") else ""
+
+
 def build_claim(row: dict, mapping: dict, source_id: str, default_heuristic: str = "unknown",
                 record_id: str | int | None = None, blockchain: str | None = None,
                 provenance_record: dict | None = None) -> dict:
@@ -52,7 +57,7 @@ def build_claim(row: dict, mapping: dict, source_id: str, default_heuristic: str
     # rather than silently dropped.
     winning_text = raw_category if cat_from_category else (raw_label if cat_from_label else "")
     _, structured_entity = taxonomy.split_structured_label(winning_text)
-    declared_source = (row.get(mapping.get("source")) or "").strip() if mapping.get("source") else ""
+    declared = declared_source(row, mapping)
     raw_address = (row.get(mapping.get("address")) or "").strip()
     return {
         "claim_id": uuid.uuid4().hex,
@@ -65,8 +70,8 @@ def build_claim(row: dict, mapping: dict, source_id: str, default_heuristic: str
         "raw_label": raw_label,
         "canon": canon,
         "polarity": taxonomy.POLARITY.get(canon, "unknown"),
-        "prov_family": declared_source,
-        "source_url": declared_source if declared_source.lower().startswith(("http://", "https://")) else "",
+        "prov_family": declared,
+        "source_url": declared if declared.lower().startswith(("http://", "https://")) else "",
         "lastmod": normalize_date(row.get(mapping.get("timestamp"), "")) if mapping.get("timestamp") else "",
         "retrieval_date": None,
         # STEP 8: confidence survives ingestion uninterpreted - normalizing it

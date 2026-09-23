@@ -378,7 +378,7 @@ def _stream_validate_and_build(path: str, spec: dict, mapping: dict, chain_id: s
                 reject(i, "missing label", address=address)
                 continue
 
-            claim_key = (address, label)
+            claim_key = (address, label, _claims.declared_source(row, mapping))   # see validate.validate_rows
             if dedupe and claim_key in seen_claims:
                 reject(i, "duplicate claim", address=address)
                 continue

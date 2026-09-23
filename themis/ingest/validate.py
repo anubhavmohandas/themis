@@ -3,6 +3,7 @@ reason and kept available for inspection; nothing is silently dropped.
 """
 from __future__ import annotations
 from .. import chains
+from .claims import declared_source
 from ..errors import InputError
 
 
@@ -43,7 +44,10 @@ def validate_rows(rows: list[dict], mapping: dict, chain_id: str | None, dedupe:
             rejected.append(dict(row=i, reason="missing label", address=address))
             continue
 
-        claim_key = (address, label)
+        # a claim is what one declared source asserts: the same (address, label) from a second
+        # declared source is corroboration to keep, not a duplicate - though two declared sources
+        # do not make two independent roots (provenance resolves that, not this key)
+        claim_key = (address, label, declared_source(row, mapping))
         if dedupe and claim_key in seen_claims:
             rejected.append(dict(row=i, reason="duplicate claim", address=address))
             continue

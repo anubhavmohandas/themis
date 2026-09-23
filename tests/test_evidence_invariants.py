@@ -165,6 +165,22 @@ class TestUploadedCsvNeverPromotesItself(unittest.TestCase):
         shares = client.get(f"/api/analysis/{aid}/summary").json()["result"]["shares"]
         self.assertNotIn("confirmed_independent_share", shares)
 
+    def test_the_same_claim_from_two_declared_sources_is_kept_and_still_confirms_no_independence(self):
+        """Duplicate-claim identity: (address, label, declared source). Keeping both claims preserves
+        provenance; it must not turn two descriptor strings into two independent roots."""
+        a = btc_address(1)
+        rows = [dict(address=a, label="exchange", source=s, seen=str(i)) for i, s in enumerate(["Src One", "Src Two", "Src One"])]
+        aid = self._upload(rows, ["address", "label", "source", "seen"])
+        self.assertEqual(len(client.get(f"/api/analysis/{aid}/claims", params=dict(limit=500)).json()["claims"]), 2)
+        prov = client.get(f"/api/analysis/{aid}/provenance").json()["uploaded_dataset"]
+        self.assertEqual({d["value"]: d["n_claims"] for d in prov["declared_sources"]}, {"Src One": 1, "Src Two": 1})
+        self.assertEqual(prov["n_distinct_declared_sources"], 2)
+        self.assertEqual([r["resolved"] for r in prov["roots"]], [False])          # still one unresolved root
+        shares = client.get(f"/api/analysis/{aid}/summary").json()["result"]["shares"]
+        self.assertNotIn("confirmed_independent_share", shares)
+        ind = provenance.address_independence([claim("case", "case:unresolved", addr=a)] * 2)
+        self.assertEqual(ind["confirmed_independent_root_count"], 0)
+
     def test_unknown_labels_stay_unknown_and_are_neither_licit_nor_illicit(self):
         rows = [dict(address=btc_address(i), label=lab) for i, lab in
                 enumerate(["totally-made-up", "class_9", "???", "Ünï©ödé", "<b>x</b>", "'; DROP TABLE claims;--"])]
