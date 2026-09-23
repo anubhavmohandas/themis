@@ -107,6 +107,7 @@ semantic_fields:
     hints: {exact: [evidence, notes, note, description, comment], tokens: [evidence, notes, description, comment]}
   chain:
     label: "Blockchain (per row)"
+    claim_role: chain
     hints: {exact: [chain, blockchain, network, coin, currency, asset, symbol],
             tokens: [chain, blockchain, network, coin, asset]}
 
@@ -198,14 +199,23 @@ rejected_examples: 50
 # a confidence column holds numbers, or a small closed set of grades
 confidence_categorical_max_distinct: 10
 
-# Per-input capabilities. SQLite tables are inspected and pre-flighted on a
-# sample; streaming analysis of a whole table is not implemented yet.
-analysis_supported_inputs: [csv, csv.gz]
+# Per-input capabilities. SQLite tables are streamed and validated in bounded
+# chunks (ingest/relational.py) - a whole table is never loaded into memory.
+analysis_supported_inputs: [csv, csv.gz, sqlite]
 
-# SQLite ingestion (ingest/sqlite_source.py)
+# SQLite ingestion (ingest/sqlite_source.py, ingest/relational.py)
 sqlite:
-  # COUNT(*) on a multi-GB table is a full scan; stop counting after this many seconds
+  # COUNT(*) / integrity_check on a multi-GB table is a full scan; stop after this many seconds
   count_timeout_seconds: 20
   sample_chunks: 10         # strided sample: this many spread-out slices ...
   fetch_chunk_rows: 10000   # rows per fetch when streaming a table
   extensions: [.db, .sqlite, .sqlite3]
+  # a table this small, with no valid claim-subject or attribution-label
+  # column of its own, is a candidate lookup/provenance table (labels, sources)
+  # rather than a candidate claim table - never the reverse
+  lookup_table_max_rows: 100000
+  # an undeclared (no PRAGMA foreign_key_list entry) relationship between two
+  # tables is only proposed when both columns share a normalized name and the
+  # referenced column is unique enough, over its sampled values, to be a real
+  # key rather than a coincidentally-matching free-text field
+  inferred_relationship_min_distinct_share: 0.95

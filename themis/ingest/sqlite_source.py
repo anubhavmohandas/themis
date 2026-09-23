@@ -65,23 +65,101 @@ def count_rows(con: sqlite3.Connection, table: str, timeout_s: float) -> int | N
 
 def list_tables(path: str, count: bool = True) -> list[dict]:
     with open_readonly(path) as con:
-        names = [r[0] for r in con.execute(
-            "SELECT name FROM sqlite_master WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+        rows = con.execute(
+            "SELECT name, type FROM sqlite_master WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%' ORDER BY name")
         out = []
-        for n in names:
+        for n, kind in rows.fetchall():
             cols = con.execute(f"PRAGMA table_info({_quote(n)})").fetchall()
-            n_rows = count_rows(con, n, cfg()["count_timeout_seconds"]) if count else None
-            out.append(dict(table=n, n_columns=len(cols), n_rows=n_rows,
+            n_rows = count_rows(con, n, cfg()["count_timeout_seconds"]) if (count and kind == "table") else None
+            out.append(dict(table=n, kind=kind, n_columns=len(cols), n_rows=n_rows,
                             row_count_status="exact" if n_rows is not None else
-                            ("not_counted" if not count else "not_counted_within_time_limit")))
+                            ("not_counted" if not count or kind != "table" else "not_counted_within_time_limit")))
         return out
 
 
 def columns(path: str, table: str) -> list[dict]:
     with open_readonly(path) as con:
         _require_table(con, table)
-        return [dict(name=r[1], declared_type=r[2], primary_key=bool(r[5]))
+        return [dict(name=r[1], declared_type=r[2], not_null=bool(r[3]), default=r[4], primary_key=bool(r[5]))
                 for r in con.execute(f"PRAGMA table_info({_quote(table)})")]
+
+
+def sqlite_version(path: str) -> str:
+    with open_readonly(path) as con:
+        return con.execute("SELECT sqlite_version()").fetchone()[0]
+
+
+def integrity_check(path: str, quick: bool = True, timeout_s: float | None = None) -> dict:
+    """`quick_check` reads every page but skips the (much slower) cross-checks
+    of `integrity_check`; still a full scan of a multi-GB file, so it is time-
+    limited like `count_rows`. Never raises: a malformed database is a result,
+    not a crash."""
+    timeout_s = timeout_s if timeout_s is not None else cfg()["count_timeout_seconds"]
+    pragma = "quick_check" if quick else "integrity_check"
+    deadline = time.monotonic() + timeout_s
+    try:
+        with open_readonly(path) as con:
+            con.set_progress_handler(lambda: 1 if time.monotonic() > deadline else 0, 50_000)
+            try:
+                rows = [r[0] for r in con.execute(f"PRAGMA {pragma}").fetchall()]
+            except sqlite3.OperationalError:
+                return dict(status="not_checked_within_time_limit", errors=[])
+            finally:
+                con.set_progress_handler(None, 0)
+        ok = rows == ["ok"]
+        return dict(status="ok" if ok else "malformed", errors=[] if ok else rows)
+    except sqlite3.DatabaseError as e:
+        return dict(status="unreadable", errors=[str(e)])
+
+
+def indexes(path: str, table: str) -> list[dict]:
+    with open_readonly(path) as con:
+        _require_table(con, table)
+        out = []
+        for _, name, unique, origin, _partial in con.execute(f"PRAGMA index_list({_quote(table)})").fetchall():
+            cols = [r[2] for r in con.execute(f"PRAGMA index_info({_quote(name)})").fetchall() if r[2] is not None]
+            out.append(dict(name=name, columns=cols, unique=bool(unique), origin=origin))
+        return out
+
+
+def foreign_keys(path: str, table: str) -> list[dict]:
+    """Declared FKs only (`PRAGMA foreign_key_list`) - a real relationship the
+    schema itself states, distinct from one `relational.infer_relationships`
+    only guesses from column names."""
+    with open_readonly(path) as con:
+        _require_table(con, table)
+        out = []
+        for _id, _seq, ref_table, frm, to, on_update, on_delete, match in \
+                con.execute(f"PRAGMA foreign_key_list({_quote(table)})").fetchall():
+            out.append(dict(table=ref_table, from_column=frm, to_column=to,
+                            on_update=on_update, on_delete=on_delete))
+        return out
+
+
+def inspect(path: str, *, count: bool = True, sample_size: int = 5) -> dict:
+    """Everything THEMIS shows before analysis may even be considered: the
+    file, the schema, and enough of the data to judge it by eye. Nothing here
+    reads more than a bounded sample of any table's rows."""
+    p = pathlib.Path(path)
+    integrity = integrity_check(path)
+    tables = list_tables(path, count=count)
+    out_tables = []
+    for t in tables:
+        name = t["table"]
+        cols = columns(path, name)
+        entry = dict(t, columns=cols)
+        if t["kind"] == "table":
+            entry["indexes"] = indexes(path, name)
+            entry["foreign_keys"] = foreign_keys(path, name)
+            try:
+                sample, _ = sample_rows(path, name, sample_size)
+            except sqlite3.OperationalError:
+                sample = []
+            entry["sample_rows"] = sample
+        out_tables.append(entry)
+    return dict(filename=p.name, size_bytes=p.stat().st_size, sqlite_version=sqlite_version(path),
+                integrity=integrity, tables=[t for t in out_tables if t["kind"] == "table"],
+                views=[t for t in out_tables if t["kind"] == "view"])
 
 
 def _as_text(v) -> str:

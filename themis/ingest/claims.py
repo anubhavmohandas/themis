@@ -17,7 +17,8 @@ def normalize_date(value: str) -> str:
 
 
 def build_claim(row: dict, mapping: dict, source_id: str, default_heuristic: str = "unknown",
-                record_id: str | int | None = None, blockchain: str | None = None) -> dict:
+                record_id: str | int | None = None, blockchain: str | None = None,
+                provenance_record: dict | None = None) -> dict:
     """One row, one claim. `source_id` should not collide with a bundled
     source id in config/sources/ unless this really is that source - an
     unrecognized id gets no provenance rule and resolves UNRESOLVED, which
@@ -76,6 +77,11 @@ def build_claim(row: dict, mapping: dict, source_id: str, default_heuristic: str
         "heuristic": default_heuristic,
         "subcat": (row.get(mapping.get("category")) or "").strip() if mapping.get("category") else "",
         "notes": f"structured_label_entity={structured_entity}" if structured_entity else "",
+        # STEP: relational extraction (ingest/relational.py) - which database
+        # table/row(s) this claim was built from, so a joined claim never
+        # loses its way back to the records it came from. None for a plain
+        # CSV/upload claim, which has nothing to trace beyond the file itself.
+        "provenance_record": provenance_record,
     }
 
 

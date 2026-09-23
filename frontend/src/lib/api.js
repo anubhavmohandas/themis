@@ -61,6 +61,31 @@ export const api = {
     return postForm("/api/sqlite/preflight", form);
   },
 
+  // Relational SQLite ingestion (Database Inspection -> Table Selection -> joined
+  // schema mapping -> streamed extraction). Everything here is read-only /
+  // sampled until `startSqliteExtractJob` actually streams the driving table.
+  sqliteInspect: (db) => getJSON(`/api/sqlite/inspect?${qs({ db })}`),
+  sqliteCandidates: (db) => getJSON(`/api/sqlite/candidates?${qs({ db })}`),
+  sqliteRelationships: (db) => getJSON(`/api/sqlite/relationships?${qs({ db })}`),
+  sqliteRelationalPreflight: ({ db, spec, semantics, chain, confirmed }) => {
+    const form = new FormData();
+    form.append("db", db); form.append("spec", JSON.stringify(spec));
+    if (semantics && Object.keys(semantics).length) form.append("semantics", JSON.stringify(semantics));
+    if (chain) form.append("chain", chain);
+    form.append("confirmed", confirmed ? "true" : "false");
+    return postForm("/api/sqlite/relational-preflight", form);
+  },
+  startSqliteExtractJob: ({ db, spec, sourceId, useReference, semantics, chain, confirmed }) => {
+    const form = new FormData();
+    form.append("db", db); form.append("spec", JSON.stringify(spec));
+    form.append("source_id", sourceId || "sqlite_dataset");
+    form.append("use_reference", useReference ? "true" : "false");
+    if (semantics && Object.keys(semantics).length) form.append("semantics", JSON.stringify(semantics));
+    if (chain) form.append("chain", chain);
+    form.append("confirmed", confirmed ? "true" : "false");
+    return postForm("/api/jobs/sqlite-extract", form);
+  },
+
   // Background jobs: start returns {job_id}; poll job(id) for real stage state.
   startAnalysisJob: (args) => postForm("/api/jobs/analysis", analysisForm(args)),
   startPaperJob: () => postEmpty("/api/jobs/paper"),

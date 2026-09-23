@@ -124,7 +124,7 @@ def _rate(sample: list[str], validator) -> float:
 
 
 def _chain_aliases() -> dict[str, str]:
-    return {a.lower(): cid for cid, ad in chains.all_adapters().items() for a in ad.symbol_aliases}
+    return chains.alias_map()
 
 
 # ------------------------------------------------------------ semantic scoring

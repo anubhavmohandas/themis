@@ -49,3 +49,10 @@ def get(chain_id: str) -> BlockchainAdapter | None:
 
 def all_adapters() -> dict[str, BlockchainAdapter]:
     return dict(_REGISTRY)
+
+
+def alias_map() -> dict[str, str]:
+    """lowercase symbol/name alias -> chain id, over every registered adapter.
+    Shared by ingest/preflight.py and ingest/relational.py so a per-row
+    "chain"/"blockchain" column resolves identically wherever it is read."""
+    return {a.lower(): cid for cid, ad in _REGISTRY.items() for a in ad.symbol_aliases}

@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AnalysisProvider } from "./lib/AnalysisContext.jsx";
 import { Sidebar, Topbar } from "./components/Shell.jsx";
 import HomePage from "./pages/Home.jsx";
+import DatabasePage from "./pages/Database.jsx";
 import OverviewPage from "./pages/Overview.jsx";
 import ClaimsPage from "./pages/Claims.jsx";
 import AddressPage from "./pages/Address.jsx";
@@ -24,6 +25,7 @@ export default function App() {
           <main className="page">
             <Routes>
               <Route path="/" element={<HomePage />} />
+              <Route path="/database" element={<DatabasePage />} />
               <Route path="/overview" element={<OverviewPage />} />
               <Route path="/claims" element={<ClaimsPage />} />
               <Route path="/address" element={<AddressPage />} />

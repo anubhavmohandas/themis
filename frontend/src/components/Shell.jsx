@@ -13,11 +13,11 @@ const GROUPS = [
   { title: "Research", items: [
     ["/paper", "Reproduce Paper"], ["/methodology", "Methodology"], ["/sources", "Sources"],
   ] },
-  { title: "Workspace", items: [["/", "New Analysis"], ["/analyses", "Recent Analyses"]] },
+  { title: "Workspace", items: [["/", "New Analysis"], ["/database", "Open Database"], ["/analyses", "Recent Analyses"]] },
 ];
 
 export const PAGE_TITLES = {
-  "/": "New Analysis", "/overview": "Overview", "/claims": "Claims", "/address": "Address Inspector",
+  "/": "New Analysis", "/database": "Open Database", "/overview": "Overview", "/claims": "Claims", "/address": "Address Inspector",
   "/provenance": "Provenance", "/conflicts": "Conflicts", "/trust": "Trust Analysis", "/export": "Exports",
   "/paper": "Reproduce Paper", "/methodology": "Methodology", "/sources": "Sources", "/analyses": "Recent Analyses",
 };

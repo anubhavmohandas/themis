@@ -79,15 +79,19 @@ class TestSqliteSource(unittest.TestCase):
         self.assertEqual(sizes, [64, 64, 64, 64, 44])
         self.assertEqual(sum(sizes), 300)
 
-    def test_wallet_table_preflights_on_its_sample_but_analysis_is_blocked_as_unimplemented(self):
+    def test_wallet_table_preflights_on_its_sample_and_analysis_is_now_supported(self):
+        # SQLite streaming extraction exists (ingest/relational.py): a single
+        # table is just a JoinSpec with no joins, so this dataset is no longer
+        # blocked on "input type unsupported" the way it was before that
+        # module existed.
         rows, names = sq.sample_rows(self.db, "wallets", 100)
         pf = preflight.run(rows, names, filename="WalletClassification.db", input_type="sqlite", table="wallets", total_rows=300)
         self.assertEqual(pf["dataset_type"], "attribution_claims")
         self.assertEqual(pf["chain"]["value"], "bitcoin")
         self.assertEqual(pf["input"]["n_rows"], 300)
         self.assertEqual(pf["input"]["n_rows_profiled"], 100)
-        self.assertFalse(pf["can_analyze"])
-        self.assertEqual({b["code"] for b in pf["blockers"]}, {"input_type_unsupported"})
+        self.assertTrue(pf["can_analyze"])
+        self.assertEqual(pf["blockers"], [])
 
     def test_price_table_is_refused_like_a_price_csv(self):
         rows, names = sq.sample_rows(self.db, "prices", 100)
@@ -130,7 +134,7 @@ class TestSqliteApi(unittest.TestCase):
         p = self.client.post("/api/sqlite/preflight", data={"db": "w.db", "table": "wallets"}).json()
         self.assertEqual(p["preflight"]["input"]["type"], "sqlite")
         self.assertEqual(p["preflight"]["dataset_type"], "attribution_claims")
-        self.assertFalse(p["preflight"]["can_analyze"])
+        self.assertTrue(p["preflight"]["can_analyze"])
         self.assertEqual(self.client.get("/api/sqlite/columns", params={"db": "w.db", "table": "zzz"}).status_code, 400)
 
     def test_paths_outside_the_directory_or_of_other_types_are_refused(self):

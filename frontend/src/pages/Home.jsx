@@ -89,6 +89,10 @@ export default function HomePage() {
               <div className="fnt" style={{ fontSize: 11.5 }}>.csv or .csv.gz · processed by the THEMIS API, never sent elsewhere</div>
               <input ref={fileInput} type="file" accept=".csv,.gz" hidden onChange={(e) => pick(e.target.files?.[0])} />
             </div>
+            <p className="mut" style={{ fontSize: 12, marginTop: 8 }}>
+              Auditing a multi-gigabyte SQLite database instead? <Link to="/database">Open a database</Link> - it is
+              inspected and streamed in chunks, never loaded whole or converted to CSV.
+            </p>
 
             {file && (
               <div className="filecard" style={{ marginTop: 12 }}>

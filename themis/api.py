@@ -27,7 +27,8 @@ from . import analysis, config_io, overview as _overview, provenance, report as 
 from . import __version__
 from .paper import reproduce as _paper_repro, verify as _paper_verify
 from . import workspace as _workspace
-from .ingest import gating as _gating, pipeline as _ingest_pipeline, preflight as _preflight, sqlite_source as _sqlite
+from .ingest import (gating as _gating, pipeline as _ingest_pipeline, preflight as _preflight,
+                    relational as _relational, sqlite_source as _sqlite)
 
 app = FastAPI(title="THEMIS API")
 app.add_middleware(
@@ -219,8 +220,7 @@ def sqlite_columns(db: str, table: str):
 @app.post("/api/sqlite/preflight")
 def sqlite_preflight(db: str = Form(...), table: str = Form(...), semantics: str | None = Form(None),
                      chain: str | None = Form(None), confirmed: bool = Form(False)):
-    """Pre-flight one table on a spread-out sample. The result always carries the
-    blocker that streaming analysis of SQLite inputs is not implemented yet."""
+    """Pre-flight one table on a spread-out sample."""
     path = _db_path(db)
 
     def run():
@@ -234,6 +234,132 @@ def sqlite_preflight(db: str = Form(...), table: str = Form(...), semantics: str
         return dict(db=db, table=table, preflight=pf, sample_rows=sample[:5], fieldnames=names,
                     semantic_fields=_semantic_field_options(), chains=sorted(chains_mod.all_adapters()))
     return _bad_request(run)
+
+
+# ------------------------------------------------------ relational SQLite ingestion
+@app.get("/api/sqlite/inspect")
+def sqlite_inspect(db: str, count: bool = True):
+    """Database Inspection stage (spec Sections 1-2): file, schema, sample
+    rows for every table/view - never more than a bounded sample of any one."""
+    path = _db_path(db)
+    return _bad_request(lambda: dict(db=db, **_sqlite.inspect(path, count=count)))
+
+
+@app.get("/api/sqlite/integrity")
+def sqlite_integrity(db: str, quick: bool = True):
+    """A full-file check (time-limited); separate from `/inspect` so a caller
+    can skip it for a database already known-good."""
+    path = _db_path(db)
+    return _bad_request(lambda: dict(db=db, **_sqlite.integrity_check(path, quick=quick)))
+
+
+@app.get("/api/sqlite/candidates")
+def sqlite_candidates(db: str):
+    """Table Selection stage (Section 3): which tables look like a claim
+    subject, an attribution table, or a lookup/provenance table, and why -
+    the user still confirms before anything is joined or analysed."""
+    path = _db_path(db)
+    return _bad_request(lambda: dict(db=db, candidates=_relational.candidate_roles(path)))
+
+
+@app.get("/api/sqlite/relationships")
+def sqlite_relationships(db: str):
+    """Declared foreign keys plus undeclared-but-inferred relationships
+    (Section 3/4), for the table-selection screen to propose a JoinSpec from."""
+    path = _db_path(db)
+    return _bad_request(lambda: dict(db=db, relationships=_relational.infer_relationships(path)))
+
+
+def _parse_join_spec(spec_json: str) -> dict:
+    spec = _parse_json_object(spec_json, "spec")
+    if not spec or "driving_table" not in spec:
+        raise HTTPException(400, "spec must be a JSON object with at least a driving_table")
+    return spec
+
+
+@app.post("/api/sqlite/relational-preflight")
+def sqlite_relational_preflight(db: str = Form(...), spec: str = Form(...), semantics: str | None = Form(None),
+                                chain: str | None = Form(None), confirmed: bool = Form(False)):
+    """Pre-flight a JoinSpec's sample: the same schema mapping / chain
+    resolution / validation-status logic a single table gets, run over the
+    joined columns. Nothing is streamed or persisted yet."""
+    path = _db_path(db)
+    join_spec = _parse_join_spec(spec)
+
+    def run():
+        check = _relational.validate_join_spec(path, join_spec)
+        sample, names = _relational.joined_sample(path, join_spec, _preflight.cfg()["sample_size"])
+        display = [f for f in names if not f.endswith("__rowid")]
+        overrides = _preflight.overrides_from_roles(None, display)
+        overrides.update({k: v for k, v in (_parse_json_object(semantics, "semantics") or {}).items()
+                          if k in display})
+        with _sqlite.open_readonly(path) as con:
+            total = _sqlite.count_rows(con, join_spec["driving_table"], _sqlite.cfg()["count_timeout_seconds"])
+        pf = _preflight.run([{k: v for k, v in r.items() if k in display} for r in sample], display,
+                            filename=db, input_type="sqlite", table=join_spec["driving_table"], total_rows=total,
+                            overrides=overrides, chain=chain or None, confirmed=confirmed)
+        pf["relational"] = dict(join_spec=join_spec, join_warnings=check["warnings"])
+        return dict(db=db, spec=join_spec, join_warnings=check["warnings"], preflight=pf,
+                    sample_rows=[{k: v for k, v in r.items()} for r in sample[:5]], fieldnames=display,
+                    semantic_fields=_semantic_field_options(), chains=sorted(chains_mod.all_adapters()))
+    return _bad_request(run)
+
+
+def _run_sqlite_extract(db: str, spec: dict, source_id: str, use_reference: bool, semantics: dict | None,
+                        chain: str | None, confirmed: bool, progress=None) -> dict:
+    """Stream-extract, validate and normalize a JoinSpec into a new
+    UPLOADED_DATASET workspace - the SQLite-relational equivalent of
+    `_run_upload`, so every existing analysis-id route works unchanged."""
+    path = _db_path(db)
+    if use_reference and progress is not None:
+        progress("start", "reference", None)
+    reference, missing = _reference_or_none() if use_reference else (None, None)
+    if use_reference and progress is not None:
+        progress("complete", "reference", "reference corpus not available: comparison skipped" if missing
+                 else "reference corpus loaded")
+    today = datetime.date.today()
+    result = _bad_request(lambda: _relational.extract(
+        path, spec, source_id, semantics=semantics, chain=chain, confirmed=confirmed,
+        reference=reference, analysis_as_of_date=today, progress=progress))
+
+    if missing and not result.get("stopped"):
+        result = dict(result)
+        result["limitations"] = [f"No cross-source comparison was run: {missing}"] + list(result.get("limitations", []))
+
+    if progress is not None:
+        progress("start", "report", None)
+    ws = _workspace.AnalysisWorkspace(
+        analysis_id=_workspace.new_id(), mode=_workspace.MODE_UPLOADED,
+        dataset_name=f"{pathlib.Path(db).name} ({spec['driving_table']})", created_at=_workspace.now_iso(),
+        analysis_as_of_date=str(today), reference_corpus=reference,
+        input_file_hash=(result.get("dataset_preflight") or {}).get("sqlite_metadata", {}).get("database_sha256"),
+        blockchain=result["detection"].get("blockchain"), preflight=result["dataset_preflight"],
+        schema_mapping=result.get("schema_mapping"), claims=result.get("claims", []),
+        reference_corpus_version=(_scope_of(reference).lower() if reference is not None else None),
+        warnings=result.get("limitations", []), result=result,
+        audit_trail=_report.audit_trail(parameters=dict(source_id=source_id, use_reference=use_reference,
+                                                        chain=chain, confirmed=confirmed, db=db, join_spec=spec),
+                                        warnings=result.get("limitations", [])),
+    )
+    _store.put(ws)
+    if progress is not None:
+        progress("complete", "report", None)
+    if not result["stopped"]:
+        result = dict(result)
+        result["claims"] = result["claims"][:500]
+    return dict(analysis_id=ws.analysis_id, meta=ws.to_meta(), preflight=result)
+
+
+@app.post("/api/sqlite/extract")
+def sqlite_extract(db: str = Form(...), spec: str = Form(...), source_id: str = Form("sqlite_dataset"),
+                   use_reference: bool = Form(True), semantics: str | None = Form(None),
+                   chain: str | None = Form(None), confirmed: bool = Form(False)):
+    """Confirm the JoinSpec and mapping, then stream the whole driving table
+    (chunked, joined, validated) into a new analysis - synchronous, for a
+    table small enough that the caller does not need job/progress polling."""
+    join_spec = _parse_join_spec(spec)
+    sem = _parse_json_object(semantics, "semantics")
+    return _run_sqlite_extract(db, join_spec, source_id, use_reference, sem, chain or None, confirmed)
 
 
 # ------------------------------------------------------------ STEP 1/2 analysis
@@ -365,6 +491,11 @@ _UPLOAD_STAGES = [("reference", "Load reference corpus"), ("parse", "Parse file"
 _PAPER_STAGES = [("load", "Load reference corpus"), ("agreement", "Agreement outcomes"),
                  ("independence", "Provenance and independence"), ("kappa", "Chance-corrected agreement"),
                  ("freshness", "Currency")]
+_SQLITE_STAGES = [("reference", "Load reference corpus"), ("inspect", "Validate join spec"),
+                  ("detect", "Detect chain and schema from a joined sample"),
+                  ("validate", "Stream, validate and normalize claims"),
+                  ("compare", "Provenance, reference comparison, independence, currency"),
+                  ("profile", "Dataset profile, provenance states, conflicts")]
 _jobs: dict[str, dict] = {}
 _jobs_lock = threading.Lock()
 _MAX_JOBS = 50
@@ -389,6 +520,8 @@ def _progress_for(job: dict):
                 continue
             if event == "start":
                 st["status"], st["started_at"] = "running", time.time()
+            elif event == "progress":
+                st["detail"] = detail    # a real interim count (rows scanned so far), never simulated
             elif event == "complete":
                 st["status"] = "complete"
                 if detail:
@@ -431,6 +564,24 @@ async def start_analysis_job(file: UploadFile = File(...), source_id: str = Form
     threading.Thread(target=_finish, daemon=True, args=(
         job, lambda: _run_upload(data, file.filename, source_id, use_reference, mapping_override, cb,
                                  semantics=sem, chain=chain or None, confirmed=confirmed))).start()
+    return dict(job_id=job["job_id"])
+
+
+@app.post("/api/jobs/sqlite-extract")
+def start_sqlite_extract_job(db: str = Form(...), spec: str = Form(...), source_id: str = Form("sqlite_dataset"),
+                             use_reference: bool = Form(True), semantics: str | None = Form(None),
+                             chain: str | None = Form(None), confirmed: bool = Form(False)):
+    """Same extraction as `/api/sqlite/extract`, on a worker thread so the UI
+    can show real per-stage (and, mid-validate, per-chunk) progress on a
+    database too large to extract synchronously within a request."""
+    join_spec = _parse_join_spec(spec)
+    sem = _parse_json_object(semantics, "semantics")
+    stages = _SQLITE_STAGES if use_reference else [s for s in _SQLITE_STAGES if s[0] != "reference"]
+    job = _new_job("sqlite-extract", stages)
+    cb = _progress_for(job)
+    threading.Thread(target=_finish, daemon=True, args=(
+        job, lambda: _run_sqlite_extract(db, join_spec, source_id, use_reference, sem, chain or None,
+                                         confirmed, cb))).start()
     return dict(job_id=job["job_id"])
 
 
