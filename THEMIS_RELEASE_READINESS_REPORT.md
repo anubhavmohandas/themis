@@ -1,0 +1,373 @@
+# THEMIS release-readiness, security and scientific-integrity closure report
+
+Date: 2026-09-24. Scope: one repository-wide closure pass. This file is tracked on purpose: the release state
+must not depend on the gitignored `HARDENING_LOG.md`. Statements are labelled **OBSERVED** (seen in this
+run), **INFERRED**, **DOCUMENTED BY SOURCE** (a source's own documentation) or **CONFIRMED BY THEMIS** (established
+by a THEMIS check) where the distinction matters.
+
+**Verdict: CONDITIONALLY READY — EXTERNAL CHECKS BLOCKED.** No avoidable implementation defect found in this
+loop remains open. Three things cannot be closed from inside the repository (section 23).
+
+---
+
+## 1. Baseline (recorded before any change)
+
+| item | value |
+|---|---|
+| HEAD | `33d9aba7f74d339b998b950613aeadb130bccd37` ("run themis"), equal to `origin/main` |
+| `git status --short`, `git diff --stat`, `git diff` | all empty: clean tree |
+| last commits | 33d9aba run themis · 2199296 provenance integrity gate + case-study metadata · 67fa669 tighten .gitignore · 554a7d4 relational SQLite ingestion · a7fe5e0 pre-flight gate tests/docs · 83cbc3c frontend schema mapping · 540094b pre-flight gate · a7ee979 css · 4c690e3 REPRODUCE test counts · 1e2039b overview populations |
+| Python | 3.14.6 (project `.venv`), pip 26.1.2 at baseline |
+| Node / npm | v26.8.2 / 11.19.1 |
+| `frontend/package-lock.json` sha256 | `9586d4b7471da720fb789e96d5bacca491d5fab4645e1e9ad3a8d673b1318d9d` (unchanged at the end) |
+| config sha256 (baseline) | notable_roots `586a4d1e…`, preflight `648cc603…`, taxonomy `1cb2f8e3…`, thresholds `acfd5016…`, trust_rules `b0d18ce9…` |
+| ignored local files | HARDENING_LOG.md, RECONCILIATION_REPORT.md, WALLETCLASSIFICATION_CASE_STUDY_REPORT.md, provenance_register.html, results/, external_data/, release/, paper/manuscript/, .venv, node_modules, dist |
+| baseline suite | 467 passed, 6 skipped |
+
+State layers: (1) **committed baseline** = 33d9aba, which already contains the WalletClassification integration
+(554a7d4, 2199296) and the earlier security/hardening work; (2) **changes introduced by this loop** = commits
+48101d2, f3b0d94, be42d24, de14716, a5fc145, 9a9e9fe and the commit adding this report.
+
+## 2. Scope
+
+Phases 1–26 of the closure brief. Not done, by rule: no WalletClassification recovery, no new corpus source, no
+paper or corpus edit, no data deleted, no disk-backed storage, no authentication added.
+
+## 3. Changes made
+
+| commit | what |
+|---|---|
+| 48101d2 | CORS allowlist + cross-origin write refusal, byte-exact upload cap (wire + per-file + gzip expansion), error sanitization, NUL-in-path fix, `run_dir_of` fix, `api.yml`, `errors.py` |
+| f3b0d94 | every relational SQL identifier quoted, alias collision refused, SQLite URI percent-encoded, `sqlite*` tables no longer hidden, dependency candidates no longer promote claims, `case_metadata` validated, literals moved to `preflight.yml`, and 101 new tests (41 more are in 48101d2) |
+| be42d24 | UI overclaim fixes, case-metadata rendering, dependency panel, neutral placeholder, case-study wording |
+| de14716, a5fc145, 9a9e9fe | REPRODUCE counts; optional browser harness `tests/e2e/` |
+
+Production diff vs baseline: 17 files, +365/−108 (`themis/`, `frontend/src`); tests +1,959 lines in 10 files.
+`git diff --check`: clean.
+
+## 4. Scientific integrity audit — defects found and fixed
+
+Every item has a test that fails on the old behaviour (mutation-checked where noted).
+
+| # | defect | effect | fix | test |
+|---|---|---|---|---|
+| S1 | `relational.provenance_states` moved a claim from `unresolved` to `inherited` because one declared-source string textually contained another (an unverified **dependency candidate**) | a candidate was presented as a lineage; contradicted the docs' "never changes a provenance count" | claims stay in their state; candidates counted separately as `dependency_candidate_claims`; `inherited` is 0 for a database extraction (no confirmed lineage exists there) | `test_evidence_invariants::test_E_extraction_…` |
+| S2 | Overview showed **"Independent corroboration: established"** whenever the reference comparison merely ran (`ind.available`), even with 0 confirmed independent roots | overclaim | established only when confirmed independent multi-root addresses > 0; interpretation paragraph tied to `resolved == 0` | browser E (see §16) |
+| S3 | the "RECOVERED DATASET SUBSET" banner fired for any non-empty `analysis_origin`/`recovery_status`, including "original_full_database" | a false statement of what the data is | fires only when the declaration mentions recovery (errs toward warning); metadata rendered as one row per field, labelled "declared by the analyst … not verified" | browser D, D2 |
+| S4 | "rows valid" beside the claim count read as verification | overclaim | "rows became claims (address syntax checked; not a verification)" | — |
+
+Verified **not** defects (tested, no change): unresolved roots never count as confirmed; a bundled source name in a
+declared-source column resolves nothing; a CSV cannot declare itself verified/derived; unknown labels stay
+`unknown` and never form agreement; one source disagreeing with itself is `incomparable`; Elliptic class aliases
+apply only to fresh ingestion and read-only to frozen claims.
+
+## 5. WalletClassification closure
+
+Final role: **UNRESOLVED-PROVENANCE CASE STUDY** (unchanged). Core conclusion: technically valid data ≠
+forensically defensible attribution.
+
+* Wording (tracked `docs/case_studies/walletclassification.md`, local report, guard test `TestCaseStudyWording`):
+  **INDEPENDENCE NOT ESTABLISHED**; separately, **a documented dependency exists between at least one pair of
+  declared source descriptors: BABD / WalletExplorer** (DOCUMENTED BY SOURCE; applying it to the recovered rows is
+  INFERRED). The phrase "independence is contradicted" and the sentence inferring an original table "likely tens of
+  millions of rows" from a maximum rowid were removed. Observed values (1,032,288 recovered rows; 1,632,364
+  index-fragment pairs; largest rowid 37,464,413) are kept as observations only, with
+  "**the full original corpus size cannot be established from the recovered subset**".
+* No "0% reliable / unreliable / invalid attribution" language exists (guard test).
+* No further recovery was attempted; the raw file is not in the repository and was not touched.
+
+## 6. Genericity audit (Phase 3)
+
+Search for `WalletClassification`, `BABD`, `Harvard`, `WalletExplorer`, standalone `WE` (case-insensitive too)
+over `themis/` and `frontend/src/` (plus `scripts/`, `run.py`):
+
+| hit | class |
+|---|---|
+| `themis/config/sources/rodwald_mixers.yml:11,20,23` "walletexplorer" | PRE-EXISTING seven-source config data/comment (a dependency Rodwald's own source documents); not a branch |
+| `frontend/src/pages/Database.jsx:104` placeholder `WalletClassification.db` | UI TEXT → **replaced** by `dataset.sqlite` |
+| `scripts/generate_case_study_demo_db.py:3,34` | GENERIC DEMO SUPPORT (synthetic; a comment names the real pattern) |
+| standalone `WE` | none |
+
+**Result: zero WalletClassification-specific scientific branches.** The dependency test uses no dataset name; the
+synthetic demo uses "DemoCorpus-13 (labels via DemoExplorer)". Source-name aliases in the taxonomy: none (test).
+
+## 7. Hardcoding audit (Phase 4)
+
+Method: AST scan of every numeric literal in `themis/**/*.py` (195 non-trivial) plus a frontend sweep.
+
+Genuine scientific/method parameters that were literals — now config (`preflight.yml`), each with a test that
+flips the value: `review_confidence` (a literal `0.5` duplicated it), `min_sequence_sample` (3),
+`detect.unsupported_chain_shape.min_sample` (3), `target_audit.min_source_name_length` (was `> 3`; now `>= 4`,
+same behaviour), `sqlite.dependency_min_descriptor_length` (3), `sqlite.lookup_role_confidence` (0.5),
+`sqlite.inferred_relationship_confidence` (0.6), `sqlite.unindexed_join_warn_rows` (1000),
+`sqlite.case_metadata_max_chars` (4000). Also fixed: `thresholds.yml: decode_report_limit` was **documented but never
+read** while `cli.py` printed a literal 12. A `… or 0.6` fallback that turned a zero table-role confidence into 0.6
+was replaced by `or 0.0`.
+
+Left in code, classified:
+
+* MATHEMATICALLY INHERENT: `1e-12`/`1e-9` float tolerances in kappa, `365.25` days/year, Wilson `z*z/(4n²)`,
+  bitcoin checksum/bech32 constants.
+* SOFTWARE/API: HTTP status codes, `1<<20` read chunk, SQLite progress-handler interval, `_MAX_JOBS = 50`, batch size
+  `1.5e7`.
+* DISPLAY: `[:5]`, `[:10]`, `[:12]` (containment table), `[:20]` examples, console widths, `most_common(10/20)`,
+  frontend `PAGE = 100`, "show 10 rejected", `>6` pairs toggle.
+* Config with an in-code fallback equal to the shipped value (`kappa 0.4`, bootstrap 2000/42/0.95,
+  `staleness_years 3.0`, `root_concentration_limit 8`, `containment_*`): config-driven; the duplicate default is
+  only reached for a custom `THEMIS_CONFIG_DIR` lacking the key (KNOWN LIMITATION, cosmetic).
+* Frontend: no scientific threshold; all percentages/`toFixed` are formatting of server values.
+
+Deliberately **not** added to `thresholds.yml`: its hash is recorded in every paper-reproduction run.
+Re-audited classes (kappa, `confidence_of`, preflight thresholds, currency/staleness, bootstrap, taxonomy walk, trust
+predicates, target/reference independence): no further hardcoding found.
+
+## 8. API security audit (Phases 5–7, 13, 14)
+
+Threat model (also in `themis/config/api.yml`): local single-user tool, binds 127.0.0.1, no authentication.
+Realistic attacker: any web page open in the same browser.
+
+| control | result |
+|---|---|
+| CORS | `allow_origins=["*"]` → allowlist `localhost/127.0.0.1` × `5173/4173` (config). Allowed origin: header present; unknown origin (incl. `null`, wrong port, look-alike host): absent; no `Origin`: unchanged |
+| blind cross-origin write | a "simple" multipart POST is still *processed* by a page that cannot read the reply. `_RequestGuard` returns 403 for any non-GET request whose `Origin` is present and not allowed; verified in a real browser (§16 G): read blocked, no analysis created |
+| upload size | `upload.max_bytes = 256 MiB` (config). Three layers: declared `Content-Length` early refusal; body bytes counted **as read** (endless-body test: stops at the limit, does not consume); exact per-file check; a `.gz` is also refused if it **decompresses** past the limit. Same code for `/api/preflight`, `/api/analysis`, `/api/jobs/analysis`. Clean 413, no traceback, no analysis or job created |
+| error disclosure | only `InputError` text (raised deliberately for the caller) is shown; every other failure → `Analysis task failed.` with the real exception and traceback in the server log (`themis.api` logger). Server paths removed from the missing-reference-corpus message; SQLite library text no longer echoed |
+| paging | server cap `paging.claims_max_page = 500`; partition test over limits 1…261 finds no duplicate/gap; empty page, invalid limits/offsets (clamped or 422), filters compose, tiers partition the claims |
+| other | `db` with NUL byte 500'd → 400; `paper run_id` `.`/`..` accepted by the regex → rejected |
+
+Trust-engine reachability (Phase 13): **IMPLEMENTED AND REACHABLE** — paper trust-rule sensitivity (`/drift`, Trust
+page) and, for any uploaded dataset, evidence retention under chosen trust predicates (`/trust-coverage`, Trust page).
+**IMPLEMENTED BUT NOT EXPOSED** — running a user's own downstream task under alternative trust rules on an arbitrary
+upload (the engine is generic; the only task is ransomware revenue, CLI/paper mode). **NOT IMPLEMENTED** — user-defined
+rules in the UI (config only). Docs already say "paper mode only"; no claim needed correcting.
+
+Residual (author decision): **DNS rebinding** and other local processes are not covered; a `Host`-header allowlist would
+close the former (about 3 lines) but every existing test client uses host `testserver`.
+
+## 9. SQLite hardening (Phase 8)
+
+28 tests (+45 subtests) on synthetic databases: bad magic, truncations, random bytes of 1…70,000 B, zero-byte and empty
+files, 22 hostile table names (quotes, SQL text, Unicode, emoji, reserved words, 5,000 characters, newlines, `sqlite*`),
+hostile/empty/duplicate-alias column names, FKs to missing tables/columns, cycles, self-join, orphans, duplicate and
+conflicting claims, NULL/empty/huge sources, two address-like columns, traversal/absolute/symlink/URI-metacharacter paths.
+Real defects found and fixed: unquoted column identifiers and aliases (**SQL quote injection**; mutation-verified),
+unescaped `LIKE 'sqlite_%'`, raw-path SQLite URI (`?`, `#`, `%`), NUL path 500, silent alias overwrite.
+Guarantees: read-only open, file bytes unchanged, no journal, **no `.recover`, no subprocess anywhere** (static test),
+corrupt file → `stopped`, no claims.
+
+## 10. CSV / general ingest hardening (Phase 9)
+
+16 tests (+44 subtests): 20 filenames (traversal, control characters, 10,000 characters), 22 header shapes (BOM, empty,
+duplicate, SQL/script/formula, 10,000 characters), hostile values (HTML/JS/SQL/formula/CRLF/NUL/100,000-character/empty/
+unknown). No path use of filenames, no crash, unknown stays `unknown` (raw kept verbatim), formula-leading cells
+(`= + - @ \t \r`) neutralised in **every** CSV export including headers and `source_id`, nothing promotes tier or provenance.
+No defect found beyond §9.
+
+## 11. Frontend security (Phase 15)
+
+`dangerouslySetInnerHTML`, `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `eval`, `new Function`, `document.write`,
+`srcdoc`, `javascript:`: **none** in `src/` or `legacy/`. The only dynamic `href`s are two API URLs built from server-side
+names. In a real browser, `<script>` and `<img onerror>` in labels, sources, column names, table names and an error
+message rendered as text; `window.__xss` never set; no dialog, page error or console error.
+
+## 12. Dependency and secret audit (Phase 17)
+
+| tool | result | class |
+|---|---|---|
+| `pip-audit` | baseline: `pip 26.1.2` PYSEC-2026-3721 (fix 26.2). Upgraded the venv's pip to 26.2.1 → **no known vulnerabilities** | packaging-tool/environment (not a runtime dependency) |
+| `npm audit` | 0 vulnerabilities | — |
+| runtime deps | pyyaml, fastapi, uvicorn, python-multipart, react, react-router-dom, reactflow: clean | — |
+| secret scan | 147 tracked files + history names: no private keys, cloud/GitHub/Slack/Google tokens, JWTs, credential URLs, `.env`, assignments to key/password/secret/token. **No false positives to report** | — |
+
+`themis` itself is "not on PyPI" to `pip-audit` (expected).
+
+## 13. Third-party data and license audit (Phase 21)
+
+**OBSERVED:** the repository is public (`private:false`, unauthenticated API, 2026-09-24) and **tracks** `demo_data/`
+(5 files: `observations_sample.csv.gz` 6.7 MB, `revenue.csv.gz`, `verified_anchors.txt.gz`, `ground_truth.csv`,
+`manifest.json`) — records **derived** from all seven sources. No raw source file, no transaction graph. Other tracked
+address-shaped strings are test/example fixtures. No WalletClassification, BABD or recovered-database content is tracked.
+
+| source | derived records tracked | license state |
+|---|---|---|
+| GraphSense TagPack | 25,362 sampled claims + `forensic` half of the anchor set | **CONFIRMED** (MIT) |
+| Schnöring et al. | complete | **CONFIRMED** (CC BY 4.0) |
+| Ransomwhere | 11,186 claims + revenue | **CONFIRMED** (CC BY 4.0, Zenodo) |
+| OFAC SDN | 185 anchors | **CONFIRMED** (public domain) |
+| Elliptic++ | 20,083 sampled claims (53.24% of corpus claims) | **UNCONFIRMED** (no license stated) |
+| Rodwald ransomware / mixers | 50,322 / 57,817 claims + revenue | **UNCONFIRMED** (no terms) |
+| WatchYourBack | 309 claims | **PARTIAL / CODE-ONLY** (GPL-3.0 for the repository; data extent unstated) |
+
+60.24% of corpus claims derive from UNCONFIRMED sources (per `THIRD_PARTY_DATA.md`, re-read). **Flagged, prominently:**
+this is the top unresolved release question. Nothing was deleted, untracked or rewritten. The release ZIP builder already
+excludes `demo_data/`; the git repository does not. THEMIS's own code has **no LICENSE file**.
+
+## 14. Clean-install verification (Phase 18)
+
+| step | result |
+|---|---|
+| `python -m pytest` | **609 passed, 6 skipped**, 2 warnings, 132 subtests (with the bundled sample). Release mode (`THEMIS_DATA_DIR` empty): 480 passed, 135 skipped |
+| skips | 6 × full-corpus Overview figures (need `THEMIS_OBSERVATIONS`); release mode adds the corpus-dependent tests, each with its stated reason |
+| `rm -rf node_modules && npm ci` | 121 packages, lockfile hash unchanged, 0 vulnerabilities |
+| `npm run build` | vite 6.4.3, 228 modules, 0 errors, 0 build warnings |
+| `npm audit` | 0 vulnerabilities |
+
+Warnings: `StarletteDeprecationWarning` (httpx test client) and `anyio BlockingPortal` alias — UPSTREAM/DEPRECATION, not
+actionable here. npm "install-scripts … esbuild, fsevents not yet covered by allowScripts" — UPSTREAM (npm policy notice;
+the build works). ACTIONABLE: none. HARMLESS: `Failed to load resource` console lines on deliberate 4xx refusal paths.
+
+Final verification (all code frozen, HEAD 9a9e9fe): pytest 609 passed / 6 skipped; clean `npm ci` + build + audit as above; `pip-audit` clean; default `reproduce-paper` BLOCKED (exit 3); retained-table run PASS; synthetic demo: 200 claims, provenance 0 resolved / 0 inherited / 0 inferred / 200 unresolved, 100 dependency-candidate claims, 1 candidate (`DemoCorpus-13 (labels via DemoExplorer)` → `DemoCorpus-13`), independence not available, 0 verified.
+
+## 15. Complete test results
+
+Baseline 467 → **609** (+142 tests). New files: `test_api_security` 41, `test_sqlite_adversarial` 28,
+`test_evidence_invariants` 27, `test_case_metadata_hardening` 18, `test_csv_adversarial` 16,
+`test_config_driven_parameters` 10; `test_case_study_metadata` 12 → 14. Related existing files all pass:
+relational 26, sqlite_source 13, ingest 33, preflight 35, independence 7, rq1_taxonomy 22, target_audit 10,
+api_views 30, trust_engine 11. Mutation checks (guard removed → a test fails): wire counter, origin refusal, per-file
+limit, wildcard CORS, error text, identifier quoting.
+
+## 16. Browser E2E (Phase 16)
+
+**Executed** (not substituted by API tests): headless Chromium 151 driven by `playwright-core` 1.63.0 against the
+production build (`vite preview :4173`) and the API (`:5001`, `THEMIS_DB_DIR` set). **16/16 steps passed**
+(`tests/e2e/`, optional, not part of pytest):
+
+A normal CSV upload → pre-flight → analysis → overview → claims (40 of 40, server-paged) → address → provenance → export
+(`normalized_claims.csv`, 41 lines) · B healthy SQLite inspect → select → 2 joins → pre-flight → extract → overview ·
+C corrupt SQLite shows "DATABASE INTEGRITY CHECK FAILED / Analysis has not started.", no table selection, and the server
+independently refuses (`stopped`, 0 claims, `/claims` → 409) · D recovered subset shows "RECOVERED DATASET SUBSET / This
+analysis does not represent the complete original database." in the alert region; a value containing a newline and
+"provenance resolution status:" cannot forge a second row; an "original_full_database" declaration raises no banner ·
+E dependent-source demo shows DECLARED SOURCE DESCRIPTOR and POTENTIAL / DOCUMENTED DEPENDENCY, "Independent corroboration:
+not established", confirmed independent roots 0, provenance `resolved 0 · inherited 0 · inferred 0 · unresolved 200`, 100
+candidate claims listed separately · F1–F4 hostile CSV / SQLite / error text render as text, no execution, no dialog ·
+G a page on another origin cannot read the API and its blind upload created nothing.
+Limits: one browser engine (Chromium), production build only, headless.
+
+## 17. Paper reproduction (Phase 19)
+
+| run | input | result |
+|---|---|---|
+| `themis reproduce-paper` (repository as shipped) | bundled sample | **`PAPER ↔ THEMIS: BLOCKED`**, exit 3; 20 PASS / 0 FAIL / 9 NOT_REPRODUCED; 27 claim ids blocked. **Missing prerequisite:** the full normalized observation table (`THEMIS_OBSERVATIONS`, built by `scripts/build_corpus.py` from the seven raw sources, which are not in this environment) |
+| same command, retained full table `results/reproduction_closure/full_build/observations.csv.gz` (sha256 `e65bf05a…029acd`, 1,545,710 claims, built 2026-09-20; ground truth copied from `demo_data`), `--as-of 2026-09-15` | FULL_CORPUS | **`PAPER ↔ THEMIS: PASS`**, 29 headline PASS / 0 FAIL / 0 NOT_REPRODUCED. Run twice: once mid-loop (dirty tree on 33d9aba) and again in the final verification on clean commit 9a9e9fe (run `20260923T232302Z-9a9e9fe`); both PASS |
+
+Reading: the BLOCKED result is the current, honest result of the command as shipped and is **not** described as a PASS.
+The second run is a separate, current execution that reaches PASS on a locally retained table whose derivation from raw
+sources could not be re-verified in this run (per-source claim counts in its manifest sum to the paper's 1,545,710).
+Historical certified PASS (tag `v1.0-paper`) is not counted here.
+Independently verified: `git diff` of `paper/`, `themis/config/sources/`, `taxonomy.yml`, `thresholds.yml`,
+`trust_rules.yml`, `notable_roots.yml` against HEAD is empty; WalletClassification is absent from
+`reproduce.required_inputs()`; the seven-source list is unchanged; no paper/config file is touched by the WalletClassification
+commits; no paper code mentions `case_metadata` or the case study (test); the demo generator is not imported by production
+code. One paper-harness file changed: `themis/paper/reproduce.py::run_dir_of` (name validation only; results unchanged, as
+the PASS above shows).
+
+## 18. Paper-vs-implementation discrepancy register (Phase 20)
+
+| item | class | status |
+|---|---|---|
+| "Exact agreement" counted one source's opinion as two agreeing (published draft 13,673 / 1,253 / 342 / 109 / 23; THEMIS 10,515 / 1,253 / 340 / 108 / 3,184) | CODE BUG — FIXED | fixed in `classify_address`; the paper's declared values are the author's; manuscript is not in the repository and not compared here |
+| TagPack per-tag confidence flattened to one `curated` tier | METHODOLOGY ISSUE — AUTHOR REVIEW REQUIRED | unchanged, by decision; `subcat` carries the raw id |
+| WatchYourBack `#`-prefixed addresses (87) | CODE BUG — FIXED (address key: `strip_prefix`; 71 hydra-market re-rooted to `ofac_sdn`) / METHODOLOGY ISSUE — AUTHOR REVIEW REQUIRED (16 remaining records) | manifest now expects 15,413 multi-dataset addresses |
+| Elliptic++ licensing | LICENSE / REDISTRIBUTION ISSUE | unresolved (§13) |
+| Rodwald licensing | LICENSE / REDISTRIBUTION ISSUE | unresolved |
+| WatchYourBack GPL-3.0 reach over the data | LICENSE / REDISTRIBUTION ISSUE | unresolved |
+| Revenue table off by $1–3 | DATA SNAPSHOT DIFFERENCE in the first log entry; root cause later found and **CODE BUG — FIXED** (cent rounding in `build_corpus.py`) | Table 2 PASS in both runs |
+| Elliptic `class_1/2` alias | NO LONGER APPLICABLE (verified zero effect; fresh ingestion only) | — |
+| Staleness judged by wall clock / newest date | CODE BUG — FIXED | analysis date pinned |
+| Bundled sample reproduces only 20/29 headline claims | KNOWN LIMITATION | needs the full table |
+| Dedupe key `(address, label)` ignores the declared source, so a second descriptor for an identical claim is dropped and counted as "duplicate claim" | KNOWN LIMITATION (new, this loop) | reported not silent; changing it alters ingestion counts: author decision |
+| THEMIS code has no LICENSE file | LICENSE / REDISTRIBUTION ISSUE | author decision |
+| "Openly redistributable" wording for Elliptic++/Rodwald | LICENSE / REDISTRIBUTION ISSUE | author decision |
+
+The paper was not edited.
+
+## 19. Repository hygiene (Phase 22)
+
+Tracked files: 147 at baseline. No `.db/.sqlite`, recovery fragment, `node_modules`, `.venv`, `.env`, credential, `dist`,
+zip or temp result folder is tracked (the only name match, `docs/case_studies/walletclassification.md`, is a document).
+Ignored as intended: HARDENING_LOG.md, RECONCILIATION_REPORT.md, the WalletClassification working report,
+`results/`, `external_data/`, `release/`, `paper/manuscript/`, `*.db`, `*.sqlite`. `HARDENING_LOG.md` being ignored is a
+deliberate `.gitignore` entry ("local working material"); its permanent content that matters is in §4, §18 and this file.
+All test databases are built in temp directories; no test artifact was left behind.
+
+## 20. Unresolved limitations
+
+1. DNS rebinding and other local processes are outside the CORS/Origin model (§8).
+2. Deduplication ignores the declared source (§18).
+3. A database view that never terminates would make an extraction run unbounded (a hostile local file; not addressed).
+4. Extraction holds all valid claims in memory (existing, documented `occam:` ceiling).
+5. `allowed_origins` is read once at import; changing it needs a restart.
+6. E2E covered Chromium only.
+7. The unverified `ValueError`s raised by library code are now internal errors (generic message): a caller who relied on
+   seeing their text will see the generic one.
+
+## 21. Author decisions still required
+
+1. Whether `demo_data/` stays tracked in a **public** repository given the unconfirmed Elliptic++ and Rodwald terms
+   (confirm with the authors, or untrack / replace with a synthetic sample). Nothing was changed.
+2. A LICENSE for THEMIS's own code.
+3. Whether to accept the retained full observation table as the authoritative reproduction input, or rebuild it from
+   freshly fetched raw sources.
+4. TagPack tiering; the 16 unreassigned WatchYourBack records.
+5. Whether the declared source should be part of the duplicate-claim key.
+6. Whether to add a `Host` allowlist (DNS rebinding).
+
+## 22. Final acceptance matrix
+
+| # | requirement | status | evidence |
+|---|---|---|---|
+| 1 | Python full suite | PASS | `python -m pytest`: 609 passed, 6 skipped (six full-corpus tests, stated reason) |
+| 2 | case-study tests | PASS | `test_case_study_metadata` 14, `test_case_metadata_hardening` 18 |
+| 3 | relational SQLite tests | PASS | `test_relational` 26, `test_sqlite_source` 13 |
+| 4 | adversarial SQLite tests | PASS | `test_sqlite_adversarial` 28 (+45 subtests) |
+| 5 | CSV ingest tests | PASS | `test_csv_adversarial` 16, `test_ingest` 33, `test_preflight` 35 |
+| 6 | taxonomy invariants | PASS | `test_evidence_invariants::TestTaxonomyInvariants`, `test_rq1_taxonomy` 22 |
+| 7 | provenance invariants | PASS | `test_evidence_invariants` cases A–F + extraction cases (27) |
+| 8 | independence invariants | PASS | `test_independence` 7, `test_target_audit` 10, cases A–F |
+| 9 | API security | PASS | `test_api_security` 41 |
+| 10 | CORS | PASS | allowed/unknown/absent origin, preflight, blind POST 403; browser G |
+| 11 | upload-size enforcement | PASS | 8 required cases + endless body + gzip expansion, three routes |
+| 12 | error sanitization | PASS | 500/job/task/sqlite/reference-path tests; server log captured |
+| 13 | path traversal | PASS | filenames (20), `db` parameter (15 shapes, symlink, NUL), `run_id` |
+| 14 | SQL injection | PASS | 22 table names, 8 column names, hostile values, catalogue lookup; mutation-verified |
+| 15 | XSS | PASS | source scan + browser F1–F3, `window.__xss` never set |
+| 16 | CSV formula injection | PASS | every export, headers, `source_id`, six lead characters |
+| 17 | claims pagination | PASS | partition over limits 1…261, cap, empty page, filters, tiers |
+| 18 | frontend clean install | PASS | `rm -rf node_modules && npm ci`, 121 packages, lockfile unchanged |
+| 19 | frontend production build | PASS | vite build, 228 modules |
+| 20 | npm audit | PASS | 0 vulnerabilities |
+| 21 | pip audit | PASS | none after pip 26.1.2 → 26.2.1 (environment tool) |
+| 22 | secret scan | PASS | §12 |
+| 23 | browser E2E | PASS | 16/16, Chromium 151 (`tests/e2e`) |
+| 24 | WalletClassification special-case grep | PASS | §6, zero scientific branches |
+| 25 | synthetic demo | PASS | `test_E_…` and browser E: 200 claims, 0/0/0/200, 1 dependency, independence not available |
+| 26 | third-party data hygiene | BLOCKED | derived records of 7 sources tracked in a public repo; 60.24% unconfirmed. Needs the Elliptic++ / Rodwald authors' answer or the author's decision (§13, §21.1) |
+| 27 | paper files unchanged | PASS | `git diff HEAD -- paper` empty |
+| 28 | seven-source corpus unchanged | PASS | `git diff -- themis/config/sources` empty; `required_inputs()` scan |
+| 29 | paper reproduction (`themis reproduce-paper`, as shipped) | BLOCKED | full observation table absent from the repository/environment default; 20 PASS / 0 FAIL / 9 NOT_REPRODUCED |
+| 29b | paper reproduction, retained full table | PASS | 29/29 headline; input provenance not re-derivable here (§17) |
+| 30 | repository hygiene | PASS | §19 |
+| 31 | scientific wording audit | PASS | §4 S2–S4 fixed; docs/back-end audit clean; guard tests |
+| 32 | unresolved author-review issues | BLOCKED | §21 (author decisions) |
+| 33 | licensing unresolved items | BLOCKED | Elliptic++, Rodwald, WatchYourBack confirmations from outside the repository |
+| 34 | final WalletClassification role | PASS | UNRESOLVED-PROVENANCE CASE STUDY |
+
+## 23. Final release recommendation
+
+**CONDITIONALLY READY — EXTERNAL CHECKS BLOCKED.** Every code, security, scientific-wording and test item is PASS. Rows
+26, 29, 32 and 33 are BLOCKED on inputs only the author or outside parties can give. Do not publish the repository or a
+release as "release ready" until row 26 (what `demo_data/` may contain in a public repository) is decided.
+`PAPER ↔ THEMIS` remains **BLOCKED** for the command as shipped; it is PASS only with the retained full table.
+
+## 24. Exact git diff / status summary
+
+Baseline `33d9aba`; commits by this loop: 48101d2, f3b0d94, be42d24, de14716, a5fc145, 9a9e9fe, plus the commit adding this
+report. Working tree clean after the final commit. Files changed vs baseline: 30 (+2,397 / −121), of which production
+`themis/` + `frontend/src` 17 files (+365 / −108), tests 10 files (+1,959), docs (README, REPRODUCE, case study, this
+report), `themis/config/api.yml` and `themis/errors.py` new. No paper, corpus, source-config, taxonomy, threshold or
+trust-rule file changed. Change review: no change alters a scientific result of the paper pipeline (§17 proves it), none
+introduces source-specific behaviour, none weakens an existing guard; the one intentional interpretation change is S1
+(a candidate no longer changes a provenance state). The new surfaces are the request guard and the config-driven allowlist,
+both tested.
