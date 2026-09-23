@@ -140,7 +140,7 @@ class TestMarketDataIsRefused(unittest.TestCase):
             os.remove(path)
 
     def test_same_via_the_api_creates_a_stopped_workspace_with_no_claims(self):
-        client = TestClient(app)
+        client = TestClient(app, base_url="http://localhost")
         r = client.post("/api/analysis", files={"file": ("btc.csv", ohlcv_bytes(), "text/csv")},
                         data={"source_id": "btc_price", "use_reference": "false", "chain": "bitcoin", "confirmed": "true",
                               "semantics": json.dumps({"Number of trades": "subject_address", "Ignore": "attribution_label"})})
@@ -335,7 +335,7 @@ class TestGatingStates(unittest.TestCase):
         self.assertEqual(r["analysis_states"]["provenance"]["state"], gating.INSUFFICIENT_DATA)
 
     def test_conflicts_endpoint_reports_the_state_not_a_zero(self):
-        client = TestClient(app)
+        client = TestClient(app, base_url="http://localhost")
         aid = client.post("/api/analysis", files={"file": ("a.csv", attribution_bytes(), "text/csv")},
                           data={"source_id": "gate_feed", "use_reference": "false"}).json()["analysis_id"]
         c = client.get(f"/api/analysis/{aid}/conflicts").json()
@@ -351,7 +351,7 @@ class TestGatingStates(unittest.TestCase):
         self.assertEqual(t["skipped"], ["exclude_conflicts"])
 
     def test_staleness_rule_is_not_applicable_without_an_attribution_date(self):
-        client = TestClient(app)
+        client = TestClient(app, base_url="http://localhost")
         rows = [{"wallet_address": btc_address(i), "category": "exchange"} for i in range(6)]
         aid = client.post("/api/analysis", files={"file": ("b.csv", to_csv(rows, ["wallet_address", "category"]), "text/csv")},
                           data={"source_id": "nodate_feed", "use_reference": "false"}).json()["analysis_id"]
@@ -361,7 +361,7 @@ class TestGatingStates(unittest.TestCase):
 
 class TestInvalidDatasetsCannotEnterAnalysis(unittest.TestCase):
     def setUp(self):
-        self.client = TestClient(app)
+        self.client = TestClient(app, base_url="http://localhost")
         self.aid = self.client.post("/api/analysis", files={"file": ("btc.csv", ohlcv_bytes(200), "text/csv")},
                                     data={"source_id": "btc_price", "use_reference": "false"}).json()["analysis_id"]
 
@@ -384,7 +384,7 @@ class TestInvalidDatasetsCannotEnterAnalysis(unittest.TestCase):
 
 class TestPreflightEndpointAndExport(unittest.TestCase):
     def test_preflight_endpoint_returns_a_reviewable_mapping(self):
-        client = TestClient(app)
+        client = TestClient(app, base_url="http://localhost")
         r = client.post("/api/preflight", files={"file": ("a.csv", attribution_bytes(), "text/csv")}).json()
         p = r["preflight"]
         self.assertTrue(p["can_analyze"])
@@ -393,7 +393,7 @@ class TestPreflightEndpointAndExport(unittest.TestCase):
         self.assertEqual(r["chains"], ["bitcoin"])
 
     def test_a_mapping_that_names_a_missing_column_is_a_400_not_a_silent_no_op(self):
-        client = TestClient(app)
+        client = TestClient(app, base_url="http://localhost")
         r = client.post("/api/preflight", files={"file": ("a.csv", attribution_bytes(), "text/csv")},
                         data={"semantics": json.dumps({"no_such_column": "subject_address"})})
         self.assertEqual(r.status_code, 400)
@@ -410,7 +410,7 @@ class TestPreflightEndpointAndExport(unittest.TestCase):
         self.assertTrue(ok["user_confirmed"])
 
     def test_preflight_json_carries_the_reproducibility_record(self):
-        client = TestClient(app)
+        client = TestClient(app, base_url="http://localhost")
         data = attribution_bytes()
         aid = client.post("/api/analysis", files={"file": ("wallets.csv", data, "text/csv")},
                           data={"source_id": "repro_feed", "use_reference": "false", "confirmed": "true"}).json()["analysis_id"]
@@ -431,7 +431,7 @@ class TestPreflightEndpointAndExport(unittest.TestCase):
 
 class TestProvenanceSeparation(unittest.TestCase):
     def test_uploaded_and_reference_provenance_are_separate_and_the_upload_borrows_nothing(self):
-        client = TestClient(app)
+        client = TestClient(app, base_url="http://localhost")
         aid = client.post("/api/analysis", files={"file": ("a.csv", attribution_bytes(), "text/csv")},
                           data={"source_id": "my_private_feed", "use_reference": "false"}).json()["analysis_id"]
         d = client.get(f"/api/analysis/{aid}/provenance").json()
@@ -455,7 +455,7 @@ class TestProvenanceSeparation(unittest.TestCase):
                 pipeline.ingest(path, "tagpack", reference=None)
         finally:
             os.remove(path)
-        r = TestClient(app).post("/api/analysis", files={"file": ("a.csv", attribution_bytes(), "text/csv")},
+        r = TestClient(app, base_url="http://localhost").post("/api/analysis", files={"file": ("a.csv", attribution_bytes(), "text/csv")},
                                  data={"source_id": "tagpack", "use_reference": "false"})
         self.assertEqual(r.status_code, 400)
 

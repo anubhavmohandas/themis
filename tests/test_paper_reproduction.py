@@ -200,7 +200,7 @@ class TestOneSourceOfTruthForDrift(unittest.TestCase):
     def api_drift(self):
         from fastapi.testclient import TestClient
         from themis.api import app
-        c = TestClient(app)
+        c = TestClient(app, base_url="http://localhost")
         aid = c.post("/api/analysis/paper").json()["analysis_id"]
         return c.get(f"/api/analysis/{aid}/drift").json()
 

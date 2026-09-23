@@ -10,7 +10,7 @@ EX = pathlib.Path(__file__).resolve().parent.parent / "examples"
 
 
 def upload(name, **form):
-    return TestClient(app).post("/api/analysis", files={"file": (name, (EX / name).read_bytes(), "text/csv")},
+    return TestClient(app, base_url="http://localhost").post("/api/analysis", files={"file": (name, (EX / name).read_bytes(), "text/csv")},
                                 data={"source_id": "example_feed", "use_reference": "false", **form}).json()
 
 

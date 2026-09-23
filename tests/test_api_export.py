@@ -54,7 +54,7 @@ class TestUploadStoppedIngestDoesNotCrash(unittest.TestCase):
     must not assume every result has them.
     """
     def setUp(self):
-        self.client = TestClient(app)
+        self.client = TestClient(app, base_url="http://localhost")
 
     def _upload(self, content: bytes, filename: str, source_id: str):
         return self.client.post(
@@ -90,7 +90,7 @@ class TestUploadInputValidation(unittest.TestCase):
     an unhandled exception that reaches the client as a 500 or crashes the
     worker."""
     def setUp(self):
-        self.client = TestClient(app)
+        self.client = TestClient(app, base_url="http://localhost")
 
     def _upload(self, content: bytes = BTC_CSV, **form):
         data = {"source_id": "t", "use_reference": "false", **form}
@@ -206,7 +206,7 @@ class TestNoReferenceCorpus(unittest.TestCase):
         self._old = os.environ.get("THEMIS_DATA_DIR")
         os.environ["THEMIS_DATA_DIR"] = "/nonexistent-themis-data-dir"
         api._reference_cache.clear()
-        self.client = TestClient(app)
+        self.client = TestClient(app, base_url="http://localhost")
 
     def tearDown(self):
         if self._old is None:

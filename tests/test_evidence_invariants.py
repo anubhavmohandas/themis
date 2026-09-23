@@ -21,7 +21,7 @@ from themis.api import app
 from themis.ingest import relational as rel
 from test_preflight import btc_address, to_csv
 
-client = TestClient(app)
+client = TestClient(app, base_url="http://localhost")
 X, Y = "montreal_paquet_clouston_2019", "ofac_sdn"          # two confirmed (resolved) roots in the bundled registry
 
 

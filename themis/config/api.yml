@@ -11,9 +11,13 @@
 #   * WRITE: a foreign page can still fire a "simple" cross-origin POST blind
 #            (multipart upload); the API refuses any state-changing request
 #            whose Origin header is present and not in this list.
-# NOT covered (would need Host-header validation or auth): DNS rebinding, and
-# any other local process. Requests with no Origin header (curl, scripts,
-# tests) are not browser requests and are unaffected.
+#   * REBIND: a page on evil.example whose DNS is switched to 127.0.0.1 becomes
+#            same-origin with the API, so neither CORS nor the Origin check
+#            applies to it. Its requests still carry `Host: evil.example`, so
+#            any request whose Host is not in `hosts.allowed` is refused.
+# NOT covered (would need auth): any other local process. Requests with no
+# Origin header (curl, scripts, tests) are not browser requests and are exempt
+# from the Origin check - but not from the Host check, which every client passes.
 
 cors:
   # exactly the origins the bundled frontend is served from: the Vite dev
@@ -23,6 +27,14 @@ cors:
     - http://127.0.0.1:5173
     - http://localhost:4173
     - http://127.0.0.1:4173
+
+hosts:
+  # Host-header hostnames the API answers to, compared without the port so no
+  # deployment's port is baked in. The server binds 127.0.0.1 only, so these
+  # are the only names a legitimate local client can send. Never "*".
+  allowed:
+    - localhost
+    - 127.0.0.1
 
 upload:
   # Largest uploaded file THEMIS will accept, in bytes, enforced while the

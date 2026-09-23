@@ -17,6 +17,7 @@ import collections, csv, datetime, gzip, hashlib, io, json, logging, os, pathlib
 try:
     from fastapi import FastAPI, File, Form, HTTPException, UploadFile
     from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.middleware.trustedhost import TrustedHostMiddleware
     from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 except ImportError as e:   # pragma: no cover
     raise SystemExit("themis.api requires the 'ui' extra: pip install -e '.[ui]'") from e
@@ -40,6 +41,7 @@ GENERIC_ERROR = "Analysis task failed."
 # Read once: the middleware below is fixed when the app is built. Threat model in config/api.yml.
 _api_cfg = config_io.load().api
 _ALLOWED_ORIGINS = frozenset(_api_cfg["cors"]["allowed_origins"])
+_ALLOWED_HOSTS = list(_api_cfg["hosts"]["allowed"])
 _MAX_UPLOAD = _api_cfg["upload"]["max_bytes"]
 _MAX_BODY = _MAX_UPLOAD + _api_cfg["upload"]["multipart_overhead_bytes"]
 _PAGING = _api_cfg["paging"]
@@ -94,6 +96,7 @@ app.add_middleware(      # added last = outermost, so a refusal from the guard s
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=_ALLOWED_HOSTS, www_redirect=False)   # outermost: DNS rebinding
 
 
 @app.exception_handler(Exception)

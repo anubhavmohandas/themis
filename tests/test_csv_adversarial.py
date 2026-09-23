@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from themis.api import app, _csv_safe_cell
 from test_preflight import btc_address
 
-client = TestClient(app, raise_server_exceptions=False)   # what a browser sees: a 500 is a failure here, not an exception
+client = TestClient(app, base_url="http://localhost", raise_server_exceptions=False)   # what a browser sees: a 500 is a failure here, not an exception
 ADDRS = [btc_address(i) for i in range(12)]
 FORMULAS = ["=cmd|' /C calc'!A0", "+1+1", "-2+3", "@SUM(1+1)", "\t=1+1", "\r=1+1", "=HYPERLINK(\"http://evil\",\"x\")"]
 

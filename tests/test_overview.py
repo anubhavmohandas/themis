@@ -185,7 +185,7 @@ class TestRealFullCorpus(unittest.TestCase):
 class TestApiSurface(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.client = TestClient(api.app)
+        cls.client = TestClient(api.app, base_url="http://localhost")
         cls.aid = cls.client.post("/api/analysis/paper").json()["analysis_id"]
         cls.summary = cls.client.get(f"/api/analysis/{cls.aid}/summary").json()
 

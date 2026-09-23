@@ -106,7 +106,7 @@ class TestSqliteApi(unittest.TestCase):
         cls.dir = tempfile.TemporaryDirectory()
         make_db(os.path.join(cls.dir.name, "w.db"))
         pathlib.Path(cls.dir.name, "notes.txt").write_text("x")
-        cls.client = TestClient(app)
+        cls.client = TestClient(app, base_url="http://localhost")
 
     @classmethod
     def tearDownClass(cls):

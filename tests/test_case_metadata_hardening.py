@@ -14,7 +14,7 @@ from themis.ingest import relational as rel
 from test_preflight import btc_address
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-client = TestClient(app)
+client = TestClient(app, base_url="http://localhost")
 ALL = dict(analysis_origin="recovered_sqlite_subset", integrity_status="source_file_truncated",
            recovery_status="recovered_subset", source_identity_status="partially_attributed",
            provenance_resolution_status="unresolved", limitations="only a partial recovery survives")

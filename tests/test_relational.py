@@ -268,7 +268,7 @@ class TestApiRoutes(unittest.TestCase):
     def setUpClass(cls):
         cls.dir = tempfile.TemporaryDirectory()
         make_relational_db(os.path.join(cls.dir.name, "w.db"), n=150)
-        cls.client = TestClient(app)
+        cls.client = TestClient(app, base_url="http://localhost")
 
     @classmethod
     def tearDownClass(cls):

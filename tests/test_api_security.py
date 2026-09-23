@@ -2,6 +2,8 @@
 
   * CORS names the frontend's origins, never "*"; a state-changing request from
     any other browser origin is refused outright, not just left unreadable
+  * the Host header must name a local hostname (DNS-rebinding defence): CORS and
+    the Origin check cannot see a page that has become same-origin with the API
   * every uploaded-file route enforces one config-driven size limit WHILE READING
     (Content-Length may be absent, low or high, and a .gz may expand)
   * a client never sees an internal exception: no path, SQL or library text -
@@ -16,8 +18,8 @@ import themis.api as api
 from themis import config_io, workspace
 from test_preflight import btc_address, to_csv
 
-client = TestClient(api.app)
-quiet = TestClient(api.app, raise_server_exceptions=False)   # what a browser sees on a 500
+client = TestClient(api.app, base_url="http://localhost")
+quiet = TestClient(api.app, base_url="http://localhost", raise_server_exceptions=False)   # what a browser sees on a 500
 
 ALLOWED = "http://localhost:5173"
 BTC_CSV = (b"wallet_address,entity_type\n"
@@ -33,6 +35,38 @@ def n_analyses() -> int:
 def upload(path: str, data: bytes, name="btc.csv", **kw):
     return client.post(path, files={"file": (name, data, "application/octet-stream")},
                        data={"use_reference": "false"}, **kw)
+
+
+class TestHostAllowlist(unittest.TestCase):
+    def get(self, host, path="/api/health"):
+        return quiet.get(path, headers={"Host": host})
+
+    def test_config_names_only_local_hostnames_never_a_wildcard(self):
+        hosts = config_io.load().api["hosts"]["allowed"]
+        self.assertTrue(hosts)
+        for h in hosts:
+            self.assertRegex(h, r"^(localhost|127\.0\.0\.1)$")
+
+    def test_localhost_and_loopback_are_accepted_on_any_port(self):
+        for host in ("localhost", "localhost:5001", "127.0.0.1", "127.0.0.1:5001", "127.0.0.1:65000"):
+            self.assertEqual(self.get(host).status_code, 200, host)
+
+    def test_rebinding_and_unexpected_hosts_are_refused(self):
+        for host in ("evil.example", "evil.example:5001", "localhost.evil.example", "evil-localhost",
+                     "127.0.0.1.evil.example", "10.0.0.5", "0.0.0.0:5001", "", "localhost@evil.example"):
+            self.assertEqual(self.get(host).status_code, 400, host)
+
+    def test_refused_for_every_method_and_route_including_uploads(self):
+        before, bad = n_analyses(), {"Host": "evil.example"}
+        self.assertEqual(quiet.get("/api/analysis", headers=bad).status_code, 400)
+        r = quiet.post("/api/preflight", files={"file": ("a.csv", BTC_CSV, "text/csv")}, headers=bad)
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(n_analyses(), before)                # nothing was processed or stored
+
+    def test_a_refused_host_leaks_no_cors_permission_or_detail(self):
+        r = quiet.get("/api/health", headers={"Host": "evil.example", "Origin": ALLOWED})
+        self.assertEqual(r.status_code, 400)
+        self.assertNotIn("themis", r.text.lower())
 
 
 class TestCors(unittest.TestCase):
@@ -176,7 +210,7 @@ class TestUploadLimit(_SmallLimit):
         async def send(m):
             sent.append(m)
         scope = dict(type="http", method="POST", path="/api/analysis", raw_path=b"/api/analysis", query_string=b"",
-                     headers=[(b"content-type", b"multipart/form-data; boundary=zzz")], http_version="1.1",
+                     headers=[(b"host", b"localhost"), (b"content-type", b"multipart/form-data; boundary=zzz")], http_version="1.1",
                      scheme="http", server=("t", 80), client=("c", 1), root_path="")
         asyncio.run(api.app(scope, receive, send))
         self.assertEqual(sent[0]["status"], 413)

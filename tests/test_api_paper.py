@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 import themis.api as api
 from _data import requires_reference_corpus
 
-client = TestClient(api.app)
+client = TestClient(api.app, base_url="http://localhost")
 
 
 class Isolated(unittest.TestCase):

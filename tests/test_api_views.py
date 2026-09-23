@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from themis.api import app
 from _data import requires_reference_corpus   # skips when the reference corpus is not shipped
 
-_client = TestClient(app)
+_client = TestClient(app, base_url="http://localhost")
 _state = {}
 
 

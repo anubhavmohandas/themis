@@ -13,7 +13,7 @@ from themis.api import app
 from themis.ingest import relational as rel, sqlite_source as sq
 from test_preflight import btc_address
 
-client = TestClient(app)
+client = TestClient(app, base_url="http://localhost")
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
