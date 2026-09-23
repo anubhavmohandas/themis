@@ -8,6 +8,17 @@ import { ErrorBox, PageHead, Section, Status } from "../components/ui.jsx";
 import Pipeline from "../components/Pipeline.jsx";
 import { ChainPicker, ConfirmMapping, MappingTable, PreflightChecks, PreflightVerdict } from "../components/Preflight.jsx";
 
+// Mirrors themis/ingest/relational.py:CASE_METADATA_FIELDS - generic, dataset-agnostic
+// context an analyst may assert about an analysis's own evidential standing.
+const CASE_METADATA_FIELDS = [
+  { key: "analysis_origin", label: "Analysis origin", placeholder: "e.g. recovered_sqlite_subset" },
+  { key: "integrity_status", label: "Integrity status", placeholder: "e.g. source_file_truncated" },
+  { key: "recovery_status", label: "Recovery status", placeholder: "e.g. recovered_subset" },
+  { key: "source_identity_status", label: "Source identity status", placeholder: "e.g. partially_attributed" },
+  { key: "provenance_resolution_status", label: "Provenance resolution status", placeholder: "e.g. unresolved" },
+  { key: "limitations", label: "Limitations", placeholder: "free text" },
+];
+
 // Upload/Open database -> Database Inspection -> Table Selection -> Schema
 // Mapping -> Sample Preview -> Preflight -> (extraction produces the Dataset
 // Profile / Provenance / Conflicts THEMIS then analyses like any other
@@ -33,16 +44,21 @@ export default function DatabasePage() {
   const [confirmed, setConfirmed] = useState(false);
   const [sourceId, setSourceId] = useState("sqlite_dataset");
   const [useReference, setUseReference] = useState(true);
+  const [caseMeta, setCaseMeta] = useState({});   // optional, generic analyst-asserted context (see CASE_METADATA_FIELDS)
   const extract = useJob();
+
+  const integrityFailed = insp && insp.integrity.status !== "ok";
 
   const inspect = () => {
     if (!db.trim()) return;
     setBusy(true); setError(null); setInsp(null); setCandidates(null); setRelationships(null);
     setDriving(null); setJoins([]); setPf(null);
-    Promise.all([api.sqliteInspect(db), api.sqliteCandidates(db), api.sqliteRelationships(db)])
-      .then(([i, c, r]) => { setInsp(i); setCandidates(c.candidates); setRelationships(r.relationships); })
-      .catch((e) => setError(e.message))
-      .finally(() => setBusy(false));
+    api.sqliteInspect(db).then((i) => {
+      setInsp(i);
+      if (i.integrity.status !== "ok") return null;   // integrity check failed: do not offer table selection
+      return Promise.all([api.sqliteCandidates(db), api.sqliteRelationships(db)])
+        .then(([c, r]) => { setCandidates(c.candidates); setRelationships(r.relationships); });
+    }).catch((e) => setError(e.message)).finally(() => setBusy(false));
   };
 
   const addJoin = () => {
@@ -71,8 +87,10 @@ export default function DatabasePage() {
   };
 
   const p = pf?.preflight;
+  const caseMetadata = Object.fromEntries(Object.entries(caseMeta).filter(([, v]) => v.trim()));
   const runExtraction = () => extract.run(
-    () => api.startSqliteExtractJob({ db, spec, sourceId, useReference, semantics: edits, chain, confirmed }),
+    () => api.startSqliteExtractJob({ db, spec, sourceId, useReference, semantics: edits, chain, confirmed,
+      caseMetadata: Object.keys(caseMetadata).length ? caseMetadata : undefined }),
     (j) => { if (j.status === "complete") { activate(j.analysis_id, j.meta); nav("/overview"); } });
 
   return (
@@ -92,7 +110,7 @@ export default function DatabasePage() {
       {error && <ErrorBox title="Request failed">{error}</ErrorBox>}
 
       {insp && (
-        <Section title="2 · Database inspection" meta={`${bytes(insp.size_bytes)} · SQLite ${insp.sqlite_version}`}>
+        <Section title="2 · Database inspection" meta={`${bytes(insp.size_bytes)}${insp.sqlite_version ? ` · SQLite ${insp.sqlite_version}` : ""}`}>
           <div className="filecard">
             <div><span className="mut">file </span>{insp.filename}</div>
             <div><span className="mut">integrity </span>
@@ -118,6 +136,16 @@ export default function DatabasePage() {
           </div>
           {insp.views.length > 0 && <p className="mut" style={{ fontSize: 12 }}>{insp.views.length} view(s): {insp.views.map((v) => v.table).join(", ")}</p>}
         </Section>
+      )}
+
+      {integrityFailed && (
+        <div className="inline-note" role="alert" style={{ whiteSpace: "pre-line" }}>
+          <strong>DATABASE INTEGRITY CHECK FAILED</strong>
+          {"\n"}Analysis has not started.
+          {"\n\n"}The database appears truncated or damaged ({insp.integrity.status}
+          {insp.integrity.errors[0] ? `: ${insp.integrity.errors[0]}` : ""}). Obtain a clean copy before treating
+          the contents as a complete dataset. THEMIS does not attempt automatic recovery.
+        </div>
       )}
 
       {candidates && (
@@ -213,6 +241,21 @@ export default function DatabasePage() {
                 compare against reference corpus
               </label>
             </div>
+            <details className="more" style={{ marginTop: 12 }}>
+              <summary>Case-study metadata (optional)</summary>
+              <p className="mut" style={{ fontSize: 12, maxWidth: 640 }}>
+                Free-text context you assert about this analysis's own evidential standing - e.g. that this
+                database is a recovered subset of a truncated original. THEMIS carries these values unchanged;
+                it never infers or scores them.
+              </p>
+              {CASE_METADATA_FIELDS.map(({ key, label, placeholder }) => (
+                <label key={key} className="field" style={{ marginTop: 6, alignItems: "flex-start" }}>
+                  {label}:
+                  <input type="text" value={caseMeta[key] || ""} placeholder={placeholder}
+                    onChange={(e) => setCaseMeta({ ...caseMeta, [key]: e.target.value })} style={{ minWidth: 320 }} />
+                </label>
+              ))}
+            </details>
             <div style={{ marginTop: 12, display: "flex", gap: 12, alignItems: "center" }}>
               <button type="button" className="btn" disabled={!p.can_analyze || extract.job?.status === "running"} onClick={runExtraction}>
                 {extract.job?.status === "running" ? "Extracting…" : "Extract & analyse"}

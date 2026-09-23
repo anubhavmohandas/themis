@@ -139,9 +139,18 @@ def foreign_keys(path: str, table: str) -> list[dict]:
 def inspect(path: str, *, count: bool = True, sample_size: int = 5) -> dict:
     """Everything THEMIS shows before analysis may even be considered: the
     file, the schema, and enough of the data to judge it by eye. Nothing here
-    reads more than a bounded sample of any table's rows."""
+    reads more than a bounded sample of any table's rows.
+
+    `integrity_check` never raises; this function must not either - a file
+    damaged enough that `sqlite_master` itself cannot be read would otherwise
+    raise sqlite3.DatabaseError out of `list_tables`/`sqlite_version` before
+    the caller ever sees why. The schema is only read once the file passes
+    its own integrity check."""
     p = pathlib.Path(path)
     integrity = integrity_check(path)
+    if integrity["status"] != "ok":
+        return dict(filename=p.name, size_bytes=p.stat().st_size, sqlite_version=None,
+                    integrity=integrity, tables=[], views=[])
     tables = list_tables(path, count=count)
     out_tables = []
     for t in tables:

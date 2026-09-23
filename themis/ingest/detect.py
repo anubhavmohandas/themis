@@ -6,9 +6,13 @@ coincidence.
 """
 from __future__ import annotations
 import re
-from .. import chains
+from .. import chains, config_io
 
 HIGH, MEDIUM, LOW, NONE = "HIGH", "MEDIUM", "LOW", "NONE"
+
+
+def cfg() -> dict:
+    return config_io.load().preflight
 ADDRESS_NAME_HINTS = ("address", "wallet", "addr", "acct", "account")
 
 # No registered adapter validates these, but a chain we have no adapter for
@@ -55,8 +59,9 @@ def _crypto_asset_field(rows: list[dict], fieldnames: list[str], sample_size: in
 def _looks_like_unrecognized_address(sample: list[str]) -> bool:
     if len(sample) < 3:
         return False
+    shape = cfg()["detect"]["unsupported_chain_shape"]
     lengths = {len(v) for v in sample}
-    if len(lengths) > 2 or not all(18 <= len(v) <= 100 for v in sample):
+    if len(lengths) > shape["max_distinct_lengths"] or not all(shape["min_len"] <= len(v) <= shape["max_len"] for v in sample):
         return False
     return all(_OPAQUE_TOKEN_RE.match(v) for v in sample)
 
@@ -86,8 +91,15 @@ def _unsupported_chain_field(rows: list[dict], fieldnames: list[str], sample_siz
 
 
 def confidence_of(rate: float) -> str:
-    """The share of sampled values that validate -> HIGH / MEDIUM / LOW / NONE."""
-    return HIGH if rate >= 0.8 else MEDIUM if rate >= 0.3 else LOW if rate >= 0.05 else NONE
+    """The share of sampled values that validate -> HIGH / MEDIUM / LOW / NONE.
+    MEDIUM reuses `min_identifier_valid_rate` (the same floor the pre-flight
+    gate blocks analysis below) rather than its own copy of that number -
+    see that key's comment in preflight.yml."""
+    c = cfg()
+    d = c["detect"]
+    return (HIGH if rate >= d["confidence_high"] else
+            MEDIUM if rate >= c["min_identifier_valid_rate"] else
+            LOW if rate >= d["confidence_low"] else NONE)
 
 
 def detect(rows: list[dict], fieldnames: list[str], sample_size: int = 500) -> dict:
@@ -103,7 +115,8 @@ def detect(rows: list[dict], fieldnames: list[str], sample_size: int = 500) -> d
             valid = sum(1 for v in sample if adapter.validate_address(v))
             rate = valid / len(sample)
             per_field[f"{field}:{chain_id}"] = dict(n_sampled=len(sample), n_valid=valid, rate=rate)
-            score = rate + (0.05 if any(h in field.lower() for h in ADDRESS_NAME_HINTS) else 0.0)
+            score = rate + (cfg()["detect"]["address_name_hint_bonus"]
+                           if any(h in field.lower() for h in ADDRESS_NAME_HINTS) else 0.0)
             if best is None or score > best["score"]:
                 best = dict(score=score, chain=chain_id, field=field, rate=rate, n_sampled=len(sample))
 

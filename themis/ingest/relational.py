@@ -52,6 +52,26 @@ def cfg() -> dict:
     return config_io.load().preflight["sqlite"]
 
 
+#: Optional, free-text context an analyst supplies about an analysis's own
+#: evidential standing - e.g. "this database is a recovered subset of a
+#: truncated original, so its source labels cannot be treated as independent
+#: roots." THEMIS never infers these values from data; it only carries and
+#: displays what the caller asserts. Absent for an ordinary dataset - never
+#: required, never scored.
+CASE_METADATA_FIELDS = ("analysis_origin", "integrity_status", "recovery_status",
+                        "source_identity_status", "provenance_resolution_status", "limitations")
+
+
+def _validate_case_metadata(case_metadata: dict | None) -> dict | None:
+    if not case_metadata:
+        return None
+    unknown = sorted(set(case_metadata) - set(CASE_METADATA_FIELDS))
+    if unknown:
+        raise ValueError(f"unknown case_metadata field(s): {', '.join(unknown)} "
+                         f"(allowed: {', '.join(CASE_METADATA_FIELDS)})")
+    return case_metadata
+
+
 # --------------------------------------------------------------- table roles
 def candidate_roles(path: str, sample_size: int | None = None) -> list[dict]:
     """For every table: does it look like a claim-subject/attribution table
@@ -354,18 +374,35 @@ def _stream_validate_and_build(path: str, spec: dict, mapping: dict, chain_id: s
 
 def extract(path: str, spec: dict, source_id: str, semantics: dict | None = None, chain: str | None = None,
            confirmed: bool = False, reference=None, analysis_as_of_date=None, progress=None,
-           sample_size: int | None = None) -> dict:
+           sample_size: int | None = None, case_metadata: dict | None = None) -> dict:
     """Joined streaming extraction, shaped exactly like
     `ingest.pipeline.ingest()`'s return value so every downstream analysis
     route (trust, provenance, conflicts, export) works on it unchanged.
+
+    `case_metadata` (see CASE_METADATA_FIELDS) is caller-asserted context
+    carried onto the result unchanged - never mandatory, never derived here.
     """
     from .. import __version__, analysis, target_audit
+    case_metadata = _validate_case_metadata(case_metadata)
 
     def _p(event, stage, detail=None):
         if progress is not None:
             progress(event, stage, detail)
 
     _p("start", "inspect")
+    integrity = _sq.integrity_check(path)
+    if integrity["status"] != "ok":
+        from . import detect as _detect
+        msg = cfg()["integrity_gate_message"]
+        detection = dict(blockchain=None, address_field=None, confidence=_detect.NONE)
+        pf = dict(status="blocked", can_analyze=False, dataset_type=None,
+                  blockers=[dict(code="database_corrupt", message=msg)], message=msg,
+                  detection=detection, integrity=integrity, case_metadata=case_metadata)
+        _p("complete", "inspect", integrity["status"])
+        return dict(source_id=source_id, stopped=True, message=msg, detection=detection,
+                    dataset_preflight=pf, analysis_states=_gating.blocked(pf), claims=[], validation=None,
+                    basic_quality=None)
+
     join_check = validate_join_spec(path, spec)
     _p("complete", "inspect", "; ".join(join_check["warnings"]) or "join keys look indexed")
 
@@ -382,6 +419,8 @@ def extract(path: str, spec: dict, source_id: str, semantics: dict | None = None
                         total_rows=driving_count, overrides=overrides, chain=chain, confirmed=confirmed)
     pf["relational"] = dict(join_spec=spec, join_warnings=join_check["warnings"],
                             tables=_table_names(spec), relationships=infer_relationships(path))
+    if case_metadata:
+        pf["case_metadata"] = case_metadata
     detection = pf["detection"]
     _p("complete", "detect", f"{pf['dataset_type']} · {pf['chain']['value'] or 'no chain'} · {pf['status']}")
     if not pf["can_analyze"]:

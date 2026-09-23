@@ -5,7 +5,7 @@ guarantee for a source THEMIS has never configured.
 import sys, pathlib, unittest, tempfile, csv, os
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from themis.ingest import detect, schema, validate, claims as claim_mod, pipeline
-from themis import provenance, taxonomy
+from themis import config_io, provenance, taxonomy
 
 
 def _write_csv(rows, fieldnames):
@@ -103,6 +103,21 @@ class TestDetection(unittest.TestCase):
         d = detect.detect(SHORT_ACCOUNT_ID_ROWS, SHORT_ACCOUNT_ID_FIELDS)
         self.assertEqual(d["confidence"], detect.NONE)
         self.assertIsNone(d["unsupported_chain_field"])
+
+    def test_medium_confidence_band_is_read_from_min_identifier_valid_rate_not_hardcoded(self):
+        # preflight.yml documents detect.py's MEDIUM band as the exact same
+        # number as min_identifier_valid_rate; raising it must actually
+        # change confidence_of's output, not just the pre-flight gate's.
+        original = config_io.load().preflight["min_identifier_valid_rate"]
+        config_io.load().preflight["min_identifier_valid_rate"] = 0.7
+        try:
+            # CRYPTO_ROWS' sample rate (2/3 = 0.667) cleared the old 0.3 floor
+            # for MEDIUM; it must now fall below the raised 0.7 floor into LOW.
+            self.assertEqual(detect.confidence_of(2 / 3), detect.LOW)
+            d = detect.detect(CRYPTO_ROWS, CRYPTO_FIELDS)
+            self.assertEqual(d["confidence"], detect.LOW)
+        finally:
+            config_io.load().preflight["min_identifier_valid_rate"] = original
 
     def test_non_crypto_dataset_has_no_unsupported_chain_field(self):
         d = detect.detect(NON_CRYPTO_ROWS, NON_CRYPTO_FIELDS)

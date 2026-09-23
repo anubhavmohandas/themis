@@ -75,7 +75,7 @@ export const api = {
     form.append("confirmed", confirmed ? "true" : "false");
     return postForm("/api/sqlite/relational-preflight", form);
   },
-  startSqliteExtractJob: ({ db, spec, sourceId, useReference, semantics, chain, confirmed }) => {
+  startSqliteExtractJob: ({ db, spec, sourceId, useReference, semantics, chain, confirmed, caseMetadata }) => {
     const form = new FormData();
     form.append("db", db); form.append("spec", JSON.stringify(spec));
     form.append("source_id", sourceId || "sqlite_dataset");
@@ -83,6 +83,7 @@ export const api = {
     if (semantics && Object.keys(semantics).length) form.append("semantics", JSON.stringify(semantics));
     if (chain) form.append("chain", chain);
     form.append("confirmed", confirmed ? "true" : "false");
+    if (caseMetadata && Object.keys(caseMetadata).length) form.append("case_metadata", JSON.stringify(caseMetadata));
     return postForm("/api/jobs/sqlite-extract", form);
   },
 

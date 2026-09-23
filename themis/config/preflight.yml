@@ -27,7 +27,8 @@ name_score: {exact: 1.0, token: 0.7}
 
 # A subject column must hold valid identifiers for the chain. Below this share
 # of valid values (sampled, then again over every row) the analysis is blocked.
-# 0.3 is the same floor detect.py uses for a MEDIUM chain-detection confidence.
+# detect.py's MEDIUM chain-detection confidence band reads this exact same
+# key (see detect: below) so the two can never drift apart again.
 min_identifier_valid_rate: 0.3
 # Two chains are "ambiguous" when both validate at least min_identifier_valid_rate
 # and their rates are within this margin of each other: the user must choose.
@@ -181,6 +182,21 @@ legacy_roles:
 # transaction time, observation time, publication time...) never counts.
 currency_roles: [ts_attribution_last_verified, ts_attribution_last_updated]
 
+# STEP 1 detection (ingest/detect.py): sample-based chain/address-column
+# guessing. `confidence_medium` is intentionally NOT set here - it reads
+# min_identifier_valid_rate above, so the two thresholds cannot drift apart.
+detect:
+  confidence_high: 0.8
+  confidence_low: 0.05
+  # added to a field's validation rate when its name hints at being an
+  # address column (see ADDRESS_NAME_HINTS), so a same-scoring name-hinted
+  # column wins the best-field tie-break
+  address_name_hint_bonus: 0.05
+  # an address-named column of uniform-length, restricted-alphabet tokens
+  # this opaque/shaped, with no more than this many distinct lengths, is
+  # reported as "unsupported chain" rather than "no crypto signal at all"
+  unsupported_chain_shape: {min_len: 18, max_len: 100, max_distinct_lengths: 2}
+
 # A market-data (OHLCV) signature: when at least `min_present` columns are named
 # exactly one of these and hold numbers, the file is market data: its numeric
 # columns are market data and its date-shaped columns are candle timestamps,
@@ -219,3 +235,11 @@ sqlite:
   # referenced column is unique enough, over its sampled values, to be a real
   # key rather than a coincidentally-matching free-text field
   inferred_relationship_min_distinct_share: 0.95
+  # shown, and extraction refused, when integrity_check() finds the file
+  # malformed/unreadable/unfinished (relational.extract's integrity gate)
+  integrity_gate_message: |-
+    DATABASE INTEGRITY CHECK FAILED
+
+    Analysis has not started.
+
+    The database appears truncated or damaged. Obtain a clean copy before treating the contents as a complete dataset.

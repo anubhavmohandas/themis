@@ -306,7 +306,7 @@ def sqlite_relational_preflight(db: str = Form(...), spec: str = Form(...), sema
 
 
 def _run_sqlite_extract(db: str, spec: dict, source_id: str, use_reference: bool, semantics: dict | None,
-                        chain: str | None, confirmed: bool, progress=None) -> dict:
+                        chain: str | None, confirmed: bool, progress=None, case_metadata: dict | None = None) -> dict:
     """Stream-extract, validate and normalize a JoinSpec into a new
     UPLOADED_DATASET workspace - the SQLite-relational equivalent of
     `_run_upload`, so every existing analysis-id route works unchanged."""
@@ -320,7 +320,7 @@ def _run_sqlite_extract(db: str, spec: dict, source_id: str, use_reference: bool
     today = datetime.date.today()
     result = _bad_request(lambda: _relational.extract(
         path, spec, source_id, semantics=semantics, chain=chain, confirmed=confirmed,
-        reference=reference, analysis_as_of_date=today, progress=progress))
+        reference=reference, analysis_as_of_date=today, progress=progress, case_metadata=case_metadata))
 
     if missing and not result.get("stopped"):
         result = dict(result)
@@ -353,13 +353,16 @@ def _run_sqlite_extract(db: str, spec: dict, source_id: str, use_reference: bool
 @app.post("/api/sqlite/extract")
 def sqlite_extract(db: str = Form(...), spec: str = Form(...), source_id: str = Form("sqlite_dataset"),
                    use_reference: bool = Form(True), semantics: str | None = Form(None),
-                   chain: str | None = Form(None), confirmed: bool = Form(False)):
+                   chain: str | None = Form(None), confirmed: bool = Form(False),
+                   case_metadata: str | None = Form(None)):
     """Confirm the JoinSpec and mapping, then stream the whole driving table
     (chunked, joined, validated) into a new analysis - synchronous, for a
     table small enough that the caller does not need job/progress polling."""
     join_spec = _parse_join_spec(spec)
     sem = _parse_json_object(semantics, "semantics")
-    return _run_sqlite_extract(db, join_spec, source_id, use_reference, sem, chain or None, confirmed)
+    cm = _parse_json_object(case_metadata, "case_metadata")
+    return _run_sqlite_extract(db, join_spec, source_id, use_reference, sem, chain or None, confirmed,
+                               case_metadata=cm)
 
 
 # ------------------------------------------------------------ STEP 1/2 analysis
@@ -570,18 +573,20 @@ async def start_analysis_job(file: UploadFile = File(...), source_id: str = Form
 @app.post("/api/jobs/sqlite-extract")
 def start_sqlite_extract_job(db: str = Form(...), spec: str = Form(...), source_id: str = Form("sqlite_dataset"),
                              use_reference: bool = Form(True), semantics: str | None = Form(None),
-                             chain: str | None = Form(None), confirmed: bool = Form(False)):
+                             chain: str | None = Form(None), confirmed: bool = Form(False),
+                             case_metadata: str | None = Form(None)):
     """Same extraction as `/api/sqlite/extract`, on a worker thread so the UI
     can show real per-stage (and, mid-validate, per-chunk) progress on a
     database too large to extract synchronously within a request."""
     join_spec = _parse_join_spec(spec)
     sem = _parse_json_object(semantics, "semantics")
+    cm = _parse_json_object(case_metadata, "case_metadata")
     stages = _SQLITE_STAGES if use_reference else [s for s in _SQLITE_STAGES if s[0] != "reference"]
     job = _new_job("sqlite-extract", stages)
     cb = _progress_for(job)
     threading.Thread(target=_finish, daemon=True, args=(
         job, lambda: _run_sqlite_extract(db, join_spec, source_id, use_reference, sem, chain or None,
-                                         confirmed, cb))).start()
+                                         confirmed, cb, case_metadata=cm))).start()
     return dict(job_id=job["job_id"])
 
 

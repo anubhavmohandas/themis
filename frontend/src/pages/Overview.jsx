@@ -269,6 +269,11 @@ function UploadOverview() {
   const limits = [...(r.limitations || [])];
   for (const l of ta.limitations || []) if (!limits.includes(l)) limits.push(l);
 
+  const caseMeta = r.dataset_preflight?.case_metadata;
+  const relProv = r.relational_provenance;
+  const deps = r.dependency_candidates;
+  const dp = r.dataset_profile;
+
   return (
     <div>
       <PageHead kicker="Target audit · uploaded dataset" title="Dataset reliability profile"
@@ -284,6 +289,60 @@ function UploadOverview() {
           sub: prov.available ? <>{fmt(prov.unresolved)} / {nT} addresses<br />{pct(sh.resolved_addr_share)} have a resolved provenance root</> : "not available",
           to: "/claims?provenance=unresolved" },
       ]} />
+
+      {caseMeta && Object.keys(caseMeta).length > 0 && (
+        <div className="inline-note" role="alert" style={{ whiteSpace: "pre-line" }}>
+          {(caseMeta.recovery_status || caseMeta.analysis_origin) && (
+            <>
+              <strong>RECOVERED DATASET SUBSET</strong>
+              {"\n"}This analysis does not represent the complete original database.{"\n\n"}
+            </>
+          )}
+          {Object.entries(caseMeta).map(([k, val]) => `${k.replace(/_/g, " ")}: ${val}`).join("\n")}
+        </div>
+      )}
+
+      {relProv && dp && (
+        <Section title="Evidence profile: what this extraction does and does not establish"
+          note="Technically valid data is not the same claim as forensically defensible attribution - a valid address and a present label do not by themselves establish resolved, independent provenance.">
+          <MetricStrip items={[
+            { label: "Address validity", value: v.n_identifiers_checked
+                ? `${fmt(v.n_identifiers_checked - v.n_identifiers_invalid)} / ${fmt(v.n_identifiers_checked)} valid`
+                : "not checked", sub: "technically valid per the chain's own syntax rules" },
+            { label: "Label coverage", value: (r.schema_mapping?.label || r.schema_mapping?.category) ? "available" : "not available",
+              sub: `${fmt(dp.scale.unique_labels)} distinct label(s)` },
+            { label: "Provenance", value: Object.entries(relProv.counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "unresolved",
+              sub: Object.entries(relProv.counts).map(([k2, n2]) => `${k2}: ${fmt(n2)}`).join(" · ") },
+            { label: "Independent corroboration", value: ind?.available ? "established" : "not established",
+              sub: ind?.available ? `${fmt(ind.confirmed_independent_multi_root)} confirmed independent multi-root` : ind?.reason, tone: ind?.available ? undefined : "hot" },
+            { label: "Source descriptors", value: dp.scale.unique_sources ? "present" : "absent",
+              sub: `${fmt(dp.scale.unique_sources)} declared source string(s)` },
+            { label: "Confirmed independent roots", value: ind?.available ? fmt(ind.confirmed_independent_multi_root) : "not established",
+              sub: "a declared source string is not, by itself, a confirmed independent evidential root", tone: ind?.available ? undefined : "hot" },
+          ]} />
+
+          {deps && deps.length > 0 && (
+            <div className="panel pad" style={{ marginTop: 12 }}>
+              <strong>Declared source descriptor vs. confirmed provenance root</strong>
+              <p className="mut" style={{ fontSize: 12 }}>
+                N distinct declared-source strings are not N independent evidential roots. THEMIS found the
+                following potential / documented dependencies among this dataset's own declared-source values
+                (never applied to any independence or corroboration count):
+              </p>
+              <ul style={{ margin: "4px 0 0", paddingLeft: 18, fontSize: 12.5 }}>
+                {deps.map((d, i) => <li key={i}><span className="mono">{d.citing}</span> - potential/documented dependency on <span className="mono">{d.cited}</span></li>)}
+              </ul>
+            </div>
+          )}
+
+          {!ind?.available && (
+            <p className="mut" style={{ fontSize: 12.5, marginTop: 10 }}>
+              <strong>Investigative interpretation.</strong> The dataset contains usable attribution records, but
+              the evidence needed to treat its source descriptors as independent forensic corroboration is not established.
+            </p>
+          )}
+        </Section>
+      )}
 
       {hasReference && (
         <Section title="Reference comparability"
