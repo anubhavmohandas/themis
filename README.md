@@ -172,6 +172,15 @@ every claim resolves **UNRESOLVED** by construction — a new dataset is never
 assumed independent. Cross-source comparison needs a reference corpus (§6);
 without one the audit says so and continues.
 
+**Local use only.** The API binds `127.0.0.1` and has no authentication: it is a
+single-user tool. What it does enforce, from `themis/config/api.yml` (whose header
+states the threat model): CORS names the frontend's own origins, never `*`, and a
+state-changing request from any other browser origin is refused; an upload is
+capped in bytes *while it is read* (and a `.gz` also in decompressed size); a
+client sees a generic message for any internal failure while the server log keeps
+the detail; an SQLite database is opened only by a name inside `THEMIS_DB_DIR`,
+read-only. Not covered: DNS rebinding and other local processes.
+
 ## 8. Pre-flight behavior
 
 Before any workspace exists THEMIS never assumes an upload is cryptocurrency

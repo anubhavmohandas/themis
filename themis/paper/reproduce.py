@@ -475,7 +475,8 @@ def latest_run_id(root: pathlib.Path | None = None) -> str | None:
 
 
 def run_dir_of(run_id: str, root: pathlib.Path | None = None) -> pathlib.Path | None:
-    if not re.fullmatch(r"[A-Za-z0-9._-]+", run_id or ""):      # a run id is a name, never a path
+    # a run id is a name, never a path: it must start alphanumeric, so "." and ".." are not names
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", run_id or ""):
         return None
     d = (root or results_root()) / "reproduction" / run_id
     return d if d.is_dir() else None

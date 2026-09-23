@@ -12,12 +12,12 @@ paper" workspace), never as a silent fallback for an uploaded dataset's
 pages.
 """
 from __future__ import annotations
-import collections, csv, datetime, hashlib, io, json, os, pathlib, sqlite3, tempfile, threading, time, traceback
+import collections, csv, datetime, gzip, hashlib, io, json, logging, os, pathlib, sqlite3, tempfile, threading, time, zlib
 
 try:
     from fastapi import FastAPI, File, Form, HTTPException, UploadFile
     from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import FileResponse, StreamingResponse
+    from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 except ImportError as e:   # pragma: no cover
     raise SystemExit("themis.api requires the 'ui' extra: pip install -e '.[ui]'") from e
 
@@ -25,18 +25,81 @@ from .corpus import Corpus
 from . import chains as chains_mod
 from . import analysis, config_io, overview as _overview, provenance, report as _report, graph as _graph, taxonomy, views
 from . import __version__
+from .errors import InputError
 from .paper import reproduce as _paper_repro, verify as _paper_verify
 from . import workspace as _workspace
 from .ingest import (gating as _gating, pipeline as _ingest_pipeline, preflight as _preflight,
                     relational as _relational, sqlite_source as _sqlite)
 
+log = logging.getLogger("themis.api")
+
+#: What a client sees when an internal failure is not one it can act on. The real
+#: exception goes to the server log (`log.exception`), never into a response.
+GENERIC_ERROR = "Analysis task failed."
+
+# Read once: the middleware below is fixed when the app is built. Threat model in config/api.yml.
+_api_cfg = config_io.load().api
+_ALLOWED_ORIGINS = frozenset(_api_cfg["cors"]["allowed_origins"])
+_MAX_UPLOAD = _api_cfg["upload"]["max_bytes"]
+_MAX_BODY = _MAX_UPLOAD + _api_cfg["upload"]["multipart_overhead_bytes"]
+_PAGING = _api_cfg["paging"]
+
+
+class _RequestGuard:
+    """Refuses, before a route runs, (1) a state-changing request from a browser
+    origin outside the allowlist - CORS alone only hides the response, the
+    upload would still be processed - and (2) any request body larger than the
+    upload limit plus multipart framing. The size is counted as the body is read
+    off the wire, so a missing or dishonest Content-Length cannot get past it."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        headers = {k.lower(): v for k, v in scope["headers"]}
+        origin = headers.get(b"origin")
+        if (origin is not None and scope["method"] not in ("GET", "HEAD", "OPTIONS")
+                and origin.decode("latin-1") not in _ALLOWED_ORIGINS):
+            return await JSONResponse(dict(detail="Cross-origin request refused."), 403)(scope, receive, send)
+        try:
+            declared = int(headers.get(b"content-length", b"0"))
+        except ValueError:
+            declared = 0
+        if declared > _MAX_BODY:
+            return await JSONResponse(dict(detail=_too_large()), 413)(scope, receive, send)
+        received = 0
+
+        async def counted_receive():
+            nonlocal received
+            msg = await receive()
+            if msg["type"] == "http.request":
+                received += len(msg.get("body", b""))
+                if received > _MAX_BODY:
+                    raise HTTPException(413, _too_large())
+            return msg
+        await self.app(scope, counted_receive, send)
+
+
+def _too_large() -> str:
+    return f"The upload is larger than the {_MAX_UPLOAD:,}-byte limit."
+
+
 app = FastAPI(title="THEMIS API")
-app.add_middleware(
+app.add_middleware(_RequestGuard)
+app.add_middleware(      # added last = outermost, so a refusal from the guard still carries CORS for an allowed origin
     CORSMiddleware,
-    allow_origins=["*"],   # a local research tool; tighten if this ever leaves localhost
-    allow_methods=["*"],
+    allow_origins=sorted(_ALLOWED_ORIGINS),
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def _unexpected_error(request, exc):
+    log.error("unhandled error on %s %s", request.method, request.url.path, exc_info=exc)
+    return JSONResponse(dict(detail=GENERIC_ERROR), 500)
 
 _store = _workspace.WorkspaceStore()
 _reference_cache: dict = {}
@@ -51,11 +114,17 @@ def _reference_corpus() -> Corpus:
     return _reference_cache["corpus"]
 
 
+#: corpus._MISSING names the server-side directory; a client gets the instruction without the path
+_REFERENCE_MISSING = ("No reference corpus is available in this installation: it is not redistributed "
+                      "(see THIRD_PARTY_DATA.md). Build it with scripts/build_corpus.py and set THEMIS_DATA_DIR.")
+
+
 def _reference_or_none():
     try:
         return _reference_corpus(), None
     except FileNotFoundError as e:
-        return None, str(e)
+        log.info("reference corpus unavailable: %s", e)
+        return None, _REFERENCE_MISSING
 
 
 def _get_workspace(analysis_id: str) -> _workspace.AnalysisWorkspace:
@@ -119,16 +188,26 @@ def taxonomy_categories():
 
 
 # ------------------------------------------------------------- STEP 2 preflight
+#: a file that is not the CSV / gzip it claims to be: the client's problem, not a server error
+_UNREADABLE_UPLOAD = (gzip.BadGzipFile, EOFError, zlib.error, csv.Error)
+
+
 def _bad_request(fn):
     """A request naming a column the file lacks, an unknown chain or an unknown
-    semantic field is a 400, not a server error."""
+    semantic field is a 400, not a server error. Only `InputError` text (written
+    for the caller) is passed through; any other exception is an internal failure
+    and reaches the generic handler, with the detail in the server log only."""
     try:
         return fn()
-    except ValueError as e:
+    except InputError as e:
         raise HTTPException(400, str(e)) from e
     except sqlite3.DatabaseError as e:
-        raise HTTPException(422, f"this is not a readable SQLite database ({e}): it may be corrupt, or still "
+        log.warning("unreadable SQLite database: %s", e)
+        raise HTTPException(422, "this is not a readable SQLite database: it may be corrupt, or still "
                                  "downloading") from e
+    except _UNREADABLE_UPLOAD as e:
+        log.warning("unreadable upload: %s: %s", type(e).__name__, e)
+        raise HTTPException(400, "the file could not be read as CSV (or gzip-compressed CSV)") from e
 
 
 def _parse_json_object(text: str | None, what: str) -> dict | None:
@@ -141,6 +220,28 @@ def _parse_json_object(text: str | None, what: str) -> dict | None:
     if not isinstance(parsed, dict):
         raise HTTPException(400, f"{what} must be a JSON object")
     return parsed
+
+
+async def _read_upload(file: UploadFile) -> bytes:
+    """The uploaded file's bytes, refusing more than `upload.max_bytes` (an exact
+    per-file check; `_RequestGuard` bounds the wire). A .gz is also refused when it
+    would DECOMPRESS past the limit, so a small archive cannot expand into an
+    unbounded in-memory table."""
+    data = await file.read(_MAX_UPLOAD + 1)
+    if len(data) > _MAX_UPLOAD:
+        raise HTTPException(413, _too_large())
+    if (file.filename or "").endswith(".gz"):
+        try:
+            with gzip.GzipFile(fileobj=io.BytesIO(data)) as g:
+                n = 0
+                while chunk := g.read(1 << 20):
+                    n += len(chunk)
+                    if n > _MAX_UPLOAD:
+                        raise HTTPException(413, "The file decompresses to more than the "
+                                                 f"{_MAX_UPLOAD:,}-byte upload limit.")
+        except _UNREADABLE_UPLOAD + (OSError,):
+            pass   # not a valid gzip: the parse step reports that, as a 400
+    return data
 
 
 @app.post("/api/preflight")
@@ -157,13 +258,13 @@ async def preflight(file: UploadFile = File(...), sample_rows: int = Form(5), ma
     if _sqlite.is_sqlite_path(name):
         raise HTTPException(400, "SQLite databases are not uploaded through this endpoint (they are too large to "
                                  "hold in memory): place the file under THEMIS_DB_DIR and use /api/sqlite/*.")
-    data = await file.read()
+    data = await _read_upload(file)
     suffix = ".csv.gz" if name.endswith(".gz") else ".csv"
     fd, tmp_path = tempfile.mkstemp(suffix=suffix)
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(data)
-        rows, fieldnames = _ingest_pipeline.load_csv(tmp_path)
+        rows, fieldnames = _bad_request(lambda: _ingest_pipeline.load_csv(tmp_path))
     finally:
         os.remove(tmp_path)
 
@@ -195,7 +296,10 @@ def _db_path(rel: str) -> str:
         raise HTTPException(409, "SQLite inputs are disabled: set THEMIS_DB_DIR to the directory holding the "
                                  "database file(s), then pass the file name relative to it.")
     base = pathlib.Path(root).resolve()
-    p = (base / rel).resolve()
+    try:
+        p = (base / rel).resolve()
+    except (ValueError, OSError):      # an embedded NUL or an unresolvable name: not a path at all
+        p = base
     if base not in p.parents or not _sqlite.is_sqlite_path(str(p)):
         raise HTTPException(400, f"{rel!r} is not a .db / .sqlite / .sqlite3 file inside THEMIS_DB_DIR")
     if not p.is_file():
@@ -346,7 +450,7 @@ def _run_sqlite_extract(db: str, spec: dict, source_id: str, use_reference: bool
         progress("complete", "report", None)
     if not result["stopped"]:
         result = dict(result)
-        result["claims"] = result["claims"][:500]
+        result["claims"] = result["claims"][:_PAGING["extract_preview_claims"]]
     return dict(analysis_id=ws.analysis_id, meta=ws.to_meta(), preflight=result)
 
 
@@ -417,7 +521,7 @@ def _run_upload(data: bytes, filename: str | None, source_id: str, use_reference
         progress("complete", "report", None)
     if not result["stopped"]:
         result = dict(result)
-        result["claims"] = result["claims"][:500]   # cap the payload; counts are in `validation`
+        result["claims"] = result["claims"][:_PAGING["extract_preview_claims"]]   # cap the payload; counts are in `validation`
     return dict(analysis_id=ws.analysis_id, meta=ws.to_meta(), preflight=result)
 
 
@@ -431,7 +535,8 @@ def _run_paper(progress=None) -> dict:
     try:
         corpus = _reference_corpus()
     except FileNotFoundError as e:
-        raise HTTPException(409, str(e)) from e
+        log.info("reference corpus unavailable: %s", e)
+        raise HTTPException(409, _REFERENCE_MISSING) from e
     if progress is not None:
         progress("complete", "load", f"{len(corpus.claims):,} claims in memory")
     result = _report.build_corpus_report(corpus, progress=progress)
@@ -468,7 +573,7 @@ async def create_analysis(file: UploadFile = File(...), source_id: str = Form("u
     other page-facing route reads through that id, never through a global
     default corpus."""
     mapping_override = _parse_mapping(mapping)
-    data = await file.read()
+    data = await _read_upload(file)
     return _run_upload(data, file.filename, source_id, use_reference, mapping_override,
                        semantics=_parse_json_object(semantics, "semantics"), chain=chain or None,
                        confirmed=confirmed)
@@ -542,15 +647,20 @@ def _finish(job: dict, fn):
             job["status"] = "stopped"
         else:
             job["status"] = "complete"
-    except Exception as e:   # noqa: BLE001 - surfaced to the client, not swallowed
-        job["status"] = "failed"
-        job["error"] = str(getattr(e, "detail", None) or e)
-        traceback.print_exc()     # the stack stays in the server log, not in the API response
-        for st in job["stages"]:
-            if st["status"] == "running":
-                st["status"] = "failed"
+    except (HTTPException, InputError) as e:   # written for the client (see _bad_request)
+        _fail(job, str(getattr(e, "detail", None) or e))
+    except Exception:   # noqa: BLE001 - logged in full, reported to the client as a generic failure
+        log.exception("job %s (%s) failed", job["job_id"], job["kind"])
+        _fail(job, GENERIC_ERROR)
     finally:
         job["finished_at"] = time.time()
+
+
+def _fail(job: dict, message: str) -> None:
+    job["status"], job["error"] = "failed", message
+    for st in job["stages"]:
+        if st["status"] == "running":
+            st["status"] = "failed"
 
 
 @app.post("/api/jobs/analysis")
@@ -560,7 +670,7 @@ async def start_analysis_job(file: UploadFile = File(...), source_id: str = Form
                              confirmed: bool = Form(False)):
     mapping_override = _parse_mapping(mapping)
     sem = _parse_json_object(semantics, "semantics")
-    data = await file.read()
+    data = await _read_upload(file)
     stages = _UPLOAD_STAGES if use_reference else [s for s in _UPLOAD_STAGES if s[0] != "reference"]
     job = _new_job("upload", stages)
     cb = _progress_for(job)
@@ -664,10 +774,9 @@ def analysis_summary(analysis_id: str):
     return dict(meta=ws.to_meta(), result=_present_result(ws), audit_trail=ws.audit_trail)
 
 
-#: occam: page size is capped, not client-controlled, so a request can
-#: never pull the whole corpus through this endpoint regardless of what
-#: `limit` asks for.
-_MAX_CLAIMS_PAGE = 500
+#: Page size is capped (config/api.yml), not client-controlled, so a request can
+#: never pull the whole corpus through this endpoint regardless of what `limit` asks for.
+_MAX_CLAIMS_PAGE = _PAGING["claims_max_page"]
 
 
 @app.get("/api/analysis/{analysis_id}/claims")
@@ -957,10 +1066,10 @@ def run_paper_task(analysis_id: str, task: str):
             ws.result["uncertainty"] = analysis.bootstrap(ws.reference_corpus)
         else:
             ws.result["anchor_validation"] = analysis.anchor_validation(ws.reference_corpus)
-    except Exception as e:   # noqa: BLE001 - reported to the client as task state
-        cache["task_error"][task] = str(e)
-        traceback.print_exc()
-        raise HTTPException(500, f"{task} failed: {e}") from e
+    except Exception as e:   # noqa: BLE001 - logged in full, reported to the client as task state
+        log.exception("paper task %s failed", task)
+        cache["task_error"][task] = GENERIC_ERROR
+        raise HTTPException(500, GENERIC_ERROR) from e
     finally:
         running.discard(task)
     return analysis_tasks(analysis_id)

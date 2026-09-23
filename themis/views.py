@@ -23,7 +23,7 @@ Everything else is `single-source` (paper) or has no reference match
 from __future__ import annotations
 import collections
 
-from . import taxonomy, provenance
+from . import config_io, taxonomy, provenance
 from .trust import predicates
 from . import workspace as _workspace
 
@@ -190,7 +190,7 @@ def conflicts_page(ws, kind=None, source_a=None, source_b=None, relationship=Non
         if q and q.strip().lower() not in a.lower():
             continue
         matches.append(r)
-    limit = max(1, min(int(limit), 200))
+    limit = max(1, min(int(limit), config_io.load().api["paging"]["conflicts_max_page"]))
     offset = max(0, int(offset))
     page = matches[offset:offset + limit]
     src_set = sorted({s for r in idx.values() for s in r["sources"]})
