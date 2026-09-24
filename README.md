@@ -179,7 +179,9 @@ state-changing request from any other browser origin is refused; an upload is
 capped in bytes *while it is read* (and a `.gz` also in decompressed size); a
 client sees a generic message for any internal failure while the server log keeps
 the detail; an SQLite database is opened only by a name inside `THEMIS_DB_DIR`,
-read-only. Not covered: DNS rebinding and other local processes.
+read-only; a request whose `Host` header is not a local hostname (`hosts.allowed`,
+port ignored) is refused, which closes DNS rebinding. Not covered: other local
+processes.
 
 ## 8. Pre-flight behavior
 
@@ -253,9 +255,11 @@ study. Read the ratio and the coverage together; neither means anything alone.
 
 Seven public datasets feed the paper corpus. Redistribution status differs and is
 **not uniformly confirmed** — `THIRD_PARTY_DATA.md` has the per-source table
-(license, evidence, retrieval date, status). TagPack (MIT), Schnöring and
-Ransomwhere (CC BY 4.0) are confirmed; Elliptic++ (53% of claims) and both
-Rodwald releases state no terms; WatchYourBack's GPL-3.0 covers its code.
+(license, evidence, retrieval date, status). TagPack (MIT) and Schnöring
+(CC BY 4.0) are confirmed; Ransomwhere's Zenodo deposit is CC BY 4.0 but the live
+export the corpus uses is unconfirmed; Elliptic++ (53% of claims) and both
+Rodwald releases state no terms; WatchYourBack's GPL-3.0 covers its code (its
+reach over the data is unstated).
 **This release ships no third-party data and no observation table.** THEMIS's
 own code has **no LICENSE file yet** — an author decision, separate from the
 dataset terms.

@@ -245,6 +245,31 @@ single-dataset share) are figures carried in `demo_data/manifest.json`, and
 currency needs every claim. Those are reported `NOT_REPRODUCED`, so the run is
 never `PASS` on the sample. A `PASS` needs a full build.
 
+**Two reproduction statements, never merged.** They answer different questions and are reported separately.
+
+1. **`PAPER ↔ THEMIS`, the shipped command.** `themis reproduce-paper` with no full corpus is
+   `BLOCKED - INPUT CORPUS NOT AVAILABLE` (exit 3). The *authoritative* path is a **fresh raw-source
+   rebuild**: fetch the seven sources (§3) → `scripts/build_corpus.py` (hashes every input) → the full
+   observation table → `themis reproduce-paper`. Only that run's result is the reproduction of the paper.
+2. **`REGRESSION VERIFICATION USING RETAINED FULL OBSERVATION TABLE: PASS`** (29 / 29 headline claims).
+   This is compatibility evidence for the *current code* on a table kept from an earlier build, not a
+   reproduction: a table that passes expected results proves compatibility, not provenance. Its record:
+
+   | | |
+   |---|---|
+   | file | `observations.csv.gz`, kept locally (gitignored, not redistributed) |
+   | SHA-256 | `e65bf05afdecea538e5fdcdbecffa8fcb0398f3cd7e2705bd47f8018d6029acd` |
+   | rows / schema | 1,545,710 claims over 1,497,191 addresses; columns `address, source, raw_label, canon, polarity, prov_family, lastmod, heuristic, subcat` (`observations-v1`) |
+   | source coverage | all seven: Elliptic++ 822,937 · TagPack 499,327 · Schnöring 103,812 · Rodwald ransomware 50,322 · Rodwald mixers 57,817 · Ransomwhere 11,186 · WatchYourBack 309 |
+   | how it was made | `scripts/build_corpus.py` (SHA-256 `b3416342…091a85c5`, unchanged since commit `6245e0c`) from raw files retrieved **2026-09-20**; every input's SHA-256 (and TagPack's tree hash and commit `7f9a5d1`) is in `expected_output/retained_table_build_manifest.json` |
+   | verified 2026-09-24 | the six retained raw files match those hashes, and rebuilding from them reproduces `observations.csv.gz`, `revenue.csv.gz`, `verified_anchors.txt.gz` and `build_manifest.json` **byte for byte** |
+   | relationship to the paper's experiment | a **reconstruction**, not the original working file: it was built after the paper's data were collected, from a live Ransomwhere export and a moving TagPack branch, and it reproduces the paper's per-source counts and all 29 headline claims. It is not shown to be the identical table |
+
+   So the retained table is a *certified retained reproduction artifact* (identity, hash, origin and
+   inputs documented), and its PASS is reported only under the label above. A reviewer who rebuilds
+   later may see different rows in the two moving sources (Ransomwhere's live export, TagPack); compare
+   the raw-input hashes in their `build_manifest.json` with the retained one before comparing results.
+
 **Output** (`results/reproduction/<run_id>/`): `metadata.json` (software version,
 git commit, analysis date, corpus / taxonomy / source-registry / threshold hashes,
 bootstrap seed and iterations, paper version), `source_manifest.json`,

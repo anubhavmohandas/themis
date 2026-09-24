@@ -80,6 +80,58 @@ Elliptic++ and Rodwald authors and then ship a sample after all, and how a
 reviewer without the sources is served (the anchor set `ground_truth.csv` is
 curated from WatchYourBack's file and the OFAC list and is not yet scripted).
 
+## Redistribution matrix (re-checked 2026-09-24; conservative: `UNCONFIRMED` is not `PERMITTED`)
+
+Every upstream location below was fetched again on 2026-09-24. "Located" means the license text
+itself (or the platform's structured license field) was read, not inferred. Nothing here is a legal
+conclusion, and nothing was removed from the repository on the strength of this table: the release
+policy is the author's (see "What is decided and what is not").
+
+| source | upstream URL | upstream license | license text located? | redistribution explicit? | derived redistribution explicit? | attribution | share-alike | research-only | commercial restriction | status | evidence |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| GraphSense TagPack | github.com/graphsense/graphsense-tagpacks | MIT | yes: `LICENSE` in the repository root (HTTP 200, 2026-09-24; GitHub `spdx_id: MIT`) | yes (MIT) | yes (MIT permits modification and sublicensing) | keep the copyright and permission notice (© 2022 Iknaio Cryptoasset Analytics GmbH; © 2018-2022 AIT Austrian Institute of Technology) | no | no | no | **CONFIRMED REDISTRIBUTABLE** | repository license; the individual tag creators' own rights are not separately stated |
+| Schnöring et al. | figshare doi:10.6084/m9.figshare.26305093 (v3, `addresses.csv`) | CC BY 4.0 | yes: figshare API `license` = CC BY 4.0 with its deed URL (2026-09-24) | yes | yes (CC BY permits adaptations) | yes: credit, link the license, indicate changes | no | no | no | **CONFIRMED REDISTRIBUTABLE** | figshare metadata for the exact version the corpus was built from (v3) |
+| Ransomwhere | ransomwhe.re (live `api.ransomwhe.re/export`); Zenodo doi:10.5281/zenodo.13999026 | CC BY 4.0 for the Zenodo deposit (v1.1.0, published 2024-10-27) | for the Zenodo deposit only (Zenodo API `cc-by-4.0`, 2026-09-24). The live export the corpus was built from (retrieved 2026-09-20) is a different, later artifact; `ransomwhe.re` returned no readable page text (client-rendered), so no live terms were found | not for the live export | not for the live export | yes (for the Zenodo deposit) | no | no | no | **UNCONFIRMED** for the records actually in the corpus (the Zenodo v1.1.0 subset alone would be CONFIRMED) | earlier notes (2026-09-19) marked this CONFIRMED; that read the Zenodo record, not the live export the corpus uses |
+| Elliptic++ | github.com/git-disl/EllipticPlusPlus (data on a Google Drive folder the README links) | none stated | no: GitHub `license: null`, no LICENSE file in the repository; the README asks for citation and states no terms | not stated | not stated | citation requested (KDD '23) | not stated | not stated | not stated | **UNCONFIRMED** | the base Elliptic dataset is reported (not re-read today) to carry CC BY-NC-ND 4.0; whether that extends to Elliptic++'s address data is unconfirmed |
+| Rodwald - ransomware | sydeus.rodwald.pl/datasets/ (`BTC_Ransom.csv`) | none stated | no: the page (fetched 2026-09-24, 3,688 characters of text) contains no license, terms or copyright text | not stated | not stated | not stated | not stated | not stated | not stated | **UNCONFIRMED** | the DepCoS-RELCOMEX paper is paywalled |
+| Rodwald - mixers | sydeus.rodwald.pl/datasets/ (`BTC_Mixers.csv`) | none stated | no (same page) | not stated | not stated | not stated | not stated | not stated | not stated | **UNCONFIRMED** | as above; the page says the article link is "soon" |
+| WatchYourBack | github.com/cybersec-code/watchyourback (`data/tagging/btc_resolv.csv`) | GPL-3.0 for the repository | yes: `LICENCE` (GNU GPL v3 text) at the repository root; GitHub `spdx_id: GPL-3.0` | the license text permits conveying, but the repository does not say the tag data is a licensed "work" | not stated for the data | GPL notices | **yes if GPL applies to the data**: a redistributed derivative would have to be GPL-3.0 | no | no (GPL permits commercial use) | **UNCONFIRMED** | if GPL does apply, shipping these rows inside a repository under MIT or Apache-2.0 would conflict (see Decision 2). Upstream's README documents the tag-file format and says nothing about licensing the data |
+| OFAC SDN list | treasury.gov/ofac/downloads/sanctions/1.0/sdn_advanced.xml | none: a US government work | not applicable (17 U.S.C. § 105); not re-fetched | yes (no copyright in US government works) | yes | none required | no | no | no | **CONFIRMED REDISTRIBUTABLE** | recorded 2026-09-18; the statutory basis is general, not a per-file notice |
+
+### Which tracked files carry which sources
+
+| tracked file | records from | worst status | note |
+|---|---|---|---|
+| `demo_data/observations_sample.csv.gz` | all seven (Elliptic++ 20,083, Rodwald 108,139, Ransomwhere 11,186, WatchYourBack 309 among 268,891 rows) | UNCONFIRMED | record-level |
+| `demo_data/revenue.csv.gz` | Rodwald ransomware + Ransomwhere | UNCONFIRMED | 61,508 address rows |
+| `demo_data/verified_anchors.txt.gz` | TagPack `forensic` + WatchYourBack ransomware | UNCONFIRMED (the WatchYourBack half; GPL question) | 146,243 bare addresses |
+| `demo_data/ground_truth.csv` | WatchYourBack + OFAC | UNCONFIRMED (the WatchYourBack half) | 289 addresses |
+| `demo_data/manifest.json` | none: counts and root shares | not a record set | aggregates; safe to keep |
+| `examples/*.csv` | none: synthetic (`example_feed`) | not applicable | |
+| `tests/`, `REPRODUCE.md`, `expected_output/explain_14BW…txt` | a handful of individual addresses (one address, its labels) | incidental | judged by the author; not a dataset |
+
+### What is decided and what is not
+
+- **Not decided, by rule:** whether `demo_data/` stays tracked. Until the author chooses, nothing was removed. The conservative
+  default already applied to a *release build* (`scripts/make_release.py`) ships none of the `demo_data/` files.
+- **The repository is public** (github.com/anubhavmohandas/themis, created 2026-09-16; on 2026-09-24 it reported 0 forks, 0 stars,
+  0 watchers and no releases; `main` only was pushed, the `v1.0-paper*` tags exist locally). `demo_data/` has been in it since
+  the first commit (`b47da84`).
+- **`git rm` is not enough.** The five files exist as 10 distinct blob versions across 6 of the 89 commits, from the first commit on. Removing them
+  from the current tree leaves every one retrievable from history. Removing them from history means rewriting it with
+  `git filter-repo --path demo_data --invert-paths` (not installed on this machine) or BFG, which changes **every** commit hash
+  (the files exist from the first commit), needs a force-push to `main`, invalidates the local `v1.0-paper*` tags and the release
+  ZIP hashes recorded in `REPRODUCE.md` and the report, and does not remove copies already cloned or cached by GitHub
+  (cached views and unreachable objects can be purged only through GitHub Support). Because no fork exists today, the practical exposure
+  is the public clone URL itself. **No history rewrite was performed or prepared.**
+- **Options for the author** (each also needs the paper's "openly redistributable" wording in §8 changed if it stays as written,
+  since it is not supported for Elliptic++ or Rodwald):
+  1. *Confirm and keep*: ask the Elliptic++ and Rodwald authors (and ransomwhe.re) in writing; record each answer here.
+  2. *Untrack going forward only* (`git rm --cached`, commit): stops new distribution; history still serves the old files.
+  3. *Untrack and rewrite history* (filter-repo + force-push): removes them from the default branch history; consequences above.
+  4. *Replace with a synthetic sample*: keeps demos and tests working without any third-party record; the corpus-dependent tests
+     then skip exactly as they do in the release.
+
 ## Attribution
 
 If the bundle is redistributed, keep with it: the MIT notice for GraphSense

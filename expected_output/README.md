@@ -15,6 +15,7 @@ byte for byte.
 | `taxonomy.txt`, `sources.txt` | `themis taxonomy`, `themis sources` |
 | `metrics_current_reproduction.json` | `python scripts/generate_result_sets.py --mode frozen --out DIR` → `DIR/metrics.json` (the bundled snapshot as shipped) |
 | `metrics_final_corrected_candidate.json` | same, `--mode candidate` (claims the paper-era adapters left `unknown` re-derived through the current taxonomy) |
+| `retained_table_build_manifest.json` | the build manifest of the retained full observation table (`scripts/build_corpus.py` output): the SHA-256 of every raw input and of the three outputs. Not produced by a `themis` command; a reviewer's own `build_manifest.json` is compared with it (see `REPRODUCE.md`, "Two reproduction statements") |
 
 The two metrics files differ only where the structured-label parser changes a
 label; see `REPRODUCE.md` for which is which. `meta.config_hash` is removed

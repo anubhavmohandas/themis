@@ -1,0 +1,107 @@
+{
+ "builder": {
+  "adapter_version": "1.0",
+  "claims_rederived_by_taxonomy_fill": 0,
+  "normalization_version": "observations-v1",
+  "python": "3.14.6",
+  "script": "scripts/build_corpus.py",
+  "script_sha256": "b341634298a623702592f14daebe670337b1525810c0d6bd2e532929091a85c5",
+  "taxonomy_fill": false,
+  "taxonomy_sha256": "1cb2f8e3110128976575c39e9f9d58e24a7666b4506f0a85d7e8cc990f669573",
+  "themis_version": "1.0.0"
+ },
+ "dropped_rows_shorter_than_a_bitcoin_address": {
+  "ellipticpp": 5
+ },
+ "inputs": {
+  "ellipticpp": {
+   "bytes": 30421134,
+   "kind": "file",
+   "name": "wallets_classes.csv",
+   "retrieved": "2026-09-20",
+   "sha256": "4e5132c99f941666bf1fefd4100a1428d339c9252ec6987909e1adf8eac902f9"
+  },
+  "ransomwhere": {
+   "bytes": 5575290,
+   "kind": "file",
+   "name": "ransomwhere.json",
+   "retrieved": "2026-09-20",
+   "sha256": "c249b94fb806de5a1fb1f257fe2d744707adb56ac4478cfd892d07df914b8959"
+  },
+  "rodwald_mixers": {
+   "bytes": 15713849,
+   "kind": "file",
+   "name": "BTC_Mixers.csv",
+   "retrieved": "2026-09-20",
+   "sha256": "f4baae03c0241b001dd686324e02911e832d8fb3a294ba7d59433a04b5b6e561"
+  },
+  "rodwald_ransom": {
+   "bytes": 10634799,
+   "kind": "file",
+   "name": "BTC_Ransom.csv",
+   "retrieved": "2026-09-20",
+   "sha256": "667b5ac6c71fc99726cd9a3b62e69435cc1653a7950edb84eed4af57f1a9a603"
+  },
+  "schnoering": {
+   "bytes": 6911449,
+   "kind": "file",
+   "name": "schnoering_addresses.csv",
+   "retrieved": "2026-09-20",
+   "sha256": "a451de6d9974594b0794284769d76c64ad92224ca010485d9265c9102feda283"
+  },
+  "tagpack": {
+   "kind": "directory",
+   "n_files": 86,
+   "retrieved": "2026-09-20",
+   "sha256": "33cc3d04dc7e36e4049558605a1f587e7f170c50526cefc0865aa8aebe618ce2"
+  },
+  "watchyourback": {
+   "bytes": 46236,
+   "kind": "file",
+   "name": "btc_resolv.csv",
+   "retrieved": "2026-09-20",
+   "sha256": "8c65f5d1df60b4b64bdd7d2ed722e7646192ead9cabc1dd063563285887ec9c3"
+  }
+ },
+ "note": "Built by scripts/build_corpus.py from the inputs above; hashes identify the exact files. Use with: themis --observations observations.csv.gz audit",
+ "outputs": {
+  "observations.csv.gz": "e65bf05afdecea538e5fdcdbecffa8fcb0398f3cd7e2705bd47f8018d6029acd",
+  "revenue.csv.gz": "654a71ffb0f8749c8d80a6d6c544c3afc251d7b8c3778f681d63e740f929e171",
+  "verified_anchors.txt.gz": "9fb611c0e2594b7304f731df9bbbf687474b9a15e5d2594a1a62835dd3ef2cdf"
+ },
+ "per_source": {
+  "ellipticpp": {
+   "addresses": 822937,
+   "claims": 822937
+  },
+  "ransomwhere": {
+   "addresses": 11186,
+   "claims": 11186
+  },
+  "rodwald_mixers": {
+   "addresses": 57817,
+   "claims": 57817
+  },
+  "rodwald_ransom": {
+   "addresses": 50322,
+   "claims": 50322
+  },
+  "schnoering": {
+   "addresses": 101387,
+   "claims": 103812
+  },
+  "tagpack": {
+   "addresses": 483296,
+   "claims": 499327
+  },
+  "watchyourback": {
+   "addresses": 309,
+   "claims": 309
+  }
+ },
+ "totals": {
+  "addresses": 1497191,
+  "claims": 1545710
+ },
+ "warnings": []
+}
