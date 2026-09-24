@@ -31,13 +31,13 @@ NON_CRYPTO_ROWS = [{"name": "Alice", "age": "30", "city": "Springfield"},
                    {"name": "Bob", "age": "25", "city": "Shelbyville"}]
 NON_CRYPTO_FIELDS = ["name", "age", "city"]
 
-# Ethereum-shaped addresses - no registered adapter validates these (THEMIS
-# V1 is Bitcoin-only), but they are still opaque, address-named, fixed-shape
-# tokens, unlike ordinary tabular data.
+# Tron-shaped addresses - no registered adapter validates these (THEMIS has
+# Bitcoin and the EVM chains only), but they are still opaque, address-named,
+# fixed-shape tokens, unlike ordinary tabular data.
 UNSUPPORTED_CHAIN_ROWS = [
-    {"address": "0x28C6c06298d514Db089934071355E5743bf21d60", "label": "Binance"},
-    {"address": "0xDFd5293D8e347dFe59E90eFd55b2956a1343963d", "label": "Kraken"},
-    {"address": "0x21a31Ee1afC51d94C2eFcCAa2092aD1028285549", "label": "Bitfinex"},
+    {"address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", "label": "Binance"},
+    {"address": "TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj", "label": "Kraken"},
+    {"address": "TNPeeaaFB7K9cmo4uQpcU32zGK8G1NYqeL", "label": "Bitfinex"},
 ]
 UNSUPPORTED_CHAIN_FIELDS = ["address", "label"]
 

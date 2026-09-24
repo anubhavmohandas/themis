@@ -200,7 +200,7 @@ class TestMultipleChains(unittest.TestCase):
         con.executemany("INSERT INTO wallets VALUES (?,?,?)", [
             (btc_address(1), "exchange", "bitcoin"),
             (btc_address(2), "exchange", "bitcoin"),
-            ("0x0000000000000000000000000000000000000000", "exchange", "ethereum"),  # not registered -> rejected
+            ("TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", "exchange", "tron"),  # no adapter -> rejected
         ])
         con.commit(); con.close()
         res = rel.extract(path, dict(driving_table="wallets", joins=[]), "multi", chain="bitcoin", confirmed=True)
@@ -341,10 +341,10 @@ class TestCsvAndPaperUnaffected(unittest.TestCase):
         self.assertIsNone(c["provenance_record"])   # new field, but None for a plain CSV claim
         self.assertEqual(c["canon"], "exchange")
 
-    def test_chain_alias_map_matches_old_private_helper_behavior(self):
+    def test_every_registered_alias_resolves_to_its_chain(self):
         from themis import chains
-        from themis.ingest import preflight as pf
-        self.assertEqual(chains.alias_map(), pf._chain_aliases())
+        for alias, cid in chains.alias_map().items():
+            self.assertEqual(chains.resolve_chain(alias), cid, alias)
 
 
 if __name__ == "__main__":

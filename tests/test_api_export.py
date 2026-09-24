@@ -35,9 +35,9 @@ class TestCsvExportInjectionGuard(unittest.TestCase):
 NON_CRYPTO_CSV = b"name,age,city\nAlice,30,Springfield\nBob,25,Shelbyville\n"
 UNSUPPORTED_CHAIN_CSV = (
     b"address,label\n"
-    b"0x28C6c06298d514Db089934071355E5743bf21d60,Binance\n"
-    b"0xDFd5293D8e347dFe59E90eFd55b2956a1343963d,Kraken\n"
-    b"0x21a31Ee1afC51d94C2eFcCAa2092aD1028285549,Bitfinex\n"
+    b"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t,Binance\n"
+    b"TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj,Kraken\n"
+    b"TNPeeaaFB7K9cmo4uQpcU32zGK8G1NYqeL,Bitfinex\n"
 )
 BTC_CSV = (
     b"wallet_address,entity_type\n"

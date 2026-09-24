@@ -1,7 +1,7 @@
 """STEP - blockchain adapter contract. A new chain is a new adapter
 registered here, never a branch inside the analysis engine."""
 from __future__ import annotations
-import abc
+import abc, re
 
 
 class BlockchainAdapter(abc.ABC):
@@ -56,3 +56,20 @@ def alias_map() -> dict[str, str]:
     Shared by ingest/preflight.py and ingest/relational.py so a per-row
     "chain"/"blockchain" column resolves identically wherever it is read."""
     return {a.lower(): cid for cid, ad in _REGISTRY.items() for a in ad.symbol_aliases}
+
+
+def _normalize_chain_name(value: str) -> str:
+    """"Polygon-Mainnet" -> "polygon": lowercase, non-alphanumeric runs -> "_", and one
+    configured network suffix (config/chains.yml network_suffixes) dropped. A testnet
+    name keeps its "testnet" token and so never resolves."""
+    from .. import config_io
+    name = re.sub(r"[^a-z0-9]+", "_", (value or "").strip().lower()).strip("_")
+    for suffix in config_io.load().chains.get("network_suffixes", []):
+        if name.endswith("_" + suffix):
+            return name[: -len(suffix) - 1]
+    return name
+
+
+def resolve_chain(value: str) -> str | None:
+    """The registered chain id a data file's chain name refers to, or None. Never guesses."""
+    return alias_map().get(_normalize_chain_name(value))

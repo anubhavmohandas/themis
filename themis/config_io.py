@@ -39,6 +39,9 @@ class Config:
         # API limits/allowlist: same fallback, so a custom config tree never runs the API without them
         api = root / "api.yml"
         self.api = _load_yaml(api if api.exists() else PKG_CONFIG / "api.yml")
+        # chains.yml: same fallback, so a custom config tree never loses the EVM chains
+        ch = root / "chains.yml"
+        self.chains = _load_yaml(ch if ch.exists() else PKG_CONFIG / "chains.yml")
         notable = root / "notable_roots.yml"
         self.notable_roots = (_load_yaml(notable) or []) if notable.exists() else []
         self.sources = {}

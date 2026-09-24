@@ -9,7 +9,7 @@ are made up.
 |---|---|
 | `example_attribution.csv` | pass pre-flight as Bitcoin attribution data (chain detected from the addresses); one address (`themis-example-7`) carries two labels that disagree; the provenance of the feed is UNRESOLVED (unknown source) so nothing is counted as independent corroboration. Its bare `timestamp` column has no stated meaning, so THEMIS does not use it for staleness: map it yourself with `--map ts_attribution_last_updated=timestamp` (or the mapping screen) if it does date the labels |
 | `example_non_crypto.csv` | stop at pre-flight: no cryptocurrency-shaped column |
-| `example_unsupported_chain.csv` | stop at pre-flight: address-shaped values on a chain THEMIS does not support (Ethereum), reported as *unsupported chain*, not "not crypto" |
+| `example_unsupported_chain.csv` | stop at pre-flight: address-shaped values on a chain THEMIS does not support (Tron), reported as *unsupported chain*, not "not crypto" |
 | `example_crypto_non_attribution.csv` | stop at pre-flight: an OHLC price series (a `symbol` column names BTC) - market data, not attribution claims: "Unsupported dataset for attribution analysis" |
 
 ```

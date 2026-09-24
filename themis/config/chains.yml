@@ -1,0 +1,25 @@
+# EVM-family chains THEMIS can validate identifiers for. An EVM address is 0x + 40 hex
+# characters on every one of these chains, so the SAME string is a valid identifier on all
+# of them and says nothing about which chain it belongs to: a dataset must state the chain
+# (per row or per file) for the identifier to mean anything (see ingest/preflight.py).
+#
+# id       the chain id claims and reports carry
+# aliases  names a data file may use for the chain. A value is matched after lowercasing and
+#          replacing every non-alphanumeric run with "_", and after dropping a trailing
+#          network suffix (network_suffixes below), so "Polygon-Mainnet" and "polygon_mainnet"
+#          both resolve through "polygon". A testnet name never resolves: THEMIS is mainnet only.
+network_suffixes: [mainnet]
+
+evm:
+  ethereum:
+    display_name: Ethereum
+    aliases: [ethereum, eth, ether]
+  bnb_smart_chain:
+    display_name: BNB Smart Chain
+    aliases: [bnb_smart_chain, bnb_chain, bnb, bsc, binance_smart_chain]
+  polygon:
+    display_name: Polygon
+    aliases: [polygon, polygon_pos, matic]
+  avalanche_c:
+    display_name: Avalanche C-Chain
+    aliases: [avalanche_c_chain, avalanche_c, avalanche, avax]

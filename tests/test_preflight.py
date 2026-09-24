@@ -390,7 +390,8 @@ class TestPreflightEndpointAndExport(unittest.TestCase):
         self.assertTrue(p["can_analyze"])
         self.assertTrue(all({"column", "semantic_type", "confidence", "sample_values", "status"} <= set(c) for c in p["columns"]))
         self.assertIn("subject_address", {f["id"] for f in r["semantic_fields"]})
-        self.assertEqual(r["chains"], ["bitcoin"])
+        self.assertEqual(r["chains"], sorted(r["chains"]))
+        self.assertTrue({"bitcoin", "ethereum"} <= set(r["chains"]))
 
     def test_a_mapping_that_names_a_missing_column_is_a_400_not_a_silent_no_op(self):
         client = TestClient(app, base_url="http://localhost")
