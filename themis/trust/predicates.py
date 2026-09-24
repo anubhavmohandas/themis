@@ -11,7 +11,7 @@ from .. import taxonomy, provenance
 
 
 def _siblings(claim, context):
-    return context.get("claims_by_address", {}).get(claim["address"], ())
+    return context.get("claims_by_address", {}).get(provenance.subject_key(claim), ())
 
 
 def root_independent_or_native(claim, context):

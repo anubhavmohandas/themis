@@ -840,7 +840,7 @@ def analysis_claims(analysis_id: str, offset: int = 0, limit: int = 100,
                             evidence_tier=taxonomy.tier_of(c), lastmod=c.get("lastmod", ""),
                             provenance=views.provenance_status(c),
                             root=views.resolution_of(c)["root"],
-                            outcome=views.outcome_for(ws, c["address"]))
+                            outcome=views.outcome_for(ws, c))
                       for c in page])
 
 

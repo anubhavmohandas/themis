@@ -315,9 +315,8 @@ def _stream_validate_and_build(path: str, spec: dict, mapping: dict, chain_id: s
     that would need an on-disk (e.g. temp-table) dedupe set instead.
     """
     tables = _table_names(spec)
-    addr_field, label_field = mapping.get("address"), mapping.get("label") or mapping.get("category")
+    addr_field, label_field = mapping.get("address"), mapping.get("category") or mapping.get("label")
     chain_field = mapping.get("chain")
-    aliases = chains.alias_map()
 
     claims: list[dict] = []
     rejected: list[dict] = []
@@ -353,13 +352,13 @@ def _stream_validate_and_build(path: str, spec: dict, mapping: dict, chain_id: s
 
             row_chain = chain_id
             if chain_field:
-                declared = (row.get(chain_field) or "").strip().lower()
+                declared = (row.get(chain_field) or "").strip()
                 # a blank per-row value falls back to the dataset's overall chain; an explicit
                 # but unrecognized one is never silently folded into it - it is simply a chain
                 # THEMIS cannot validate yet, and the row is rejected as such below (`aliases.get`
                 # with no default returns None for an unrecognized value, which must not become
                 # the falsy "use chain_id" case `row_chain = chain_id` above already covered)
-                row_chain = aliases.get(declared) if declared else chain_id
+                row_chain = chains.resolve_chain(declared) if declared else chain_id
             adapter = chains.get(row_chain) if row_chain else None
             if adapter is None:
                 reject(i, "unresolved chain", address=address)
@@ -378,7 +377,8 @@ def _stream_validate_and_build(path: str, spec: dict, mapping: dict, chain_id: s
                 reject(i, "missing label", address=address)
                 continue
 
-            claim_key = (address, label, _claims.declared_source(row, mapping))   # see validate.validate_rows
+            claim_key = (row_chain, adapter.normalize_address(address), label,
+                         _claims.declared_source(row, mapping))   # see validate.validate_rows
             if dedupe and claim_key in seen_claims:
                 reject(i, "duplicate claim", address=address)
                 continue

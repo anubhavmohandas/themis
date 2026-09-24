@@ -29,6 +29,11 @@ UNSUPPORTED_CHAIN_MESSAGE = _preflight.UNSUPPORTED_CHAIN_MESSAGE
 CRYPTO_NON_ATTRIBUTION_MESSAGE = _preflight.CRYPTO_NON_ATTRIBUTION_MESSAGE
 
 
+#: validation outputs with one entry per row: the claim builder consumes them, but they never belong in a
+#: result that is stored, served or exported (at ten million rows they are hundreds of MB)
+_PER_ROW = ("valid_rows", "valid_chains", "rejected")
+
+
 def load_csv(path: str) -> tuple[list[dict], list[str]]:
     # utf-8-sig strips a leading UTF-8 BOM if present (common from
     # Excel-exported CSVs) and is otherwise identical to utf-8, so a
@@ -100,7 +105,8 @@ def ingest(path: str, source_id: str, mapping_override: dict | None = None,
                         sha256=sha256_file(path), input_type=input_type_of(path), overrides=overrides,
                         chain=chain, confirmed=confirmed, sample_size=sample_size)
     detection = pf["detection"]
-    _p("complete", "detect", f"{pf['dataset_type']} \u00b7 {pf['chain']['value'] or 'no chain'} \u00b7 {pf['status']}")
+    chain_txt = pf["chain"]["value"] or ("chain per row" if pf["chain"]["status"] == "per_row" else "no chain")
+    _p("complete", "detect", f"{pf['dataset_type']} \u00b7 {chain_txt} \u00b7 {pf['status']}")
     if not pf["can_analyze"]:
         return _stopped(source_id, pf, rows, fieldnames)
 
@@ -114,19 +120,20 @@ def ingest(path: str, source_id: str, mapping_override: dict | None = None,
     n_chk, n_bad = validation["n_identifiers_checked"], validation["n_identifiers_invalid"]
     if not n_chk or (n_chk - n_bad) / n_chk < floor:
         pf["blockers"].append(dict(code="subject_invalid_full", message=(
-            f"Only {n_chk - n_bad:,} of {n_chk:,} values in '{mapping['address']}' are valid {chain_id} identifiers "
-            f"(minimum {floor:.0%}); no claims were created.")))
+            f"Only {n_chk - n_bad:,} of {n_chk:,} values in '{mapping['address']}' are valid "
+            f"{chain_id or 'per-row-chain'} identifiers (minimum {floor:.0%}); no claims were created.")))
         pf.update(status="blocked", can_analyze=False, message=_preflight._message("blocked", "attribution_claims",
                                                                                    pf["blockers"], detection))
         return _stopped(source_id, pf, rows, fieldnames,
-                        {k: v for k, v in validation.items() if k != "valid_rows"})
+                        {k: v for k, v in validation.items() if k not in _PER_ROW})
     _p("start", "normalize")
-    claims = _claims.build_claims(validation["valid_rows"], mapping, source_id, blockchain=chain_id)
+    claims = _claims.build_claims(validation["valid_rows"], mapping, source_id, blockchain=chain_id,
+                                  row_chains=validation["valid_chains"])
     _p("complete", "normalize", f"{len(claims):,} claims")
 
     capabilities = {"address_validation": True, "claim_normalization": True,
                     "internal_consistency": True}
-    limitations = []
+    limitations = _validation_limitations(validation, pf, len(rows), len(claims))
 
     basis = pf["currency_basis"]
     if basis is None:
@@ -183,7 +190,7 @@ def ingest(path: str, source_id: str, mapping_override: dict | None = None,
     _p("complete", "compare",
        "provenance, reference comparison, independence and currency" if reference is not None
        else "internal checks only (no reference corpus)")
-    summary = {k: v for k, v in validation.items() if k not in ("valid_rows", "rejected")}
+    summary = {k: v for k, v in validation.items() if k not in _PER_ROW}
     summary["rejected_examples"] = validation["rejected"][:_preflight.cfg()["rejected_examples"]]
     pf["validation"] = summary
     pf["analysis_states"] = states
@@ -194,6 +201,30 @@ def ingest(path: str, source_id: str, mapping_override: dict | None = None,
         claims=claims, capabilities=capabilities, limitations=limitations,
         target_audit=target_result, reliability_profile=target_result["profile"],
     )
+
+
+def _validation_limitations(v: dict, pf: dict, n_rows: int, n_claims: int) -> list[str]:
+    """What the full validation found about the DATA that the reader must carry with any figure:
+    identifiers that failed, checksums that are absent, whitespace that was trimmed, rows that
+    carry several labels. Counts, never a judgement of the dataset."""
+    out = []
+    floor = _preflight.cfg()["min_identifier_valid_rate"]
+    for cid, st in sorted(v["per_chain"].items()):
+        if st["checked"] and st["invalid"] / st["checked"] > 1 - floor:
+            out.append(f"{cid}: {st['invalid']:,} of {st['checked']:,} identifiers ({st['invalid'] / st['checked']:.1%}) "
+                       "failed validation on this chain and were rejected. That is a property of the identifiers in "
+                       "the file, not something THEMIS repaired or could repair.")
+    for cid, states in sorted(v["checksum_states"].items()):
+        n_ne = states.get("not_encoded", 0)
+        if n_ne and not states.get("valid") and not states.get("invalid"):
+            out.append(f"{cid}: none of the {n_ne:,} valid identifiers encodes an EIP-55 checksum (all one case). "
+                       "They are syntactically valid; a mistyped or altered address cannot be detected from them.")
+        elif states.get("invalid"):
+            out.append(f"{cid}: {states['invalid']:,} mixed-case identifiers failed their EIP-55 checksum and were rejected.")
+    if v["n_identifiers_trimmed"]:
+        out.append(f"{v['n_identifiers_trimmed']:,} identifiers carried leading or trailing whitespace, which was trimmed "
+                   "before validation; the identifier itself was not altered.")
+    return out
 
 
 def _unavailable_dim(reason: str) -> dict:

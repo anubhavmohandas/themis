@@ -83,5 +83,25 @@ class TestChainNames(unittest.TestCase):
             self.assertIsNone(chains.resolve_chain(name), name)
 
 
+class TestChainPerRow(unittest.TestCase):
+    fields = ["chain", "address", "category"]
+
+    def test_a_reference_source_on_another_chain_never_matches_by_string(self):
+        s = "ransomwhere"                                                 # a bundled source that declares chain: bitcoin
+        ref = corpus_mod.Corpus([dict(address=evm(7), source=s, raw_label="ransomware", canon="ransomware",
+                                      polarity="illicit", prov_family="", lastmod="", heuristic="", subcat="")])
+        self.assertEqual(len(ref.for_subject("ethereum", evm(7))), 0)
+        self.assertEqual(len(ref.for_subject("bitcoin", evm(7))), 1)
+        claim = lambda ch: dict(address=evm(7), blockchain=ch, source="up", canon="exchange", raw_label="exchange",
+                                polarity="licit", prov_family="", lastmod="", heuristic="unknown", subcat="")
+        eth = target_audit.audit_target_against_reference([claim("ethereum")], ref)
+        self.assertEqual(eth["profile"]["reference_comparability"]["comparable"], 0)
+        btc = target_audit.audit_target_against_reference([claim("bitcoin")], ref)
+        self.assertEqual(btc["profile"]["reference_comparability"]["comparable"], 1)
+
+
+
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -38,6 +38,15 @@ def normalize_address(claim: dict, sources: dict | None = None) -> str:
     return raw[len(prefix):] if prefix and raw.startswith(prefix) else raw
 
 
+def subject_key(claim: dict) -> str:
+    """What a claim is ABOUT: the identifier on its chain. The same address string on two chains
+    is two subjects, so a claim that states its chain is keyed "chain:address". A claim with no
+    chain (the reference corpus's own claims, or a file that never said) is keyed by the bare
+    address, exactly as before."""
+    chain = claim.get("blockchain")
+    return f"{chain}:{claim['address']}" if chain else claim["address"]
+
+
 def resolve(claim: dict, sources: dict | None = None) -> dict:
     """Assign this claim's provenance root per its source's declared rule.
 

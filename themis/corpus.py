@@ -1,7 +1,7 @@
 """Corpus loading. Works on the bundled sample or on a full local build."""
 from __future__ import annotations
 import csv, datetime, gzip, json, os, collections, pathlib
-from . import provenance
+from . import provenance, config_io
 
 csv.field_size_limit(10 ** 9)
 PKG = pathlib.Path(__file__).resolve().parent.parent
@@ -81,6 +81,20 @@ class Corpus:
         with _open(path) as f:
             claims = list(csv.DictReader(f))
         return cls(claims, {}, full=True)
+
+    def chain_of(self, claim: dict) -> str | None:
+        """The chain a reference claim's identifier lives on, as its source's config declares it
+        (None when a source declares none)."""
+        return (config_io.load().sources.get(claim.get("source")) or {}).get("chain")
+
+    def for_subject(self, chain: str | None, address: str) -> list:
+        """Reference claims about this identifier ON THIS CHAIN. A reference source that declares a
+        different chain never speaks about it, whatever the string looks like; a chain of None (the
+        asker did not say) or a source that declares none is not filtered."""
+        claims = self.by_addr.get(address, [])
+        if chain is None:
+            return claims
+        return [c for c in claims if self.chain_of(c) in (None, chain)]
 
     # ------------------------------------------------------------ accessors
     @property

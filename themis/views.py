@@ -105,22 +105,27 @@ def _comparable_groups(ws) -> dict[str, list]:
         return {a: ref.by_addr[a] for a in ref.multi_source_addresses()}
     if ref is None:
         return {}
-    mine = collections.defaultdict(list)
+    mine = collections.defaultdict(list)          # subject (chain + address) -> the target's claims
     for c in ws.claims:
-        mine[c["address"]].append(c)
-    return {a: cs + ref.by_addr[a] for a, cs in mine.items() if a in ref.by_addr}
+        mine[provenance.subject_key(c)].append(c)
+    out = {}
+    for key, cs in mine.items():
+        ref_cs = ref.for_subject(cs[0].get("blockchain"), cs[0]["address"])
+        if ref_cs:
+            out[key] = cs + ref_cs
+    return out
 
 
 def address_index(ws) -> dict[str, dict]:
-    """{address: record} over the workspace's comparable addresses, cached."""
+    """{subject: record} over the workspace's comparable subjects (chain + address), cached."""
     cache = _cache(ws)
     if "index" in cache:
         return cache["index"]
     idx = {}
-    for addr, claims in _comparable_groups(ws).items():
+    for key, claims in _comparable_groups(ws).items():
         outcome = taxonomy.classify_address(claims)
         indep = provenance.address_independence(claims)
-        idx[addr] = dict(address=addr, outcome=outcome, kind=KIND_OF_OUTCOME[outcome],
+        idx[key] = dict(address=claims[0]["address"], chain=claims[0].get("blockchain"), outcome=outcome, kind=KIND_OF_OUTCOME[outcome],
                          circular=indep["circular"], relationship=relationship_of(indep),
                          independence=indep, sources=sorted({c["source"] for c in claims}),
                          claims=claims)
@@ -145,14 +150,14 @@ def claims_filter(ws, claims: list, outcome=None, comparable=None, provenance_fi
     if outcome or comparable:
         idx = address_index(ws)
         if outcome == "single-source":
-            claims = [c for c in claims if c["address"] not in idx]
+            claims = [c for c in claims if provenance.subject_key(c) not in idx]
         elif outcome:
             want = {a for a, r in idx.items() if r["outcome"] == outcome}
-            claims = [c for c in claims if c["address"] in want]
+            claims = [c for c in claims if provenance.subject_key(c) in want]
         if comparable == "yes":
-            claims = [c for c in claims if c["address"] in idx]
+            claims = [c for c in claims if provenance.subject_key(c) in idx]
         elif comparable == "no":
-            claims = [c for c in claims if c["address"] not in idx]
+            claims = [c for c in claims if provenance.subject_key(c) not in idx]
     if provenance_filter:
         claims = [c for c in claims if provenance_status(c) == provenance_filter]
     if q:
@@ -164,9 +169,9 @@ def claims_filter(ws, claims: list, outcome=None, comparable=None, provenance_fi
     return claims
 
 
-def outcome_for(ws, address: str):
-    """Agreement outcome for the address, or None when it is not comparable."""
-    rec = address_index(ws).get(address)
+def outcome_for(ws, claim: dict):
+    """Agreement outcome for the claim's subject, or None when it is not comparable."""
+    rec = address_index(ws).get(provenance.subject_key(claim))
     return rec["outcome"] if rec else None
 
 
@@ -187,7 +192,7 @@ def conflicts_page(ws, kind=None, source_a=None, source_b=None, relationship=Non
             continue
         if relationship and r["relationship"] != relationship:
             continue
-        if q and q.strip().lower() not in a.lower():
+        if q and q.strip().lower() not in r["address"].lower():
             continue
         matches.append(r)
     limit = max(1, min(int(limit), config_io.load().api["paging"]["conflicts_max_page"]))
@@ -197,7 +202,7 @@ def conflicts_page(ws, kind=None, source_a=None, source_b=None, relationship=Non
     return dict(
         total=len(matches), offset=offset, limit=limit, n_returned=len(page),
         counts=kind_counts(ws), sources=src_set,
-        items=[dict(address=r["address"], kind=r["kind"], outcome=r["outcome"],
+        items=[dict(address=r["address"], chain=r["chain"], kind=r["kind"], outcome=r["outcome"],
                     relationship=r["relationship"], circular=r["circular"],
                     independence=dict(apparent=r["independence"]["apparent_dataset_count"],
                                       confirmed=r["independence"]["confirmed_independent_root_count"],
@@ -209,7 +214,7 @@ def conflict_export_rows(ws):
     """One row per claim at every conflict / hierarchical / incomparable address."""
     idx = address_index(ws)
     header = ["address", "kind", "outcome", "provenance_relationship", "source", "canon",
-              "raw_label", "polarity", "root", "root_kind", "provenance", "lastmod"]
+              "raw_label", "polarity", "root", "root_kind", "provenance", "lastmod", "chain"]
     rows = []
     for a in _cache(ws)["sorted_addresses"]:
         r = idx[a]
@@ -217,9 +222,9 @@ def conflict_export_rows(ws):
             continue
         for c in r["claims"]:
             v = claim_view(c)
-            rows.append([a, r["kind"], r["outcome"], r["relationship"], v["source"], v["canon"],
+            rows.append([r["address"], r["kind"], r["outcome"], r["relationship"], v["source"], v["canon"],
                          v["raw_label"], v["polarity"], v["root"], v["root_kind"],
-                         v["provenance"], v["lastmod"] or ""])
+                         v["provenance"], v["lastmod"] or "", r["chain"] or ""])
     return header, rows
 
 
@@ -269,13 +274,13 @@ def _enriched(claims: list) -> list:
 
 
 def _context(ws, claims: list) -> dict:
-    by_addr = collections.defaultdict(list)
+    by_addr = collections.defaultdict(list)          # subject (chain + address) -> claims
     for c in claims:
-        by_addr[c["address"]].append(c)
+        by_addr[provenance.subject_key(c)].append(c)
     ref = ws.reference_corpus
     if ref is not None:
-        for a in by_addr:
-            by_addr[a] = by_addr[a] + list(ref.by_addr.get(a, ()))
+        for k, cs in by_addr.items():
+            by_addr[k] = cs + list(ref.for_subject(cs[0].get("blockchain"), cs[0]["address"]))
     return dict(claims_by_address=dict(by_addr), as_of=_as_of(ws))
 
 
@@ -296,7 +301,7 @@ def _apply(rule: dict, claims: list, ctx: dict) -> list:
         verdict = {}
         out = []
         for c in claims:
-            a = c["address"]
+            a = provenance.subject_key(c)
             if a not in verdict:
                 verdict[a] = fn(c, ctx, **params)
             if verdict[a]:
@@ -327,7 +332,7 @@ def trust_coverage(ws, rule_ids: list) -> dict:
         cache["trust_base"] = (claims, _context(ws, claims))
         cache["trust_individual"] = {}
     claims, ctx = cache["trust_base"]
-    n_claims, n_addr = len(claims), len({c["address"] for c in claims})
+    n_claims, n_addr = len(claims), len({provenance.subject_key(c) for c in claims})
     states = {r["id"]: _rule_state(ws, r) for r in RULES}
     applicable = {rid for rid, st in states.items() if st["state"] == "computed"}
 
@@ -335,7 +340,7 @@ def trust_coverage(ws, rule_ids: list) -> dict:
     for r in RULES:
         if r["id"] in applicable and r["id"] not in individual:
             kept = _apply(r, claims, ctx)
-            individual[r["id"]] = dict(claims=len(kept), addresses=len({c["address"] for c in kept}))
+            individual[r["id"]] = dict(claims=len(kept), addresses=len({provenance.subject_key(c) for c in kept}))
 
     eligible, steps = claims, []
     for rid in rule_ids:
@@ -344,8 +349,8 @@ def trust_coverage(ws, rule_ids: list) -> dict:
             continue
         eligible = _apply(RULES_BY_ID[rid], eligible, ctx)
         steps.append(dict(rule=rid, state="computed", claims=len(eligible),
-                          addresses=len({c["address"] for c in eligible})))
-    e_claims, e_addr = len(eligible), len({c["address"] for c in eligible})
+                          addresses=len({provenance.subject_key(c) for c in eligible})))
+    e_claims, e_addr = len(eligible), len({provenance.subject_key(c) for c in eligible})
 
     return dict(
         rules=[dict(id=r["id"], label=r["label"], help=r["help"], state=states[r["id"]]["state"],

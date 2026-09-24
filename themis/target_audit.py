@@ -46,11 +46,14 @@ def discover_inheritance_candidates(target_claims: list[dict], reference_corpus,
     inherited_share = thresholds.get("containment_inherited_share", 0.999)
     min_group = thresholds.get("min_containment_group", 5)
 
-    target_addrs = {c["address"] for c in target_claims}
     residue_hits = _naming_residue(target_claims, cfg.sources)
 
     out = {}
     for src, ref_addrs in reference_corpus.src_addr.items():
+        # only the target's identifiers on the chain this reference source covers can be contained in it
+        src_chain = (cfg.sources.get(src) or {}).get("chain")
+        target_addrs = {c["address"] for c in target_claims
+                        if src_chain is None or c.get("blockchain") in (None, src_chain)}
         inter = target_addrs & ref_addrs
         if not inter or len(target_addrs) < min_group:
             continue
@@ -126,9 +129,9 @@ def audit_target_against_reference(target_claims: list[dict], reference_corpus,
                                    analysis_as_of_date: datetime.date | None = None,
                                    thresholds: dict | None = None) -> dict:
     thresholds = thresholds if thresholds is not None else config_io.load().thresholds
-    by_addr = collections.defaultdict(list)
+    by_addr = collections.defaultdict(list)          # subject (chain + address) -> the target's claims
     for c in target_claims:
-        by_addr[c["address"]].append(c)
+        by_addr[provenance.subject_key(c)].append(c)
     n_addr = len(by_addr)
 
     inheritance = discover_inheritance_candidates(target_claims, reference_corpus, thresholds)
@@ -136,7 +139,7 @@ def audit_target_against_reference(target_claims: list[dict], reference_corpus,
     comparability, resolution, outcome_counter = {}, {}, collections.Counter()
     indep_rows = {}
     for addr, claims in by_addr.items():
-        ref_claims = reference_corpus.by_addr.get(addr, [])
+        ref_claims = reference_corpus.for_subject(claims[0].get("blockchain"), claims[0]["address"])
         indep_rows[addr] = provenance.address_independence(claims + ref_claims)
         if not ref_claims:
             comparability[addr] = NO_REFERENCE_MATCH

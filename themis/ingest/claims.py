@@ -4,7 +4,7 @@ taxonomy's declared aliases (config/taxonomy.yml) - never guessed.
 """
 from __future__ import annotations
 import uuid
-from .. import taxonomy, provenance
+from .. import taxonomy, provenance, chains
 
 #: the flat claim schema every analysis function in this package reads.
 CLAIM_FIELDS = ["address", "raw_address", "source", "raw_label", "canon", "polarity",
@@ -59,11 +59,14 @@ def build_claim(row: dict, mapping: dict, source_id: str, default_heuristic: str
     _, structured_entity = taxonomy.split_structured_label(winning_text)
     declared = declared_source(row, mapping)
     raw_address = (row.get(mapping.get("address")) or "").strip()
+    adapter = chains.get(blockchain) if blockchain else None
+    # the canonical spelling of an identifier on its chain (an EVM address is hex: case is not identity)
+    canonical = adapter.normalize_address(raw_address) if adapter else raw_address
     return {
         "claim_id": uuid.uuid4().hex,
         "record_id": record_id,
         "blockchain": blockchain,
-        "address": provenance.normalize_address(dict(source=source_id, address=raw_address)),
+        "address": provenance.normalize_address(dict(source=source_id, address=canonical)),
         "raw_address": raw_address,
         "source": source_id,
         "actor": (row.get(mapping.get("actor")) or "").strip() if mapping.get("actor") else "",
@@ -91,6 +94,9 @@ def build_claim(row: dict, mapping: dict, source_id: str, default_heuristic: str
 
 
 def build_claims(rows: list[dict], mapping: dict, source_id: str, default_heuristic: str = "unknown",
-                 blockchain: str | None = None) -> list[dict]:
-    return [build_claim(r, mapping, source_id, default_heuristic, record_id=i, blockchain=blockchain)
+                 blockchain: str | None = None, row_chains: list | None = None) -> list[dict]:
+    """One claim per row. `row_chains[i]` is the row's own chain when the file states it per row;
+    `blockchain` is the file's single chain otherwise."""
+    return [build_claim(r, mapping, source_id, default_heuristic, record_id=i,
+                        blockchain=row_chains[i] if row_chains else blockchain)
             for i, r in enumerate(rows)]

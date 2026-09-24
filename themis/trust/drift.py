@@ -7,12 +7,13 @@ never sees "ransomware" or "revenue" - see themis/tasks/ for that.
 """
 from __future__ import annotations
 import collections
+from .. import provenance
 
 
 def group_by_address(claims: list[dict]) -> dict:
     out = collections.defaultdict(list)
     for c in claims:
-        out[c["address"]].append(c)
+        out[provenance.subject_key(c)].append(c)
     return dict(out)
 
 
