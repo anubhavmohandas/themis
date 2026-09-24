@@ -552,4 +552,3 @@ live export, WatchYourBack's GPL reach) could make the public repository inappro
 license is unconfirmed. Author actions, in order: (1) choose the `demo_data/` policy (§25.2); (2) ask IAR about IP, then pick a license; (3) decide
 the 87 `#` WatchYourBack records (§25.6); (4) fix the paper's "openly redistributable" sentence and the "highest declared confidence" wording. The
 artifact is otherwise frozen: no further engineering work is open.
-
