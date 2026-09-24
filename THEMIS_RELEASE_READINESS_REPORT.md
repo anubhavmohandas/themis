@@ -371,3 +371,185 @@ trust-rule file changed. Change review: no change alters a scientific result of 
 introduces source-specific behaviour, none weakens an existing guard; the one intentional interpretation change is S1
 (a candidate no longer changes a provenance state). The new surfaces are the request guard and the config-driven allowlist,
 both tested.
+
+
+---
+
+## 25. AUTHOR / RELEASE DECISIONS
+
+Date: 2026-09-24, after commits 6c8895a (Host allowlist), e6a71f6 (claim identity) and 9176869 (data matrix, retained-table
+record). Historical sections above are unchanged; where they are now out of date this section says so: **§8 residual
+(DNS rebinding), §18 row "Dedupe key ignores the declared source", §20 items 1-2, §21 items 3-6 are superseded by the table below.**
+Nothing in the frozen corpus, `paper/`, `themis/config/` or the manuscript was edited in this loop.
+
+### 25.1 Summary
+
+| # | issue | decision | status |
+|---|---|---|---|
+| 1 | public `demo_data/` redistribution | matrix built; **release policy not chosen** (rule: author selects); nothing removed | EXTERNAL CONFIRMATION REQUIRED |
+| 2 | software LICENSE | ownership unresolved; options presented; **no LICENSE added** | EXTERNAL CONFIRMATION REQUIRED |
+| 3 | authoritative reproduction input | fresh raw-source rebuild is authoritative; retained table = certified regression artifact; statements kept separate | RESOLVED |
+| 4A | TagPack tiering | unchanged; current interpretation classified | DEFERRED WITH DOCUMENTED LIMITATION |
+| 4B | 16 remaining WatchYourBack `#` records | classified COMMENT by upstream's own parser; frozen corpus **not** changed; paper impact measured | DEFERRED WITH DOCUMENTED LIMITATION |
+| 4C | duplicate-claim identity | claim = (address, label, declared source); implemented and tested; frozen paper unaffected | RESOLVED |
+| 4D | Host / DNS rebinding | Host allowlist implemented and tested | RESOLVED |
+
+### 25.2 Decision 1 - `demo_data/` redistribution
+
+* **Decision.** Build the matrix (`THIRD_PARTY_DATA.md`, "Redistribution matrix"); apply `UNCONFIRMED != PERMITTED`; do not remove
+  anything until the author selects a policy.
+* **Rationale / evidence (OBSERVED 2026-09-24).** TagPack MIT (`LICENSE` fetched), Schnöring CC BY 4.0 (figshare API), OFAC US government
+  work: CONFIRMED REDISTRIBUTABLE. Elliptic++: GitHub `license: null`, no LICENSE file, README asks for citation only. Rodwald (both): page
+  text has no license or terms. WatchYourBack: GPL-3.0 `LICENCE` for the repository; its reach over `btc_resolv.csv` is unstated and
+  share-alike would apply if it does. **Ransomwhere was downgraded from CONFIRMED to UNCONFIRMED**: the CC BY 4.0 record is the Zenodo
+  v1.1.0 deposit (2024-10-27); the corpus uses the live export retrieved 2026-09-20, whose terms could not be read.
+  Every `demo_data/` file except `manifest.json` (aggregates) carries UNCONFIRMED records: observations sample (Elliptic++ 20,083,
+  Rodwald 108,139, Ransomwhere 11,186, WatchYourBack 309 rows), revenue (Rodwald + Ransomwhere), anchors and ground truth (WatchYourBack half).
+* **Git history (OBSERVED).** The repository is public (created 2026-09-16; 0 forks, stars, watchers, releases on 2026-09-24; only `main`
+  pushed; `v1.0-paper*` tags local). The five files exist as 10 blob versions across 6 of 89 commits, from the first commit. `git rm`
+  alone leaves all of it retrievable. Removal from history needs `git filter-repo --path demo_data --invert-paths` (not installed here) or
+  BFG: every commit hash changes, force-push to `main`, local tags and the recorded release-ZIP hashes become stale, and cloned or
+  GitHub-cached copies persist (purge only via GitHub Support). **No rewrite was performed or prepared.**
+* **Implementation impact.** None (documentation only). **Paper impact.** The paper's Ethics statement still says the datasets are
+  "openly redistributable"; that is not supported for Elliptic++, Rodwald or the Ransomwhere live export. Author wording change; paper untouched.
+  **Release impact.** A release build already excludes all `demo_data/` files (`scripts/make_release.py`); the public development repository
+  does not.
+* **Status.** EXTERNAL CONFIRMATION REQUIRED (Elliptic++ / Rodwald / ransomwhe.re / WatchYourBack authors) plus the author's choice among:
+  confirm and keep; `git rm --cached` going forward only; untrack and rewrite history; replace with a synthetic sample.
+
+### 25.3 Decision 2 - software license
+
+* **Decision.** None. No `LICENSE` file, no `pyproject.toml` license field, no header added.
+* **Ownership evidence (OBSERVED).** 89 commits, all by one author identity; the paper lists one author affiliated with *Digital Forensics and
+  Cyber Security, Institute of Advanced Research, Gandhinagar*, corresponding e-mail on the institute's domain (`mscdfcs` local part), and
+  declares "No funding was received". Whether IAR holds rights in the work (student/thesis work, use of institute resources, an IP policy) is
+  **not determinable from the repository**. That is the blocking fact; the author must ask the institute.
+* **Separation.** A software license does not grant rights in third-party data (§25.2) and the data licenses do not license this code.
+  If WatchYourBack's GPL-3.0 were held to cover the rows in `demo_data/`, shipping them in a repository under MIT or Apache-2.0 would conflict;
+  with demo data untracked the question does not arise.
+* **Options (not selected).** Dependencies are all permissive (PyYAML MIT; FastAPI MIT; uvicorn, starlette, httpx BSD-3; python-multipart
+  Apache-2.0; React, Vite MIT), so none of the three is blocked by them.
+
+| license | what it means in practice |
+|---|---|
+| MIT | shortest text; anyone may use, modify, relicense and sell it, keeping the notice; no patent grant; no warranty |
+| Apache-2.0 | same freedoms plus an explicit patent grant and a NOTICE convention; longer; compatible with GPL-3.0 (one-way) |
+| GPL-3.0 | derivatives and redistributed copies must stay GPL-3.0; discourages proprietary reuse; forecloses embedding in permissively licensed tools |
+
+* **Impact.** Implementation none; paper none (its code-availability sentence says the code is "released"); release: a public release without a
+  license is "all rights reserved" by default, so a reviewer may read but not reuse it. **Status.** EXTERNAL CONFIRMATION REQUIRED, then author choice.
+
+### 25.4 Decision 3 - authoritative paper-reproduction input
+
+* **Decision.** The fresh raw-source rebuild is the authoritative path. The retained observation table is a *certified retained reproduction
+  artifact*, and its PASS is reported only as **REGRESSION VERIFICATION USING RETAINED FULL OBSERVATION TABLE**. The statements are never merged
+  (`REPRODUCE.md`, "Two reproduction statements").
+* **Evidence (OBSERVED 2026-09-24).** Retained table sha256 `e65bf05a…029acd`, 1,545,710 rows, columns `address, source, raw_label, canon,
+  polarity, prov_family, lastmod, heuristic, subcat`, all seven sources (Elliptic++ 822,937; TagPack 499,327; Schnöring 103,812; Rodwald 57,817 +
+  50,322; Ransomwhere 11,186; WatchYourBack 309). The six retained raw files hash exactly as its build manifest records; running
+  `scripts/build_corpus.py` (unchanged since 6245e0c) on them reproduced `observations.csv.gz`, `revenue.csv.gz`, `verified_anchors.txt.gz` and
+  `build_manifest.json` **byte-identically**. The manifest is now tracked as `expected_output/retained_table_build_manifest.json`.
+* **What is not established.** It is a *reconstruction* built 2026-09-20 from a live Ransomwhere export and a moving TagPack branch (commit
+  7f9a5d1, 2026-09-11), after the paper's data were collected; it reproduces the paper's per-source counts and all 29 headline claims but is not
+  shown to be the identical working file. The raw files were not re-fetched today, so upstream drift since 2026-09-20 is unmeasured.
+* **Results, kept apart.** `themis reproduce-paper` as shipped (sample only): **`PAPER ↔ THEMIS: BLOCKED`**, 20 PASS / 0 FAIL / 9 NOT_REPRODUCED.
+  Retained table (`--observations`, `--data-dir`, `--as-of 2026-09-15`): 29 PASS / 0 FAIL / 0 blocked, **REGRESSION VERIFICATION USING RETAINED FULL
+  OBSERVATION TABLE: PASS**.
+* **Impact.** Implementation none; paper none; release: the shipped command stays BLOCKED, honestly. **Status.** RESOLVED.
+
+### 25.5 Decision 4A - TagPack confidence
+
+* **Upstream documentation (fetched 2026-09-24).** `graphsense-tagpack-tool`: `tagpack_schema.yaml` declares `confidence` (`taxonomy: confidence`,
+  mandatory); `db/confidence.csv` defines each id by how the *creator* obtained the data, with a numeric `level`: forensic_investigation 70,
+  authority_data 60, forensic / service_data / trusted_provider 50, untrusted_transaction 40, web_crawl 20, heuristic 10, unknown 5; `forensic` is
+  "Forensic reports - Creator retrieved data attribution data from somehow trusted reports (e.g. academic papers)".
+* **Classification of the current THEMIS interpretation.**
+
+| interpretation | classification |
+|---|---|
+| raw id preserved verbatim in `subcat`; no `confidence_normalized` | SUPPORTED |
+| every TagPack claim tiered DERIVED, no id mapped to the verified tier | SUPPORTED (upstream's ids describe a creator's acquisition class, not re-checkable verification) |
+| Condition D "highest declared confidence" = `forensic` ∪ WatchYourBack ransomware | PARTIALLY SUPPORTED: `forensic` is level 50, equal to `service_data` and below `authority_data` (60) and `forensic_investigation` (70); "highest" holds only among the ids present at ransomware-revenue addresses. **AUTHOR REVIEW REQUIRED** on the wording |
+
+* Full-corpus id distribution over the 499,327 TagPack claims (OBSERVED): service_data 67.51%, forensic 32.10%, blank 0.19%, web_crawl 0.13%,
+  authority_data 0.07%, untrusted_transaction 13 claims. (The source config quotes the bundled sample's shares, 69.9% forensic; they differ.)
+* **Impact.** Implementation none (tiers not changed to raise apparent confidence); paper none; release: the uncertainty is documented in
+  `themis/config/sources/tagpack.yml` and here and does not masquerade as established truth. **Status.** DEFERRED WITH DOCUMENTED LIMITATION.
+
+### 25.6 Decision 4B - the 16 remaining WatchYourBack records
+
+* **Which.** Of the 87 `#`-prefixed lines in upstream `btc_resolv.csv`, 71 (hydra-market) were re-rooted to `ofac_sdn` earlier; the other 16 are 14
+  `apt29` (`us-gov-sanctioned`) and 2 `mrpr0gr4mmer` (sextortion, clipper).
+* **Upstream evidence (OBSERVED).** The README documents the tag-file format (six columns, no header) and no comment syntax. Upstream's own loader,
+  `code/lib/tags.py`, reads this very file with `pd.read_csv(f, names=names, na_filter=False, comment='#')`: a line **beginning with `#` is
+  ignored entirely by WatchYourBack itself**.
+* **Classification.** All 16 (and the other 71) are **COMMENT** under upstream's parser. Syntax is resolved; the maintainers' *intent* (disabled,
+  superseded, or noted elsewhere) is not, and is not needed for the classification. The earlier THEMIS rule (`strip_prefix: "#"`, "WatchYourBack's own
+  convention") was made to fix cross-source address matching and treated the prefix as data formatting; upstream's code does not support that reading.
+* **Paper impact of excluding them (MEASURED by full `reproduce-paper` runs on rebuilt tables).** Both exclusions give `PAPER ↔ THEMIS: FAIL` with the
+  same 8 failing statements, 2 of them headline: `corpus.claims` (16 -> 1,545,694; 87 -> 1,545,623), WatchYourBack addresses/claims (293 / 222 vs 309),
+  `coverage.multi_dataset_addresses` (15,413 -> 15,400 either way), the 2- and 3-dataset distribution cells, Elliptic++ ∩ WatchYourBack (8 -> 7), and
+  `currency.missing_revision_claims` (1,035,420 -> 1,035,404 / 1,035,333). Every other statement stays PASS.
+* **Decision.** The frozen corpus is **not** changed here: it would reverse an established, tested rule and move published numbers, and the intent question
+  is open. Until the author decides, the records remain in the corpus and this section is the visible limitation. Not included to enlarge the corpus, not
+  excluded to protect paper numbers: the cost of excluding is stated above. Decision needed: exclude (config `strip_prefix` removed / adapter skips `#`
+  lines; paper numbers above change) or keep with the wording that they are lines upstream ignores.
+* **Status.** DEFERRED WITH DOCUMENTED LIMITATION (AUTHOR DECISION; the 71 hydra records share the same evidence).
+
+### 25.7 Decision 4C - duplicate-claim identity
+
+* **Where the key lives.** Only the *upload* path (`ingest/validate.py`, streaming `ingest/relational.py`). The frozen seven-source corpus is built by
+  `scripts/build_corpus.py`, which never called it, so **no paper number can move through this change**.
+* **Change.** Claim identity is `(address, label, declared source)`; the same claim from a second declared source is kept, only a repeat from the
+  same declared source (whitespace-normalised) collapses; without a mapped source column behaviour is unchanged. Row-level duplicates still collapse.
+  Shared helper `claims.declared_source`, used by both paths and `build_claim`.
+* **Quantified on the retained full table** (MEASURED with THEMIS's own `agreement`, `cohen_kappa`, `independence`, `corpus_roots`,
+  `anchor_validation`; V0 = frozen as is; V1 = old key; V2 = new key):
+
+| variant | claims | dropped | fields changed vs V0 (of 152 compared) |
+|---|---|---|---|
+| V0 frozen | 1,545,710 | - | - |
+| V2 new key | 1,543,338 | 2,372 (all Schnöring repeats from the *same* declared source) | 9: claim totals, 3 root claim counts, unresolved addresses (853,583 -> 853,769), one anchor self-root count. Agreement outcomes, conflicts, kappa, roots-per-address, independence, anchor validation identical |
+| V1 old key | 1,527,623 | 18,087 (TagPack 15,676, every one with a **distinct** declared source; Schnöring 2,411, of which 39 had distinct declared sources) | 33: e.g. multi-source addresses on 3 roots 7,432 -> 399; anchors exact 203 -> 201, licit/illicit conflict 25 -> 27; Schnöring anchor agreement 0.941 -> 0.882 |
+
+  So the old key would have erased 15,715 groups of multi-source corroboration if the corpus had been ingested through it, and moved anchor results.
+* **Independence is not implied.** A test uploads one claim under two declared sources: two claims kept, one **unresolved** root, no confirmed
+  independent share. (In the frozen corpus TagPack creators are identified roots *by source config*, unchanged; that rule is the author's.)
+* **Tests.** `test_ingest` (same source collapses; different sources kept, whitespace-insensitive; no source column unchanged), `test_evidence_invariants`
+  (kept but still unresolved / no independence), `test_sqlite_adversarial` (relational path; the old assertion encoded the old key and was rewritten).
+* **Impact.** Implementation: 3 source files, +4 tests, 1 rewritten. Paper: **none** (structural, and measured above). Release: uploads with several
+  declared sources now report more claims and fewer "duplicate claim" rejections. **Status.** RESOLVED.
+
+### 25.8 Decision 4D - Host / DNS rebinding
+
+* **Decision.** Starlette `TrustedHostMiddleware` (installed dependency), outermost, hostnames from `themis/config/api.yml` `hosts.allowed`
+  (`localhost`, `127.0.0.1`); port ignored, so no deployment port is hardcoded; wildcard forbidden by test; the server still binds `127.0.0.1` only.
+* **Evidence.** New `TestHostAllowlist` (5 tests): localhost and loopback accepted on any port; `evil.example`, look-alikes
+  (`localhost.evil.example`, `127.0.0.1.evil.example`, `localhost@evil.example`), other IPs, `0.0.0.0`, empty Host refused with 400 on GET and on upload
+  routes, nothing stored; a refused host leaks no detail. Live check against a running server: `Host: 127.0.0.1:5001` 200, `Host: evil.example` 400.
+  Browser E2E after the change: **16/16**.
+* **Cost.** 14 test files construct their client with `base_url="http://localhost"` (Starlette's default host `testserver` is now refused).
+* **Impact.** Implementation: 2 files + tests; paper none; release: `python -m themis.api` clients must send a local Host (browsers and curl do).
+  **Status.** RESOLVED. Residual: other local processes (no authentication), as before.
+
+### 25.9 Final verification (this loop)
+
+| check | result |
+|---|---|
+| `python -m pytest` (corpus present) | **618 passed, 6 skipped** (was 609 / 6) |
+| no reference corpus (`THEMIS_DATA_DIR` empty) | 489 passed, 135 skipped |
+| `rm -rf frontend/node_modules; npm ci; npm run build; npm audit` | ci OK (postinstall scripts not approved by npm; build unaffected), build OK, **0 vulnerabilities** |
+| `pip-audit` | no known vulnerabilities (the local `themis` package itself is skipped: not on PyPI) |
+| browser E2E (Chromium, scratch Playwright) | **16/16** |
+| `themis reproduce-paper` (shipped) | **`PAPER ↔ THEMIS: BLOCKED`** (20 PASS / 0 FAIL / 9 NOT_REPRODUCED) |
+| retained-table regression | **`REGRESSION VERIFICATION USING RETAINED FULL OBSERVATION TABLE: PASS`** (29 / 29) |
+| retained table rebuilt from retained raw files | byte-identical outputs |
+
+### 25.10 Final status
+
+**CONDITIONALLY READY — EXTERNAL CONFIRMATION REQUIRED.** Not `RELEASE READY`: unresolved redistribution rights (Elliptic++, Rodwald, the Ransomwhere
+live export, WatchYourBack's GPL reach) could make the public repository inappropriate to distribute, and copyright ownership for the software
+license is unconfirmed. Author actions, in order: (1) choose the `demo_data/` policy (§25.2); (2) ask IAR about IP, then pick a license; (3) decide
+the 87 `#` WatchYourBack records (§25.6); (4) fix the paper's "openly redistributable" sentence and the "highest declared confidence" wording. The
+artifact is otherwise frozen: no further engineering work is open.
+
