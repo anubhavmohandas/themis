@@ -45,6 +45,12 @@ __MACOSX/
 /RECONCILIATION_REPORT.md
 /provenance_register.html
 /WALLETCLASSIFICATION_CASE_STUDY_REPORT.md
+# MBAL experiment: the dataset and anything derived from it (samples, screenshots, raw JSON)
+# live outside the repository and must never be added; its two reports carry no rows and are tracked
+/mbal_testdata/
+/mbal_evidence/
+mbal_*.csv
+dataset_10m_ads*.csv
 /results/
 /external_data/
 /release/

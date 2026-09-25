@@ -177,12 +177,33 @@ without one the audit says so and continues.
 single-user tool. What it does enforce, from `themis/config/api.yml` (whose header
 states the threat model): CORS names the frontend's own origins, never `*`, and a
 state-changing request from any other browser origin is refused; an upload is
-capped in bytes *while it is read* (and a `.gz` also in decompressed size); a
+capped in bytes *while it is read* (and a `.gz` also in decompressed size) and
+in logical rows (see *Scale and limits*); a
 client sees a generic message for any internal failure while the server log keeps
 the detail; an SQLite database is opened only by a name inside `THEMIS_DB_DIR`,
 read-only; a request whose `Host` header is not a local hostname (`hosts.allowed`,
 port ignored) is refused, which closes DNS rebinding. Not covered: other local
 processes.
+
+### Scale and limits
+
+THEMIS's architecture is **in-memory**: an uploaded dataset, its claims and every derived
+table are held in RAM for the life of the analysis. Disk-backed storage is **not
+implemented**, and THEMIS does not support arbitrary multi-gigabyte datasets.
+
+- Measured on the 10,000,000-row / 850 MB unseen-dataset run (`MBAL_VALIDATION_REPORT.md`):
+  about **2.5 KB of RAM per row**, a peak near **24.7 GB**.
+- The upload limit stays **256 MiB** (`upload.max_bytes`), and a **`upload.max_rows`** guard
+  (default 1,000,000 logical CSV rows, about 2.5 GB) refuses a larger file before any
+  analysis: HTTP 413, no partial result, service unaffected. Rows are CSV records, so a
+  quoted newline is one row. Both live in `themis/config/api.yml`.
+- The 10M-row analysis is a **documented scale test**, run under an explicit local config
+  (`THEMIS_CONFIG_DIR` with raised limits) on a machine sized for it. It is not the
+  public or browser path.
+- The first Claims or Trust query on a very large analysis can be slow (the claims are
+  sorted, and the trust rules evaluated, once per workspace and then cached).
+- `analysis_summary.json` contains every claim and stays intentionally large; it is
+  streamed rather than built in memory, but it is still as large as the analysis.
 
 ## 8. Pre-flight behavior
 
