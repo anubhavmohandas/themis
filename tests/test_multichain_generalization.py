@@ -441,6 +441,89 @@ class TestNoStateLeaksBetweenRequests(unittest.TestCase):
         self.assertFalse(r["preflight"]["can_analyze"])
 
 
+class TestResponsesStayBoundedAtScale(unittest.TestCase):
+    """The per-address maps are server-side state; the screen payload must not grow with the number of addresses."""
+
+    def test_the_summary_carries_no_per_address_map_but_the_inspector_still_reads_it(self):
+        from fastapi.testclient import TestClient
+        from themis.api import app
+        rows = [{"chain": "ethereum", "address": evm(i), "category": "exchange"} for i in range(60)]
+        c = TestClient(app, base_url="http://localhost")
+        aid = c.post("/api/analysis", data={"source_id": "scale_probe", "use_reference": "false"},
+                     files={"file": ("a.csv", to_csv(rows, ["chain", "address", "category"]), "text/csv")}).json()["analysis_id"]
+        summ = c.get(f"/api/analysis/{aid}/summary").json()
+        for v in (summ["result"]["validation"], summ["result"]["dataset_preflight"]["validation"]):
+            for per_row in ("valid_rows", "valid_chains", "valid_labels", "rejected"):    # counts, never one entry per row
+                self.assertNotIn(per_row, v)
+        ta = summ["result"]["target_audit"]
+        self.assertNotIn("address_comparability", ta)
+        self.assertNotIn("address_resolution", ta)
+        self.assertEqual(ta["n_target_addresses"], 60)
+        insp = c.get(f"/api/analysis/{aid}/address/{evm(3)}").json()
+        self.assertTrue(insp["found"])
+        self.assertEqual(insp["chain"], "ethereum")
+        # the claims table pages through one cached order, and the summary export streams
+        page = c.get(f"/api/analysis/{aid}/claims", params=dict(limit=10)).json()
+        self.assertEqual(page["total"], 60)
+        self.assertEqual([r["address"] for r in page["claims"]], sorted(r["address"] for r in page["claims"]))
+        # the job-status / extract response is bounded too: it is what the browser downloads when a job finishes
+        job = c.post("/api/jobs/analysis", data={"source_id": "scale_probe2", "use_reference": "false"},
+                     files={"file": ("a.csv", to_csv(rows, ["chain", "address", "category"]), "text/csv")}).json()["job_id"]
+        import time
+        for _ in range(100):
+            st = c.get(f"/api/jobs/{job}").json()
+            if st["status"] != "running":
+                break
+            time.sleep(0.1)
+        self.assertEqual(st["status"], "complete")
+        self.assertNotIn("address_comparability", st["preflight"]["target_audit"])
+        self.assertNotIn("valid_chains", st["preflight"]["validation"])
+        exp = c.get(f"/api/analysis/{aid}/export/analysis_summary.json")
+        self.assertEqual(exp.status_code, 200)
+        self.assertEqual(len(exp.json()["result"]["claims"]), 60)
+
+
+class TestAddressInspectorKeepsChainsApart(unittest.TestCase):
+    """The same string on several chains is several subjects: the inspector never answers with a merged view."""
+
+    def setUp(self):
+        from fastapi.testclient import TestClient
+        from themis.api import app
+        self.a = evm(7)
+        rows = [{"chain": c, "address": self.a, "category": lab} for c, lab in
+                [("ethereum", "exchange"), ("polygon", "scam")]]
+        rows += [{"chain": "ethereum", "address": evm(1000 + i), "category": "exchange"} for i in range(30)]
+        self.c = TestClient(app, base_url="http://localhost")
+        self.aid = self.c.post("/api/analysis", data={"source_id": "inspector_probe", "use_reference": "false"},
+                               files={"file": ("a.csv", to_csv(rows, ["chain", "address", "category"]), "text/csv")}
+                               ).json()["analysis_id"]
+
+    def get(self, addr, chain=None):
+        return self.c.get(f"/api/analysis/{self.aid}/address/{addr}", params={"chain": chain} if chain else None).json()
+
+    def test_without_a_chain_an_address_on_two_chains_asks_which(self):
+        r = self.get(self.a)
+        self.assertTrue(r["ambiguous"])
+        self.assertEqual(r["chains"], ["ethereum", "polygon"])
+        self.assertFalse(r["found"])
+
+    def test_each_chain_gets_only_its_own_claims(self):
+        eth, pol = self.get(self.a, "ethereum"), self.get(self.a, "polygon")
+        self.assertEqual([c["raw"] for c in eth["target_claims"]], ["exchange"])
+        self.assertEqual([c["raw"] for c in pol["target_claims"]], ["scam"])
+        self.assertEqual((eth["chain"], pol["chain"]), ("ethereum", "polygon"))
+
+    def test_a_chain_the_address_is_not_on_finds_nothing(self):
+        r = self.get(self.a, "bnb_smart_chain")
+        self.assertFalse(r["found"])
+        self.assertEqual(r["chain"], "bnb_smart_chain")
+
+    def test_an_address_on_one_chain_needs_no_chain(self):
+        r = self.get(evm(1003))
+        self.assertTrue(r["found"])
+        self.assertEqual(r["chain"], "ethereum")
+
+
 class TestLogicalCsvRecords(unittest.TestCase):
     def test_quoted_newlines_commas_quotes_empties_long_fields_unicode_and_crlf_keep_every_column_aligned(self):
         long = "x" * 100_000

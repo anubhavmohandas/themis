@@ -46,6 +46,10 @@ upload:
   # that travel in the same body as the file. Only bounds what is read off the
   # wire; the file itself is checked against max_bytes exactly. 1 MiB.
   multipart_overhead_bytes: 1048576
+  # Largest file the BROWSER will hash itself before upload (Web Crypto has no streaming digest, so it must
+  # read the whole file into the tab's memory: at hundreds of MiB that crashed the tab). Larger files show the
+  # hash the server computed instead. 128 MiB.
+  browser_hash_max_bytes: 134217728
 
 paging:
   claims_max_page: 500        # rows per /claims page, however large `limit` asks for

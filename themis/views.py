@@ -134,6 +134,27 @@ def address_index(ws) -> dict[str, dict]:
     return idx
 
 
+def sorted_claims(ws) -> list:
+    """The workspace's claims in the order the claims table pages through them (address, chain, source),
+    sorted once per workspace: sorting millions of claims on every page request took seconds each time."""
+    cache = _cache(ws)
+    if "sorted_claims" not in cache:
+        cache["sorted_claims"] = sorted(ws.claims, key=lambda c: (c["address"], c.get("blockchain") or "",
+                                                                   c.get("source", "")))
+    return cache["sorted_claims"]
+
+
+def count_subjects(ws, claims: list) -> int:
+    """Distinct subjects (chain + address) among `claims`. For the whole, unfiltered list the answer is cached:
+    counting it is a pass over every claim, and the claims table asks on each page."""
+    if claims is sorted_claims(ws):
+        cache = _cache(ws)
+        if "n_subjects" not in cache:
+            cache["n_subjects"] = len({provenance.subject_key(c) for c in claims})
+        return cache["n_subjects"]
+    return len({provenance.subject_key(c) for c in claims})
+
+
 def kind_counts(ws) -> dict:
     idx = address_index(ws)
     c = collections.Counter(r["kind"] for r in idx.values())

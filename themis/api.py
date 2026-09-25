@@ -175,7 +175,8 @@ def _hash_bytes(data: bytes) -> str:
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": __version__}
+    return {"status": "ok", "version": __version__,
+            "browser_hash_max_bytes": _api_cfg["upload"]["browser_hash_max_bytes"]}
 
 
 @app.get("/api/sources")
@@ -452,8 +453,7 @@ def _run_sqlite_extract(db: str, spec: dict, source_id: str, use_reference: bool
     if progress is not None:
         progress("complete", "report", None)
     if not result["stopped"]:
-        result = dict(result)
-        result["claims"] = result["claims"][:_PAGING["extract_preview_claims"]]
+        result = _client_result(result)
     return dict(analysis_id=ws.analysis_id, meta=ws.to_meta(), preflight=result)
 
 
@@ -473,6 +473,26 @@ def sqlite_extract(db: str = Form(...), spec: str = Form(...), source_id: str = 
 
 
 # ------------------------------------------------------------ STEP 1/2 analysis
+_ADDRESS_MAPS = ("address_comparability", "address_resolution")
+
+
+def _client_result(result: dict) -> dict:
+    """What a job / extract response carries: the first claims only, and never the per-address maps.
+    Both stay in the stored workspace; the paged endpoints and the address inspector read them there. A
+    ten-million-row analysis otherwise sent the browser a multi-gigabyte job status and crashed the tab."""
+    out = dict(result)
+    out["claims"] = out["claims"][:_PAGING["extract_preview_claims"]]
+    if out.get("target_audit"):
+        out["target_audit"] = {k: v for k, v in out["target_audit"].items() if k not in _ADDRESS_MAPS}
+    return out
+
+
+def _blockchain_label(detection: dict) -> str | None:
+    """The chain(s) a workspace covers, as one string: the single chain, or the chains a per-row
+    chain column stated."""
+    return detection.get("blockchain") or (", ".join(detection["blockchains"]) if detection.get("blockchains") else None)
+
+
 def _run_upload(data: bytes, filename: str | None, source_id: str, use_reference: bool,
                 mapping_override: dict | None, progress=None, semantics: dict | None = None,
                 chain: str | None = None, confirmed: bool = False) -> dict:
@@ -509,7 +529,7 @@ def _run_upload(data: bytes, filename: str | None, source_id: str, use_reference
         analysis_id=_workspace.new_id(), mode=_workspace.MODE_UPLOADED,
         dataset_name=filename or source_id, created_at=_workspace.now_iso(),
         analysis_as_of_date=str(today), reference_corpus=reference,
-        input_file_hash=_hash_bytes(data), blockchain=result["detection"].get("blockchain"),
+        input_file_hash=_hash_bytes(data), blockchain=_blockchain_label(result["detection"]),
         preflight=result["dataset_preflight"],
         schema_mapping=result.get("schema_mapping"), claims=result.get("claims", []),
         reference_corpus_version=(_scope_of(reference).lower() if reference is not None else None),
@@ -523,8 +543,7 @@ def _run_upload(data: bytes, filename: str | None, source_id: str, use_reference
     if progress is not None:
         progress("complete", "report", None)
     if not result["stopped"]:
-        result = dict(result)
-        result["claims"] = result["claims"][:_PAGING["extract_preview_claims"]]   # cap the payload; counts are in `validation`
+        result = _client_result(result)   # cap the payload; counts are in `validation`
     return dict(analysis_id=ws.analysis_id, meta=ws.to_meta(), preflight=result)
 
 
@@ -736,6 +755,11 @@ def _present_result(ws) -> dict:
     row says whether that root is resolved, using the same provenance.is_unresolved
     the engine uses. The stored result and the export are untouched."""
     result = {k: v for k, v in (ws.result or {}).items() if k != "claims"}
+    ta = result.get("target_audit")
+    if ta:
+        # one entry per address: no screen renders them (the address inspector reads them server-side), and at
+        # ten million addresses they were a 1.5 GB response
+        result["target_audit"] = {k: v for k, v in ta.items() if k not in _ADDRESS_MAPS}
     ind = result.get("independence")
     if ind and ind.get("root_concentration"):
         ind = dict(ind)
@@ -802,7 +826,7 @@ def analysis_claims(analysis_id: str, offset: int = 0, limit: int = 100,
     ws = _get_workspace(analysis_id)
     _require_analyzable(ws)
     as_of = _as_of_date(ws)
-    claims = ws.claims
+    claims = views.sorted_claims(ws)
     if source:
         claims = [c for c in claims if c.get("source") == source]
     if canon:
@@ -828,14 +852,15 @@ def analysis_claims(analysis_id: str, offset: int = 0, limit: int = 100,
     total = len(claims)
     limit = max(1, min(limit, _MAX_CLAIMS_PAGE))
     offset = max(0, offset)
-    ordered = sorted(claims, key=lambda c: (c["address"], c.get("source", "")))
-    page = ordered[offset:offset + limit]
+    page = claims[offset:offset + limit]        # `claims` is already in the workspace's cached sort order
     # which population these records are: a drill-down from a metric of another population must say so
     population = ("uploaded_dataset" if ws.mode == _workspace.MODE_UPLOADED
                   else _overview.NORMALIZED if ws.reference_corpus.full else _overview.SAMPLE)
-    return dict(total=total, n_addresses=len({c["address"] for c in claims}), population=population,
+    return dict(total=total, n_addresses=views.count_subjects(ws, claims), population=population,
                offset=offset, limit=limit, n_returned=len(page),
-               claims=[dict(address=c["address"], source=c["source"], raw_label=c.get("raw_label", ""),
+               claims=[dict(address=c["address"], chain=c.get("blockchain"), source=c["source"],
+                            raw_label=c.get("raw_label") or c.get("subcat") or "", entity=c.get("entity", ""),
+                            label_cell=c.get("label_cell"),
                             canon=c.get("canon"), polarity=c.get("polarity"),
                             evidence_tier=taxonomy.tier_of(c), lastmod=c.get("lastmod", ""),
                             provenance=views.provenance_status(c),
@@ -882,7 +907,7 @@ def analysis_trust_coverage(analysis_id: str, rules: str = ""):
 
 
 @app.get("/api/analysis/{analysis_id}/address/{address:path}")
-def analysis_address(analysis_id: str, address: str):
+def analysis_address(analysis_id: str, address: str, chain: str | None = None):
     ws = _get_workspace(analysis_id)
     _require_analyzable(ws)
     if ws.mode == _workspace.MODE_PAPER:
@@ -891,7 +916,7 @@ def analysis_address(analysis_id: str, address: str):
             for view, raw in zip(res["claims"], ws.reference_corpus.by_addr[address]):
                 view["provenance"] = views.provenance_status(raw)
         return res
-    return _explain_in_workspace(ws, address)
+    return _explain_in_workspace(ws, address, chain)
 
 
 def _provenance_payload(ws) -> dict:
@@ -1082,9 +1107,10 @@ def run_paper_task(analysis_id: str, task: str):
 def analysis_export(analysis_id: str, name: str):
     ws = _get_workspace(analysis_id)
     if name == "analysis_summary.json":
-        payload = json.dumps(dict(meta=ws.to_meta(), result=ws.result, audit_trail=ws.audit_trail),
-                             indent=1, default=str)
-        return StreamingResponse(iter([payload]), media_type="application/json",
+        # streamed piece by piece: this object holds every claim, and one string of it is gigabytes at scale
+        payload = json.JSONEncoder(indent=1, default=str).iterencode(
+            dict(meta=ws.to_meta(), result=ws.result, audit_trail=ws.audit_trail))
+        return StreamingResponse(payload, media_type="application/json",
                                  headers={"Content-Disposition": 'attachment; filename="analysis_summary.json"'})
     if name == "preflight.json":
         if ws.preflight is None:
@@ -1099,7 +1125,7 @@ def analysis_export(analysis_id: str, name: str):
         _require_analyzable(ws)
     if name == "normalized_claims.csv":
         fields = ["claim_id", "address", "source", "raw_label", "canon", "polarity", "root",
-                  "heuristic", "confidence_raw", "lastmod"]
+                  "heuristic", "confidence_raw", "lastmod", "blockchain", "entity", "label_cell"]
         rows = [[c.get(f, "") for f in fields] for c in ws.claims]
         return _csv_response(rows, fields, name)
     if name == "limitations.json":
@@ -1220,15 +1246,25 @@ def _as_of_date(ws: _workspace.AnalysisWorkspace) -> datetime.date | None:
         return None
 
 
-def _explain_in_workspace(ws: _workspace.AnalysisWorkspace, address: str) -> dict:
+def _explain_in_workspace(ws: _workspace.AnalysisWorkspace, address: str, chain: str | None = None) -> dict:
     """STEP 21 - address inspector scoped to one uploaded-dataset workspace:
     the target's own claim(s) plus only the reference claims that land on
-    this same address, never the reference corpus's unrelated agreement."""
+    this same identifier ON THE SAME CHAIN, never the reference corpus's unrelated agreement.
+    An address string that the dataset states on several chains is several subjects: without
+    `chain` the caller is told which chains to choose from rather than given a merged answer."""
     as_of = _as_of_date(ws)
-    target_claims = [c for c in ws.claims if c["address"] == address]
-    ref_claims = ws.reference_corpus.by_addr.get(address, []) if ws.reference_corpus else []
+    on_address = [c for c in ws.claims if c["address"] == address]
+    chains_here = sorted({c.get("blockchain") for c in on_address if c.get("blockchain")})
+    if chain is None and len(chains_here) > 1:
+        return dict(address=address, found=False, ambiguous=True, chains=chains_here,
+                    message=f"'{address}' appears on {len(chains_here)} chains in this dataset; choose one. "
+                            "The same string on different chains is a different subject.")
+    if chain is None and len(chains_here) == 1:
+        chain = chains_here[0]
+    target_claims = [c for c in on_address if chain is None or c.get("blockchain") == chain]
+    ref_claims = ws.reference_corpus.for_subject(chain, address) if ws.reference_corpus else []
     if not target_claims and not ref_claims:
-        return dict(address=address, found=False)
+        return dict(address=address, chain=chain, found=False)
 
     combined = target_claims + ref_claims
     indep = provenance.address_independence(combined)
@@ -1236,22 +1272,23 @@ def _explain_in_workspace(ws: _workspace.AnalysisWorkspace, address: str) -> dic
     outcome = taxonomy.classify_address(combined) if len(srcs) >= 2 else "single-source"
 
     def _claim_view(c):
-        return dict(source=c["source"], label=c["canon"], raw=c["raw_label"],
+        return dict(source=c["source"], label=c["canon"], raw=c.get("raw_label") or c.get("subcat") or "",
                    root=c.get("root", provenance.root_of(c)),
                    root_kind=views.resolution_of(c)["kind"], tier=taxonomy.tier_of(c),
                    provenance=views.provenance_status(c),
+                   entity=c.get("entity") or None,
                    lastmod=c.get("lastmod") or None, flags=taxonomy.currency_flags(c, today=as_of))
 
     return dict(
-        address=address, found=True,
+        address=address, chain=chain, found=True,
         target_claims=[_claim_view(c) for c in target_claims],
         reference_claims=[_claim_view(c) for c in ref_claims],
         datasets=srcs, outcome=outcome,
         apparent_corroboration=indep["apparent_dataset_count"],
         actual_corroboration=indep["confirmed_independent_root_count"],
         circular=indep["circular"], independence=indep,
-        comparability=(ws.result.get("target_audit", {}).get("address_comparability", {}).get(address)
-                      if ws.result else None),
+        comparability=(ws.result.get("target_audit", {}).get("address_comparability", {}).get(
+            provenance.subject_key(target_claims[0]) if target_claims else address) if ws.result else None),
     )
 
 
