@@ -170,6 +170,37 @@ await step("E dependent-source demo: descriptors and dependency, never independe
   await expectText(/The dataset contains usable attribution records, but the evidence needed to treat its source descriptors as independent forensic corroboration is not established\./);
 });
 
+// ---------------------------------------------------------------- H: multi-chain, per-row chain
+await step("H1 multi-chain file: chain per row, invalid identifiers rejected and shown, nothing crashes", async () => {
+  await page.goto(BASE + "/");
+  await page.setInputFiles("input[type=file]", `${SP}/csv/multichain.csv`);
+  await page.getByText("2 · Pre-flight").waitFor();
+  await expectText(/Blockchain: stated per row by 'chain'/);
+  await expectText(/Declared source: 'source' \(a class of evidence, not a per-claim source\)/);
+  await confirmIfAsked();
+  const run = page.getByRole("button", { name: /Run analysis/ });
+  await enabled(run);
+  await run.click();
+  await page.waitForURL(/\/overview/);
+  await page.getByText("Dataset reliability profile").waitFor();          // a page that used to go blank when rows were rejected
+  await expectText(/Identifier validity by chain/);
+  await expectText(/Rejected rows/);
+  await expectText(/bitcoin\s+50\s+\d+/);
+  await expectNoText(/verified attribution|ground truth confirmed/i);
+});
+await step("H2 a mapping that does not fit the values is refused, and is not a verdict on the file", async () => {
+  await page.goto(BASE + "/");
+  await page.setInputFiles("input[type=file]", `${SP}/csv/multichain.csv`);
+  await page.getByText("2 · Pre-flight").waitFor();
+  await page.getByLabel("Meaning of address").selectOption({ label: "Market timestamp" });
+  await page.getByText(/this column cannot date a claim/).first().waitFor();
+  await expectText(/set by you/);
+  await expectNoText(/does not appear to contain cryptocurrency attribution data/);
+  await page.getByRole("button", { name: /Reset to THEMIS/ }).click();
+  await page.getByText(/Blockchain: stated per row/).waitFor();
+  await expectNoText(/set by you/);
+});
+
 // ---------------------------------------------------------------- F: XSS
 await step("F1 hostile CSV renders as text, nothing executes", async () => {
   await analyseCsv("xss.csv");

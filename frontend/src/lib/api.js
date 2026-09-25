@@ -95,7 +95,7 @@ export const api = {
   listAnalyses: () => getJSON("/api/analysis"),
   analysisMeta: (id) => getJSON(`/api/analysis/${id}`),
   summary: (id) => getJSON(`/api/analysis/${id}/summary`),
-  address: (id, addr) => getJSON(`/api/analysis/${id}/address/${encodeURIComponent(addr)}`),
+  address: (id, addr, chain) => getJSON(`/api/analysis/${id}/address/${encodeURIComponent(addr)}${chain ? `?chain=${encodeURIComponent(chain)}` : ""}`),
   claims: (id, params) => getJSON(`/api/analysis/${id}/claims?${qs(params)}`),
   conflicts: (id, params) => getJSON(`/api/analysis/${id}/conflicts?${qs(params)}`),
   trustCoverage: (id, rules) => getJSON(`/api/analysis/${id}/trust-coverage?${qs({ rules: rules.join(",") })}`),

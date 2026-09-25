@@ -115,7 +115,7 @@ function Body() {
             </div>
             {data.items.length === 0
               ? <div className="empty" style={{ maxWidth: "none" }}><div className="eyebrow">No matches</div><p>No address matches these filters. Loosen the source, relationship or search filter.</p></div>
-              : <div className="records" style={{ opacity: loading ? 0.6 : 1 }}>{data.items.map((it) => <Item key={it.address} it={it} />)}</div>}
+              : <div className="records" style={{ opacity: loading ? 0.6 : 1 }}>{data.items.map((it) => <Item key={`${it.chain || ""}:${it.address}`} it={it} />)}</div>}
           </>
         )}
       </Section>
@@ -130,7 +130,7 @@ function Item({ it }) {
   return (
     <article className="record" style={{ cursor: "default" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
-        <Link className="mono" to={`/address?q=${encodeURIComponent(it.address)}`}>{it.address}</Link>
+        <Link className="mono" to={`/address?q=${encodeURIComponent(it.address)}${it.chain ? `&chain=${encodeURIComponent(it.chain)}` : ""}`}>{it.address}</Link>{it.chain && <span className="mut small"> · {it.chain}</span>}
         <span className="fnt" style={{ fontSize: 11.5 }}>{it.outcome}{it.circular ? " · circular corroboration" : ""}</span>
       </div>
       <div className="grid3" style={{ gap: 16, gridTemplateColumns: `repeat(${Math.min(it.claims.length + 1, 4)}, 1fr)` }}>

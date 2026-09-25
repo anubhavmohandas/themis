@@ -124,7 +124,7 @@ function ClaimsBody() {
             <div className="tablewrap" style={{ opacity: loading ? 0.6 : 1 }}>
               <table>
                 <thead><tr>
-                  <th>Address</th><th>Raw label</th><th>Category</th><th>Source</th><th>Evidence</th><th>Provenance</th><th>Last revised</th><th>Agreement</th>
+                  <th>Address</th><th>Chain</th><th>Raw label</th><th>Entity</th><th>Category</th><th>Source</th><th>Evidence</th><th>Provenance</th><th>Last revised</th><th>Agreement</th>
                 </tr></thead>
                 <tbody>
                   {data.claims.map((c, i) => {
@@ -133,8 +133,10 @@ function ClaimsBody() {
                     const pv = PROVENANCE[c.provenance] || { label: c.provenance, tone: "mut" };
                     return (
                       <tr key={`${c.address}-${c.source}-${i}`}>
-                        <td className="mono"><Link to={`/address?q=${encodeURIComponent(c.address)}`}>{c.address}</Link></td>
-                        <td className="mono small mut">{c.raw_label}</td>
+                        <td className="mono"><Link to={`/address?q=${encodeURIComponent(c.address)}${c.chain ? `&chain=${encodeURIComponent(c.chain)}` : ""}`}>{c.address}</Link></td>
+                        <td className="small mono mut">{c.chain || "—"}</td>
+                        <td className="mono small mut" title={c.label_cell ? `one of the labels in "${c.label_cell}"` : undefined}>{c.raw_label}</td>
+                        <td className="mono small mut">{c.entity || "—"}</td>
                         <td>{humanize(c.canon)}</td>
                         <td>{c.source}</td>
                         <td><Status tone={t.tone}>{t.label}</Status></td>

@@ -27,6 +27,27 @@ with open(os.path.join(c, "normal.csv"), "w", newline="") as f:
     w = csv.writer(f); w.writerow(["address", "label", "source"])
     for i in range(40):
         w.writerow([btc_address(i), ("exchange", "ransomware", "mixer")[i % 3], "Src A" if i % 2 else "Src B"])
+# a synthetic multi-chain file: the chain is stated per row, some identifiers are invalid on their chain
+# (lowercased Base58, a URL-ish string), and each row may carry several labels
+import hashlib
+_B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+def _btc(i):
+    payload = b"\x00" + hashlib.sha256(f"e2e-{i}".encode()).digest()[:20]
+    raw = payload + hashlib.sha256(hashlib.sha256(payload).digest()).digest()[:4]
+    n, out = int.from_bytes(raw, "big"), ""
+    while n:
+        n, r = divmod(n, 58); out = _B58[r] + out
+    return "1" * (len(raw) - len(raw.lstrip(b"\x00"))) + out
+with open(os.path.join(c, "multichain.csv"), "w", newline="") as f:
+    w = csv.writer(f); w.writerow(["chain", "address", "categories", "entity", "source"])
+    for i in range(60):
+        w.writerow(["ethereum_mainnet", "0x" + hashlib.sha256(f"eth-{i}".encode()).hexdigest()[:40],
+                    ["exchange", "mixer", "exchange,mixer", "scam"][i % 4], "acme" if i % 3 == 0 else "", ["heuristic", "external", "ground_truth"][i % 3]])
+    for i in range(20):
+        w.writerow(["bitcoin_mainnet", _btc(i), "exchange", "", "external"])
+    for i in range(30):
+        w.writerow(["bitcoin_mainnet", _btc(100 + i).lower(), "exchange", "", "external"])   # case-folded: fails its checksum
+
 with open(os.path.join(c, "xss.csv"), "w", newline="") as f:
     w = csv.writer(f); w.writerow(["address", "label", "source", HOSTILE])
     for i in range(15):

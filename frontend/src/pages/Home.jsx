@@ -40,7 +40,11 @@ export default function HomePage() {
     if (!file) return undefined;
     let cancelled = false;
     setHash(undefined);
-    sha256(file).then((h) => { if (!cancelled) setHash(h); }).catch(() => { if (!cancelled) setHash(null); });
+    // the limit comes from the server's config: the browser must read the whole file to hash it, which crashes the tab on a huge one
+    api.health()
+      .then((h) => (file.size <= h.browser_hash_max_bytes ? sha256(file) : null))
+      .then((h) => { if (!cancelled) setHash(h); })
+      .catch(() => { if (!cancelled) setHash(null); });
     return () => { cancelled = true; };
   }, [file]);
 
@@ -60,6 +64,7 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file, editKey, chain, confirmed]);
 
+  const resetMapping = () => { setEdits({}); setChain(null); setConfirmed(false); };
   const pick = (f) => { if (f) { setEdits({}); setChain(null); setConfirmed(false); setPf(null); setFile(f); setSourceId((f.name || "uploaded_dataset").replace(/\.(csv|gz)+$/i, "") || "uploaded_dataset"); } };
 
   const finish = (j) => {
@@ -99,7 +104,9 @@ export default function HomePage() {
                 <div><span className="mut">file </span>{file.name}</div>
                 <div><span className="mut">size </span>{bytes(file.size)}{pf ? ` · ${fmt(pf.n_rows)} rows · ${pf.fieldnames.length} columns` : ""}</div>
                 <div style={{ wordBreak: "break-all" }}><span className="mut">sha-256 </span>
-                  {hash === undefined ? "computing…" : hash === null ? "unavailable in this browser context" : hash}</div>
+                  {hash === undefined ? "computing…" : hash === null
+                    ? (p?.input?.sha256 ? `${p.input.sha256} (computed by the server: too large to hash in the browser)` : "computed by the server once the pre-flight returns")
+                    : hash}</div>
               </div>
             )}
 
@@ -129,6 +136,12 @@ export default function HomePage() {
               </Section>
 
               <Section title="3 · Schema mapping" note="What THEMIS took each column to mean, from its name and its values. Correct anything: the server re-validates every choice, and a mapping can never waive validation.">
+                {Object.keys(edits).length > 0 && (
+                  <div className="inline-note" style={{ marginBottom: 8 }}>
+                    {Object.keys(edits).length} mapping{Object.keys(edits).length === 1 ? "" : "s"} set by you: {Object.keys(edits).join(", ")}.{" "}
+                    <button type="button" className="chip-btn plain" onClick={resetMapping}>Reset to THEMIS's inferred mapping</button>
+                  </div>
+                )}
                 <MappingTable p={p} fields={pf.semantic_fields}
                   onChange={(col, sem) => setEdits({ ...edits, [col]: sem })} />
                 <ConfirmMapping p={p} confirmed={confirmed} onChange={setConfirmed} />

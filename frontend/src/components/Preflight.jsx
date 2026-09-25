@@ -26,6 +26,19 @@ export function PreflightChecks({ p }) {
 // fields it lacks; a merely blocked one lists what to fix.
 export function PreflightVerdict({ p }) {
   if (p.can_analyze) return null;
+  if (p.dataset_state === "attribution_like_schema_unresolved" && p.established?.length) {
+    // what THEMIS established (from the backend), then why nothing ran: never "not attribution data"
+    return (
+      <div className="inline-note" role="alert">
+        <strong>Attribution-like data: THEMIS could not establish a schema automatically</strong>
+        <div style={{ marginTop: 6 }}>Nothing was analysed. What THEMIS established:</div>
+        <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>{p.established.map((t, i) => <li key={i}>{t}</li>)}</ul>
+        <div style={{ marginTop: 6 }}>Why it stopped:</div>
+        <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>{p.blockers.map((b) => <li key={b.code}>{b.message}</li>)}</ul>
+        <div className="mut" style={{ marginTop: 6, fontSize: 11.5 }}>Correct a mapping below if THEMIS misread a column; a mapping is re-validated against the column's values and cannot waive that check.</div>
+      </div>
+    );
+  }
   const unsupported = p.status === "unsupported";
   const [headline, ...rest] = (p.message || "").split("\n");
   return (
@@ -80,7 +93,7 @@ export function MappingTable({ p, fields, onChange }) {
 // when it was detected the user can still override it.
 export function ChainPicker({ p, chains, value, onChange }) {
   const ch = p.chain;
-  if (ch.status === "not_required") return null;
+  if (ch.status === "not_required" || ch.status === "per_row") return null;   // per row: the file states it, see the checks above
   const need = ch.status === "undetermined" || ch.status === "ambiguous";
   return (
     <label className="field" style={{ marginTop: 12 }}>

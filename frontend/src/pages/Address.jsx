@@ -12,21 +12,22 @@ export default function AddressPage() {
 }
 
 function AddressBody() {
-  const { analysisId, chain } = useAnalysis();
+  const { analysisId } = useAnalysis();
   const [sp, setSp] = useSearchParams();
   const q = (sp.get("q") || "").trim();
+  const chainParam = (sp.get("chain") || "").trim();
   const [text, setText] = useState(q);
   useEffect(() => setText(q), [q]);
   const submit = () => setSp(text.trim() ? { q: text.trim() } : {});
 
-  const { data, error, loading } = useApiData(() => (q ? api.address(analysisId, q) : null), [analysisId, q]);
+  const { data, error, loading } = useApiData(() => (q ? api.address(analysisId, q, chainParam || undefined) : null), [analysisId, q, chainParam]);
 
   return (
     <div>
       <PageHead kicker="Address Inspector" mono={!!(q && data?.found)} title={q && data?.found ? q : "Inspect one address"}
         lead={q && data?.found ? undefined : "Every attribution claim for one address, side by side and never merged, with the provenance root each claim traces to."}>
         {q && data?.found && <>
-          {chain && <Tag>{chain}</Tag>}
+          {data.chain && <Tag>{data.chain}</Tag>}
           <button type="button" className="chip-btn plain" onClick={() => { try { navigator.clipboard.writeText(q); } catch { /* clipboard unavailable */ } }}>Copy</button>
         </>}
       </PageHead>
@@ -39,7 +40,15 @@ function AddressBody() {
       {!q && <StartFromConflict />}
       {q && loading && <Loading>Reading claims…</Loading>}
       {error && <ErrorBox title="Could not inspect this address">{error}</ErrorBox>}
-      {q && data && !data.found && (
+      {q && data?.ambiguous && (
+        <div className="inline-note" role="alert">
+          <strong>This address string is on more than one chain.</strong> {data.message}
+          <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+            {data.chains.map((c) => <Link key={c} className="btn secondary" to={`/address?q=${encodeURIComponent(q)}&chain=${encodeURIComponent(c)}`}>{c}</Link>)}
+          </div>
+        </div>
+      )}
+      {q && data && !data.found && !data.ambiguous && (
         <Empty eyebrow="Address not found" action={<Link className="btn secondary" to="/claims">Browse claims</Link>}>
           No claim in this analysis names this address. THEMIS only knows addresses that appear in the loaded claims; a missing address is absence of evidence, not evidence of absence.
         </Empty>

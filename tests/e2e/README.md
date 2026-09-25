@@ -15,4 +15,4 @@ python -m http.server 4999 --bind 127.0.0.1 --directory $E2E/foreign &   # any s
 npm i --prefix $E2E playwright-core && cp tests/e2e/e2e.mjs $E2E/ && (cd $E2E && SP=$E2E node e2e.mjs)
 ```
 
-Results go to `$E2E/e2e-results.json`. Last run: 16/16 (see THEMIS_RELEASE_READINESS_REPORT.md).
+Results go to `$E2E/e2e-results.json`. Last run: 18/18 (16 workflows, plus H1/H2: a synthetic multi-chain file with a per-row chain, and a mapping that does not fit the values).

@@ -286,8 +286,8 @@ function UploadOverview() {
         lead={`${meta.dataset_name}: provenance, agreement with the reference corpus, independence and currency for the addresses in your file. Every figure carries its denominator; click a figure to open the records behind it.`} />
 
       <MetricStrip items={[
-        { label: "Target claims", value: fmt(ta.n_target_claims), sub: `${fmt(v.n_valid)} of ${fmt(v.n_input)} rows became claims (address syntax checked; not a verification)` },
-        { label: "Target addresses", value: nT, sub: "distinct addresses in the file" },
+        { label: "Target claims", value: fmt(ta.n_target_claims), sub: `${fmt(ta.n_target_claims)} claims from ${fmt(v.n_valid)} of ${fmt(v.n_input)} rows (identifier syntax checked; not a verification)` },
+        { label: "Target addresses", value: nT, sub: "distinct identifiers, each on its own chain" },
         hasReference
           ? { label: "Reference match", value: pct(rc.comparable_share), sub: `${fmt(rc.comparable)} / ${nT} also named in the reference corpus`, to: "/claims?comparable=yes", top: true }
           : { label: "Reference match", value: "not run", text: true, sub: "reference comparison was switched off" },
@@ -418,13 +418,28 @@ function UploadOverview() {
         </Section>
       )}
 
+      {v.per_chain && Object.keys(v.per_chain).length > 0 && (
+        <Section title="Identifier validity by chain" meta={`${fmt(v.n_identifiers_checked)} identifiers checked`}
+          note="Each identifier is checked under the chain its own row states. Valid means syntactically valid on that chain; it says nothing about whether the label is true.">
+          <div className="tablewrap"><table>
+            <thead><tr><th>Chain</th><th className="num">Checked</th><th className="num">Failed</th><th className="num">Valid</th><th>EIP-55 checksum</th></tr></thead>
+            <tbody>{Object.entries(v.per_chain).map(([cid, st]) => (
+              <tr key={cid}><td className="mono">{cid}</td><td className="num">{fmt(st.checked)}</td><td className="num">{fmt(st.invalid)}</td>
+                <td className="num">{st.valid_share == null ? "—" : pct(st.valid_share)}</td>
+                <td className="small mut">{v.checksum_states?.[cid] ? Object.entries(v.checksum_states[cid]).map(([k2, n2]) => `${k2.replace(/_/g, " ")}: ${fmt(n2)}`).join(" · ") : "not applicable"}</td></tr>
+            ))}</tbody>
+          </table></div>
+        </Section>
+      )}
+
       {v.n_rejected > 0 && (
-        <Section title="Rejected rows" meta={`${fmt(v.n_rejected)} of ${fmt(v.n_input)} input rows`}>
+        <Section title="Rejected rows" meta={`${fmt(v.n_rejected)} of ${fmt(v.n_input)} input rows`}
+          note={Object.entries(v.rejected_by_reason || {}).map(([k2, n2]) => `${k2}: ${fmt(n2)}`).join(" · ")}>
           <div className="tablewrap"><table>
             <thead><tr><th>Row</th><th>Reason</th><th>Address</th></tr></thead>
-            <tbody>{v.rejected.slice(0, 10).map((x, i) => <tr key={i}><td className="mono">{x.row}</td><td>{x.reason}</td><td className="mono small">{x.address || "—"}</td></tr>)}</tbody>
+            <tbody>{(v.rejected_examples || []).slice(0, 10).map((x, i) => <tr key={i}><td className="mono">{x.row}</td><td>{x.reason}</td><td className="mono small">{x.address || "—"}</td></tr>)}</tbody>
           </table>
-          {v.rejected.length > 10 && <div className="tablefoot">Showing 10 of {fmt(v.rejected.length)} rejected rows.</div>}
+          <div className="tablefoot">Showing {fmt(Math.min(10, (v.rejected_examples || []).length))} example rows; every rejected row is counted above by reason.</div>
           </div>
         </Section>
       )}
