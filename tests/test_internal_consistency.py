@@ -80,13 +80,36 @@ class TestInternalConsistencyTaxonomy(unittest.TestCase):
         self.assertEqual(sum(counts.values()), 0)
 
     def test_unmapped_labels_contribute_no_interpretable_opinion(self):
-        # both claims are canon "unknown" (an unmapped vocabulary): nothing to compare, so this
-        # is neither a repeat nor a contradiction, mirroring classify_address's own "unknown
-        # claims contributed no usable opinion" rule
+        # both claims are canon "unknown" (an unmapped vocabulary): they cannot be judged compatible
+        # or incompatible, so none of the four interpretable buckets may claim the subject ...
         a = btc_address(7)
         claims = [claim(1, "unknown", a, raw="code-A"), claim(2, "unknown", a, raw="code-B")]
         counts = self._n(claims)
-        self.assertEqual(sum(counts.values()), 0)
+        for k in ("repeated observation", "repeated same label", "compatible multi-label claim",
+                  "internal contradiction"):
+            self.assertEqual(counts[k], 0, k)
+
+    def test_unmapped_distinct_labels_on_one_subject_are_accounted_for_not_silently_dropped(self):
+        # ... but the subject DID carry two different labels. A measured zero must not hide it:
+        # it lands in the explicit "uninterpretable multi-label" bucket
+        a = btc_address(7)
+        claims = [claim(1, "unknown", a, raw="code-A"), claim(2, "unknown", a, raw="code-B")]
+        self.assertEqual(self._n(claims)["uninterpretable multi-label"], 1)
+
+    def test_an_unmapped_label_beside_a_mapped_one_is_not_a_repeated_same_label(self):
+        # "code-A" is not known to be the same category as "exchange"; counting it as a repeat of
+        # the mapped label would overstate agreement
+        a = btc_address(13)
+        counts = self._n([claim(1, "exchange", a, raw="exchange"), claim(2, "unknown", a, raw="code-A")])
+        self.assertEqual(counts["repeated same label"], 0)
+        self.assertEqual(counts["uninterpretable multi-label"], 1)
+
+    def test_a_repeated_unmapped_label_is_a_repeated_observation(self):
+        # byte-identical claims need no interpretation to be recognised as the same thing said twice
+        a = btc_address(14)
+        counts = self._n([claim(1, "unknown", a, raw="code-A"), claim(2, "unknown", a, raw="code-A")])
+        self.assertEqual(counts["repeated observation"], 1)
+        self.assertEqual(counts["uninterpretable multi-label"], 0)
 
     def test_three_compatible_labels_on_one_branch_are_still_compatible(self):
         a = btc_address(8)
@@ -144,6 +167,15 @@ class TestPipelineExposesRealInternalConsistency(unittest.TestCase):
                 dict(address=btc_address(12), label="exchange")]
         res = self._ingest(rows, ["address", "label"])
         self.assertEqual(res["internal_consistency"]["internal contradiction"]["n"], 1)
+
+    def test_a_file_with_only_unmapped_labels_does_not_report_a_bare_zero_for_a_multi_label_subject(self):
+        a = btc_address(15)
+        rows = [dict(address=a, label="code-A"), dict(address=a, label="code-B"),
+                dict(address=btc_address(16), label="code-A")]
+        res = self._ingest(rows, ["address", "label"])
+        ic = res["internal_consistency"]
+        self.assertEqual(ic["internal contradiction"]["n"], 0)
+        self.assertEqual(ic["uninterpretable multi-label"]["n"], 1)
 
 
 if __name__ == "__main__":

@@ -230,7 +230,8 @@ OUTCOMES = ["exact", "hierarchical refinement", "entity-type conflict",
 
 #: internal_consistency bucket names, most to least informative
 INTERNAL_CONSISTENCY_OUTCOMES = ["repeated observation", "repeated same label",
-                                 "compatible multi-label claim", "internal contradiction"]
+                                 "compatible multi-label claim", "internal contradiction",
+                                 "uninterpretable multi-label"]
 
 
 def internal_consistency(claims: list[dict]) -> dict:
@@ -255,9 +256,10 @@ def internal_consistency(claims: list[dict]) -> dict:
         (the relationship `classify_address` calls "hierarchical refinement").
       - internal contradiction: different categories that cannot both be true - opposite polarity, or
         unrelated branches (the relationship `classify_address` calls a conflict).
-
-    A subject whose claims are all `canon: unknown` is left out: it made no interpretable claim to
-    contradict itself with, so it is neither repetition nor contradiction.
+      - uninterpretable multi-label: the claims differ and at least one is `canon: unknown` (a label
+        the taxonomy cannot place), so whether they are compatible or contradictory cannot be judged.
+        This is not a contradiction and not agreement; it is counted so that a zero in the four
+        buckets above is never a zero over subjects that were silently skipped.
     """
     by_subject = collections.defaultdict(list)
     for c in claims:
@@ -267,13 +269,15 @@ def internal_consistency(claims: list[dict]) -> dict:
     for subject, group in by_subject.items():
         if len(group) < 2:
             continue
-        cats = {c["canon"] for c in group if c["canon"] != "unknown"}
-        if not cats:
-            continue
-        if len(cats) == 1:
-            first = group[0]
-            identical = all(c.get("raw_label") == first.get("raw_label")
-                            and c.get("source") == first.get("source") for c in group)
+        canons = {c["canon"] for c in group}
+        cats = canons - {"unknown"}
+        first = group[0]
+        identical = all(c.get("raw_label") == first.get("raw_label")
+                        and c.get("source") == first.get("source") for c in group)
+        if "unknown" in canons:
+            # byte-identical claims need no interpretation to be a repeat; anything else cannot be judged
+            bucket = "repeated observation" if identical and not cats else "uninterpretable multi-label"
+        elif len(cats) == 1:
             bucket = "repeated observation" if identical else "repeated same label"
         else:
             rel = label_relationship(cats)

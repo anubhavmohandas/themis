@@ -103,7 +103,7 @@ function Found({ data }) {
             tone: (ind.confirmed_independent_root_count ?? 0) < (ind.apparent_dataset_count ?? 0) ? "hot" : "" },
           { label: "Unresolved relationships", value: fmt(ind.unresolved_source_count) },
           { label: "Conflict", value: outcome ? (isConflict ? "Yes" : "No") : "No", tone: isConflict ? "hot" : "",
-            sub: outcome ? outcome.label : "single-source: nothing to compare" },
+            sub: outcome ? outcome.label : "single-source: no cross-source comparison possible" },
         ]} />
 
         <Section title="Apparent vs. independent corroboration">
