@@ -552,3 +552,74 @@ live export, WatchYourBack's GPL reach) could make the public repository inappro
 license is unconfirmed. Author actions, in order: (1) choose the `demo_data/` policy (§25.2); (2) ask IAR about IP, then pick a license; (3) decide
 the 87 `#` WatchYourBack records (§25.6); (4) fix the paper's "openly redistributable" sentence and the "highest declared confidence" wording. The
 artifact is otherwise frozen: no further engineering work is open.
+
+## 26. THIRD-PARTY DATA REDISTRIBUTION DECISION LOOP (licensing investigation only)
+
+Date: 2026-09-24. Full record: `THIRD_PARTY_DATA_REDISTRIBUTION.md` (inventory, per-source evidence with URLs, the
+matrix, git impact, options, recommendation). Nothing in `demo_data/`, git history, the paper, the corpus, the code or
+the licence state was changed. Sections above are historical; where §13 and §25.2 differ from this section, this section
+is current: §13's "60.24% unconfirmed" predates the Ransomwhere downgrade (**60.98%** of corpus claims is now unconfirmed;
+39.02% confirmed), and §25.2's "89 commits" is now 92.
+
+### 26.1 What is redistributed (OBSERVED)
+
+`demo_data/` tracks 5 files, all `NORMALIZED`/`DERIVED`/`AGGREGATED` (none verbatim, none synthetic):
+`observations_sample.csv.gz` (268,891 normalized claims), `revenue.csv.gz` (61,508 per-address USD totals),
+`verified_anchors.txt.gz` (146,243 bare addresses), `ground_truth.csv` (289 addresses: OFAC 185 + WatchYourBack 104),
+`manifest.json` (counts only). 139,717 of the 268,891 sample rows (51.96%) come from sources with no confirmed
+redistribution permission. Every file except `manifest.json` mixes confirmed and unconfirmed sources.
+
+### 26.2 Source-by-source status (OBSERVED 2026-09-24)
+
+| source | exact artifact | licence found | status |
+|---|---|---|---|
+| GraphSense TagPack | git clone `7f9a5d1` | MIT (`LICENSE`, © Iknaio, © AIT); the repository is the data | **CONFIRMED REDISTRIBUTABLE** |
+| Schnöring et al. (the seventh corpus source) | figshare v3 `addresses.csv` | CC BY 4.0 (figshare API, v3) | **CONFIRMED REDISTRIBUTABLE** |
+| OFAC SDN (ground truth only; not a corpus source) | `sdn_advanced.xml` | none published; 17 U.S.C. § 105(a) (US Government work) | **CONFIRMED REDISTRIBUTABLE** (statutory basis only) |
+| Elliptic++ | `wallets_classes.csv`, authors' Drive | none: GitHub `license: null`, no LICENSE file, README/paper/issue #4 searched; Drive listing not enumerable | **UNCONFIRMED** |
+| Rodwald ransomware / mixers | `BTC_Ransom.csv`, `BTC_Mixers.csv` | none: 4,973-byte page has 0 licence/terms/copyright tokens; the files also embed walletexplorer.com / blockchain.info data | **UNCONFIRMED** |
+| Ransomwhere | live export 2026-09-20 | CC BY 4.0 on the Zenodo deposit v1.1.0 only | **UNCONFIRMED** |
+| WatchYourBack | `btc_resolv.csv` | GPL-3.0 for the repository (software); not shown to govern the data; the file's 309 rows cite 30 other publishers | **UNCONFIRMED** |
+
+**Ransomwhere, measured.** The Zenodo v1.1.0 file (md5 matches the Zenodo record) was compared record by record with
+the retained live export: the live export has **8 records the deposit lacks** (all Akira, created 2024-10-29) and
+**2,229 shared records whose USD values differ** (after re-pricing); 11,178 addresses' observation fields (address,
+family, date, transaction hash/time/amount) are identical, 8,949 records are byte-identical. The CC BY licence is
+therefore established for the deposit, not for the artifact THEMIS used, and is not transferred. The site's text
+(server-rendered, so an earlier note calling it client-rendered is wrong) has no licence statement, says the data
+are "entirely publicly available", and cites the Zenodo DOI for citation. Live API: HTTP 502 today.
+
+### 26.3 Git history (OBSERVED)
+
+Public since 2026-09-16; 0 forks/stars/watchers; `main` only; `HEAD = origin/main = 30ffd0b` (all 92 commits are on
+GitHub; the local tags `v1.0-paper*` are not). `demo_data/` is in all 92 commits from the first (`b47da84`) and was
+changed in 6 (`b47da84`, `627fa53`, `95ff42f`, `5736bea`, `57e2cc5`, `6245e0c`): 10 blob versions, 6 of which carry
+third-party records (`observations_sample` 1 blob in 92 commits; `verified_anchors` 1 in 92; `revenue` 2, in 60 and
+32; `ground_truth` 2, in 39 and 53; `manifest.json` 4, aggregates only). `git rm` removes files from `HEAD` only; the
+blobs stay reachable from every earlier commit. Removal from history needs `git filter-repo` (not installed) or BFG,
+changes all 92 hashes, a force-push, and re-cut tags and release hashes; clones, forks and GitHub caches can retain
+the data. **No rewrite was performed or prepared.**
+
+### 26.4 Options and recommendation (author's choice, not made)
+
+* **A, keep:** only TagPack (MIT notice), Schnöring (CC BY: credit, licence link, indicate changes) and OFAC; the files
+  would first have to be rebuilt per source, and the six historical blobs are unaffected.
+* **B, `git rm` at `HEAD`:** minimal and reversible; history (all 92 commits) still serves the blobs, so it does not
+  by itself address distribution through history. Sufficiency is a risk judgment left to the author.
+* **C, remove + rewrite history:** removes the blobs from `main`; all hashes change, force-push, stale tags/hashes,
+  copies persist elsewhere. Cost is smallest now (one branch, one author, 0 forks).
+* **Conservative release policy under uncertainty (not a legal conclusion):** do not include the third-party rows of
+  Elliptic++, Rodwald, Ransomwhere (live export) or WatchYourBack until permission is confirmed. The release
+  ZIP already excludes `demo_data/`. Recommended order: ask the four parties for written confirmation, then B at
+  minimum; C if history must stop serving unconfirmed rows.
+* **Reproducibility without rows:** yes for Elliptic++, Rodwald and WatchYourBack (fetch, recorded SHA-256, adapters, and
+  aggregate `expected_output/`); only **partly** for Ransomwhere (the live export is a moving target and the
+  licence-clean Zenodo copy differs in 8 records and 2,229 USD values, impact not measured); the
+  WatchYourBack subset of `ground_truth.csv` and of the anchor set has no regenerating script.
+
+### 26.5 Status
+
+**CONDITIONALLY READY — EXTERNAL CONFIRMATION REQUIRED**, unchanged: permission is confirmed for 3 of the 8 tracked
+sources (TagPack, Schnöring, OFAC) and not for the other 5 (Elliptic++, Rodwald ransomware, Rodwald mixers,
+Ransomwhere live export, WatchYourBack). Author decisions pending: the `demo_data/` policy (A/B/C), the four permission
+requests, the software licence, and the paper's "openly redistributable" wording.
