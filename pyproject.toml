@@ -1,7 +1,7 @@
 [project]
 name = "themis"
 version = "1.0.0"
-description = "Provenance-aware auditing of public Bitcoin attribution labels"
+description = "Provenance-aware auditing of public cryptocurrency attribution labels"
 requires-python = ">=3.10"
 dependencies = ["pyyaml>=6"]
 

@@ -531,7 +531,7 @@ def main(argv=None):
     p = argparse.ArgumentParser(
         prog="themis",
         description="THEMIS - Trust and Evidence-based Heuristic Method for "
-                    "Investigative Source Assessment. Audits public Bitcoin "
+                    "Investigative Source Assessment. Audits public cryptocurrency "
                     "attribution labels: provenance, independence, currency, and "
                     "their effect on a forensic figure.")
     p.add_argument("--observations", help="full observations.csv(.gz) from scripts/build_corpus.py; "

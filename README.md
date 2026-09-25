@@ -1,8 +1,9 @@
 # THEMIS
 
 **T**rust and **E**vidence-based **H**euristic **M**ethod for **I**nvestigative
-**S**ource Assessment — provenance-aware auditing of public Bitcoin attribution
-labels, built alongside the paper *Provenance Before Precision: Auditing Public
+**S**ource Assessment — provenance-aware auditing of public cryptocurrency
+attribution labels (Bitcoin, and the EVM chains in `themis/config/chains.yml`; the paper's
+seven-source study is Bitcoin), built alongside the paper *Provenance Before Precision: Auditing Public
 Bitcoin Attribution Labels and Their Effect on Forensic Conclusions* (ICISHCT
 2026, under review).
 
@@ -159,7 +160,7 @@ page of the dashboard shows the same verification matrix, fetched from the API.
 Figures need `pip install -e ".[figures]"` (matplotlib); without it their data
 files are still written.
 
-## 7. Uploading a new Bitcoin attribution CSV
+## 7. Uploading a new cryptocurrency attribution CSV
 
 Dashboard: Upload → pre-flight → confirm schema → run. CLI: `themis ingest FILE
 --source-id NAME [--map role=column ...] [--reference OBS | --no-reference]`.
