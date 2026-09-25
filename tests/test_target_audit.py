@@ -170,5 +170,25 @@ class TestProvenanceIndependenceCases(unittest.TestCase):
         self.assertEqual(r["address_comparability"]["a7"], target_audit.DISTINCT_PROVENANCE)
 
 
+class TestReferenceIndependenceIsNotCreditedToTheTarget(unittest.TestCase):
+    """Two distinct roots that both belong to reference sources do not make the target's own,
+    unresolved provenance distinct, and must not appear as the target's confirmed independence."""
+
+    def test_an_unresolved_target_claim_next_to_two_reference_roots_stays_unresolved(self):
+        from themis import corpus as corpus_mod
+        base = dict(polarity="illicit", prov_family="", lastmod="", heuristic="", subcat="")
+        ref = corpus_mod.Corpus([dict(base, address="a1", source="ransomwhere", raw_label="x", canon="ransomware"),
+                                 dict(base, address="a1", source="tagpack", raw_label="x", canon="ransomware")])
+        roots = {c["root"] for c in ref.by_addr["a1"]}
+        self.assertEqual(len(roots), 2)                       # two resolved, distinct reference roots
+        mine = [dict(base, address="a1", blockchain="bitcoin", source="upload", raw_label="x", canon="ransomware")]
+        r = target_audit.audit_target_against_reference(mine, ref)
+        self.assertEqual(r["address_comparability"]["bitcoin:a1"], target_audit.RELATIONSHIP_UNRESOLVED)
+        ind = r["profile"]["independence"]
+        self.assertEqual(ind["confirmed_independent_multi_root"], 0)
+        self.assertEqual(ind["independence_unresolved"], 1)
+        self.assertEqual(ind["apparent_multi_source"], 1)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

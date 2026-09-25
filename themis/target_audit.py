@@ -116,8 +116,14 @@ def _address_status(target_claims_here, ref_claims_here, inheritance):
     shared_roots = {r for r in target_roots & ref_roots if not provenance.is_unresolved(r)}
     if shared_roots:
         return SAME_PROVENANCE, "resolved"
+    # DISTINCT means the TARGET's provenance is distinct from the reference's. Two distinct roots that both
+    # come from reference sources say nothing about the target: unless the target contributes a resolved root
+    # of its own, its relationship to the reference stays unresolved (reference-reference independence must
+    # never be credited to the target).
+    target_resolved = {r for r in target_roots if not provenance.is_unresolved(r)}
+    ref_resolved = {r for r in ref_roots if not provenance.is_unresolved(r)}
     combo_indep = provenance.address_independence(target_claims_here + ref_claims_here)
-    if combo_indep["confirmed_independent_root_count"] >= 2:
+    if target_resolved and ref_resolved and combo_indep["confirmed_independent_root_count"] >= 2:
         return DISTINCT_PROVENANCE, "resolved"
     if flagged:
         return RELATIONSHIP_UNRESOLVED, "partially_resolved"
@@ -158,14 +164,22 @@ def audit_target_against_reference(target_claims: list[dict], reference_corpus,
     n_incomparable = n_addr - n_comparable
     total_outcomes = sum(outcome_counter.values()) or 1
 
-    apparent_multi = sum(1 for r in indep_rows.values() if r["apparent_dataset_count"] >= 2)
-    confirmed_multi = sum(1 for r in indep_rows.values() if r["confirmed_independent_root_count"] >= 2)
-    shared_only = sum(1 for a, r in indep_rows.items()
-                      if r["apparent_dataset_count"] >= 2 and r["confirmed_independent_root_count"] < 2
-                      and r["unresolved_source_count"] == 0)
-    indep_unresolved = sum(1 for r in indep_rows.values()
-                           if r["apparent_dataset_count"] >= 2 and r["unresolved_source_count"] > 0
-                           and r["confirmed_independent_root_count"] < 2)
+    # Every address several datasets speak about falls in exactly one bucket. Confirmed independence needs
+    # >= 2 resolved roots AND a resolved root of the target's own: roots that only reference sources hold
+    # cannot be credited to the target.
+    apparent_multi = confirmed_multi = shared_only = indep_unresolved = 0
+    for addr, r in indep_rows.items():
+        if r["apparent_dataset_count"] < 2:
+            continue
+        apparent_multi += 1
+        target_resolved = any(not provenance.is_unresolved(c.get("root", provenance.root_of(c)))
+                              for c in by_addr[addr])
+        if r["confirmed_independent_root_count"] >= 2 and target_resolved:
+            confirmed_multi += 1
+        elif r["unresolved_source_count"] > 0:
+            indep_unresolved += 1
+        else:
+            shared_only += 1
 
     fresh = analysis.freshness(target_claims, as_of=analysis_as_of_date)
     prov_resolution = collections.Counter(resolution.values())
