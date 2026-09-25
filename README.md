@@ -191,6 +191,7 @@ data, and distinguishes four cases instead of one generic rejection:
 | input | result |
 |---|---|
 | **Supported-chain attribution data** (Bitcoin: base58check, bech32/bech32m; Ethereum, BNB Smart Chain, Polygon, Avalanche C-Chain: `0x` + 40 hex, EIP-55 reported separately from validity) | runs the full pipeline; the chain is stated per row, per file, or chosen by you (an EVM address is valid on every EVM chain, so it is never guessed) |
+| **Attribution-like, schema unresolved** (identifier column that fails validation next to attribution labels) | stops, and says what was established (labels, the chain the file states) and why nothing ran; it is not called "not attribution data" |
 | **Crypto, not attribution** (e.g. a price series with a `symbol` column naming BTC) | stops: recognised as cryptocurrency-related but not attribution data — via an opt-in `symbol_aliases` content signal on the chain adapter, never from a filename |
 | **Unsupported-chain attribution** (e.g. Tron) | stops: identified as crypto attribution data on a chain THEMIS does not support, via a chain-agnostic token-shape fallback |
 | **Non-crypto** | stops: no address-shaped column and no asset-identity signal, with an explanation of what was looked for |

@@ -16,7 +16,7 @@ the user names as the subject is validated exactly like an inferred one.
 Every rule and threshold is read from config/preflight.yml.
 """
 from __future__ import annotations
-import datetime, hashlib, json, re
+import collections, datetime, hashlib, json, re
 
 from .. import chains, config_io
 from ..errors import InputError
@@ -65,6 +65,11 @@ CRYPTO_NON_ATTRIBUTION_MESSAGE = (
 )
 
 
+ATTRIBUTION_LIKE_HEADLINE = ("This file looks like attribution data (an identifier column next to attribution "
+                             "labels), but THEMIS could not establish a schema for it automatically. "
+                             "Nothing was analysed. What THEMIS established:")
+
+
 def cfg() -> dict:
     return config_io.load().preflight
 
@@ -97,8 +102,9 @@ def _is_date(v: str) -> bool:
 class _Profile:
     """What a column's sampled values look like, independent of its name."""
 
-    def __init__(self, name: str, sample: list[str]):
+    def __init__(self, name: str, sample: list[str], positions: list[int] | None = None):
         self.name, self.sample, self.n = name, sample, len(sample)
+        positions = list(range(len(sample))) if positions is None else positions
         n = self.n or 1
         num = [_is_number(v) for v in sample]
         date = [_is_date(v) for v in sample]
@@ -109,9 +115,11 @@ class _Profile:
         self.text = sum(1 for a, b, c in zip(num, date, url) if not (a or b or c)) / n
         self.distinct = len(set(sample))
         ints = [int(v) for v, isnum in zip(sample, num) if isnum and re.fullmatch(r"[+-]?\d+", v.strip())]
-        # a 0,1,2,3... (or 1,2,3...) counter is a row index, whatever it is called
+        # a 0,1,2,3... (or 1,2,3...) counter is a row index, whatever it is called: each value
+        # is its row position plus one constant, whichever rows were sampled
         self.sequential = (self.n >= cfg()["min_sequence_sample"] and len(ints) == self.n
-                           and all(b - a == 1 for a, b in zip(ints, ints[1:])))
+                           and len({v - i for v, i in zip(ints, positions)}) == 1
+                           and all(b > a for a, b in zip(ints, ints[1:])))
 
     def is_numeric(self, c) -> bool:
         return self.n > 0 and self.numeric >= c["numeric_share_min"]
@@ -122,10 +130,6 @@ class _Profile:
 
 def _rate(sample: list[str], validator) -> float:
     return (sum(1 for v in sample if validator(v)) / len(sample)) if sample else 0.0
-
-
-def _chain_aliases() -> dict[str, str]:
-    return chains.alias_map()
 
 
 # ------------------------------------------------------------ semantic scoring
@@ -169,6 +173,14 @@ class _Ctx:
         return self._rates[key]
 
 
+def _identifier_shaped(column: str, ctx: _Ctx) -> bool:
+    """Do the column's values validate as identifiers (addresses) for some supported chain?"""
+    p = ctx.profiles[column]
+    if p.n == 0 or p.sequential or p.is_numeric(ctx.c):
+        return False
+    return max(ctx.subject_rates(column, "address").values(), default=0.0) >= ctx.c["min_identifier_valid_rate"]
+
+
 def _value_score(sem: str, column: str, name_score: float, ctx: _Ctx) -> float:
     c, p = ctx.c, ctx.profiles[column]
     f = c["semantic_fields"][sem]
@@ -184,17 +196,23 @@ def _value_score(sem: str, column: str, name_score: float, ctx: _Ctx) -> float:
         if p.is_numeric(c):
             return 0.0                       # digits-only values are not addresses or hashes
         return max(ctx.subject_rates(column, kind).values(), default=0.0)
-    if sem in ("attribution_label", "attribution_category", "attribution_actor", "attribution_evidence"):
+    if sem in c["identifier_excluded_semantics"] and _identifier_shaped(column, ctx):
+        return 0.0                           # an address is not a label, a grade, a source or a chain name
+    if sem in ("attribution_label", "attribution_category", "attribution_entity", "attribution_actor",
+               "attribution_evidence"):
         return p.text
     if sem == "attribution_source":
         return p.url if name_score == 0 else min(1.0, p.url + p.text)
     if sem == "attribution_confidence":
-        return 1.0 if (p.is_numeric(c) or p.distinct <= c["confidence_categorical_max_distinct"]) else 0.0
+        grades = set(c["confidence_grades"])
+        graded = sum(1 for v in p.sample if _norm(v) in grades) / p.n
+        return 1.0 if p.is_numeric(c) or graded >= c["numeric_share_min"] else 0.0
     if sem == "chain":
-        al = _chain_aliases()
-        return sum(1 for v in p.sample if v.strip().lower() in al) / p.n
+        return sum(1 for v in p.sample if chains.resolve_chain(v)) / p.n
     if sem.startswith("ts_"):
         return p.date
+    if sem in ("market_numeric", "numeric_unclassified"):
+        return p.numeric
     return 0.0
 
 
@@ -264,7 +282,10 @@ def run(rows: list[dict], fieldnames: list[str], *, filename: str | None = None,
 
     n_total = total_rows if total_rows is not None else len(rows)
     n_sample = sample_size or c["sample_size"]
-    profiles = {f: _Profile(f, _detect.sample_values(rows, f, n_sample)) for f in fieldnames}
+    profiles = {}
+    for f in fieldnames:
+        pairs = _detect.sample_pairs(rows, f, n_sample)
+        profiles[f] = _Profile(f, [v for _, v in pairs], [i for i, _ in pairs])
     market = _has_market_signature(fieldnames, profiles, c)
     ctx = _Ctx(c, profiles, chain)
     fields = c["semantic_fields"]
@@ -338,21 +359,31 @@ def run(rows: list[dict], fieldnames: list[str], *, filename: str | None = None,
     by_sem = {r["semantic_type"]: r for r in columns if _is_unique(r["semantic_type"], c)}
 
     subject = _subject_of(columns, ctx)
-    chain_res = _resolve_chain(subject, columns, ctx, chain)
-    if subject and subject["kind"] == "address" and chain_res["value"]:
-        # the subject's status is what it is under the chosen/detected chain
-        _revalidate_subject(columns, subject, chain_res["value"], ctx)
-        subject = _subject_of(columns, ctx)
+    chain_res = _resolve_chain(subject, columns, ctx, chain, rows)
+    if subject and subject["kind"] == "address":
+        if chain_res["status"] == "per_row":
+            rate = chain_res["per_row"]["overall_rate"]
+            _rescore_subject(columns, subject, rate, c)
+            _revalidate_subject(columns, subject, rate, "supported-chain", ctx)
+            subject = _subject_of(columns, ctx)
+        elif chain_res["value"]:
+            # the subject's status is what it is under the chosen/detected chain
+            _revalidate_subject(columns, subject, subject["rates"].get(chain_res["value"]), chain_res["value"], ctx)
+            subject = _subject_of(columns, ctx)
 
     detection = _detection(rows, fieldnames, subject, chain_res, n_sample)
-    label_col = next((by_sem[s] for s in ("attribution_label", "attribution_category")
+    label_col = next((by_sem[s] for s in ("attribution_category", "attribution_label", "attribution_entity")
                       if s in by_sem and by_sem[s]["status"] != "invalid"), None)
     dataset_type = _dataset_type(subject, label_col, market, detection, columns, c)
+    label_structure = _label_structure(rows, by_sem, c)
+    extra_warnings = _extra_warnings(columns, chain_res, profiles, c, n_total)
 
+    established = _established(columns, label_col, profiles) if dataset_type == "attribution_like_unresolved" else []
     blockers = _blockers(subject, chain_res, label_col, columns, detection, dataset_type, confirmed, input_type, c)
     warnings = [f"{r['column']}: {n}" for r in columns for n in r["notes"]
-                if r["status"] in ("review", "invalid")]
-    status = ("unsupported" if dataset_type not in ("attribution_claims", "unsupported_subject_kind")
+                if r["status"] in ("review", "invalid")] + extra_warnings
+    status = ("unsupported" if dataset_type not in ("attribution_claims", "unsupported_subject_kind",
+                                                    "attribution_like_unresolved", "mapping_unresolved")
               else "blocked" if any(b["code"] != "needs_confirmation" for b in blockers)
               else "needs_confirmation" if blockers else "ready")
 
@@ -369,18 +400,21 @@ def run(rows: list[dict], fieldnames: list[str], *, filename: str | None = None,
         input=dict(filename=filename, sha256=sha256, type=input_type, table=table,
                    n_rows=n_total, n_rows_profiled=len(rows), n_columns=len(fieldnames),
                    original_columns=list(fieldnames)),
-        dataset_type=dataset_type, status=status, can_analyze=(status == "ready"),
+        dataset_type=dataset_type, dataset_state=DATASET_STATES[dataset_type], established=established, status=status,
+        can_analyze=(status == "ready"), label_structure=label_structure,
         subject=subject, chain=chain_res, columns=columns, required=required,
         mapping=mapping, currency_basis=basis,
-        timestamp_roles={r["column"]: r["semantic_type"] for r in columns if r["semantic_type"].startswith("ts_")},
+        timestamp_roles={r["column"]: r["semantic_type"] for r in columns
+                         if r["semantic_type"].startswith("ts_") and r["status"] != "invalid"},
         blockers=blockers, warnings=warnings, detection=detection,
         dataset_type_label=DATASET_TYPE_LABELS[dataset_type],
         checks=_checks(dataset_type, subject, chain_res, columns, basis, label_col,
-                       {r["column"]: r["semantic_type"] for r in columns if r["semantic_type"].startswith("ts_")},
-                       input_type, c),
+                       {r["column"]: r["semantic_type"] for r in columns
+                        if r["semantic_type"].startswith("ts_") and r["status"] != "invalid"},
+                       input_type, c, _source_class(columns, profiles, c, n_total)),
         user_confirmed=bool(confirmed), user_overrides=overrides,
         user_selected_chain=chain,
-        message=_message(status, dataset_type, blockers, detection),
+        message=_message(status, dataset_type, blockers, detection, established),
     )
 
 
@@ -391,9 +425,12 @@ def _column_record(col: str, a: dict, p: _Profile, ctx: _Ctx, rej) -> dict:
     notes, user = list(a["notes"]), a["origin"] == "user"
     # a user's choice is judged on the values alone: what the column is called is not evidence for it
     ns = 1.0 if user else _name_score(col, fld.get("hints", {}), c)
-    value = None if sem in _SHAPE_ONLY else _value_score(sem, col, ns, ctx)
+    # a shape-only semantic is assigned by the file's shape when inferred, but a user's choice of
+    # one is still a claim about the values and is checked against them like any other
+    value = None if sem == "unmapped" or (sem in _SHAPE_ONLY and not user) else _value_score(sem, col, ns, ctx)
+    strict = sem in c["strict_value_semantics"] or sem.startswith("ts_")
     status = "ok"
-    if sem in ("unmapped", "numeric_unclassified"):
+    if sem == "unmapped":
         status = "unused"
     elif p.n == 0 and user:
         status, notes = "invalid", notes + ["the column has no values"]
@@ -402,9 +439,19 @@ def _column_record(col: str, a: dict, p: _Profile, ctx: _Ctx, rej) -> dict:
         status = "invalid"
         notes.append(f"only {value:.0%} of sampled values are valid identifiers for any supported chain "
                      f"(minimum {c['min_identifier_valid_rate']:.0%})")
-    elif user and sem.startswith("ts_") and sem not in _SHAPE_ONLY and sem != "ts_unclassified" and not p.is_date(c):
+    elif user and sem.startswith("ts_") and not p.is_date(c):
         status = "invalid"
         notes.append(f"only {p.date:.0%} of sampled values are ISO dates: this column cannot date a claim")
+    elif user and sem in c["identifier_excluded_semantics"] and _identifier_shaped(col, ctx):
+        status = "invalid"
+        notes.append(f"the values are identifiers (addresses), not '{fld['label']}': a mapping cannot make an "
+                     "identifier column mean something else")
+    elif user and strict and value is not None and value < c["review_confidence"]:
+        status = "invalid"
+        notes.append(f"only {value:.0%} of sampled values fit '{fld['label']}': choosing a column never waives "
+                     "the check of what it contains")
+    elif sem == "numeric_unclassified":
+        status = "unused"
     elif user and value is not None and value < c["review_confidence"]:
         notes.append(f"the values look unlike '{fld['label']}' ({value:.0%} fit); kept because you set it")
     elif not user and sem == "ts_unclassified":
@@ -417,7 +464,8 @@ def _column_record(col: str, a: dict, p: _Profile, ctx: _Ctx, rej) -> dict:
     conf = (None if value is None else round(value, 4)) if user else a["conf"]
     return dict(column=col, semantic_type=sem, semantic_label=fld["label"], confidence=conf,
                 status=status, origin=a["origin"], sample_values=[v[:60] for v in list(dict.fromkeys(p.sample))[:3]],
-                notes=notes, subject_kind=fld.get("subject_kind"))
+                notes=notes, subject_kind=fld.get("subject_kind"),
+                rejected_as_subject=bool(rej and any(s.startswith("subject_") for _, _, s, _ in rej)))
 
 
 def _subject_of(columns: list[dict], ctx: _Ctx) -> dict | None:
@@ -430,27 +478,64 @@ def _subject_of(columns: list[dict], ctx: _Ctx) -> dict | None:
                 rates=ctx.subject_rates(r["column"], kind))
 
 
-def _revalidate_subject(columns, subject, chain_id, ctx) -> None:
-    """Re-decide the subject's status under the chain it will really be
-    validated against, not the best of all chains."""
-    rate = subject["rates"].get(chain_id)
+def _revalidate_subject(columns, subject, rate, where, ctx) -> None:
+    """Re-decide the subject's status under the chain(s) it will really be validated
+    against (`where` names them), not the best of all chains."""
     for r in columns:
         if r["column"] != subject["column"]:
             continue
         if rate is not None and rate < ctx.c["min_identifier_valid_rate"]:
             if r["status"] != "invalid":       # already explained by the all-chains check
-                r["notes"].append(f"{rate:.0%} of sampled values are valid {chain_id} identifiers "
+                r["notes"].append(f"{rate:.0%} of sampled values are valid {where} identifiers "
                                   f"(minimum {ctx.c['min_identifier_valid_rate']:.0%})")
             r["status"] = "invalid"
     subject["rate_under_chain"] = rate
 
 
-def _resolve_chain(subject, columns, ctx: _Ctx, user_chain: str | None) -> dict:
-    """Chain from, in order: what the user chose, an explicit chain column, then
-    the subject's values. Unknown or ambiguous is reported as such: it is never
-    defaulted, and a chain-dependent analysis waits for the user."""
+def _rescore_subject(columns, subject, rate: float, c: dict) -> None:
+    """The column-level value fit (best of all chains) says nothing when each row states its own
+    chain: rescore the subject on the row-paired rate, identifiers judged under their own chains."""
+    for r in columns:
+        if r["column"] != subject["column"] or r["semantic_type"] != "subject_address":
+            continue
+        if r["origin"] == "user":
+            r["confidence"] = round(rate, 4)
+            continue
+        ns = _name_score(r["column"], c["semantic_fields"]["subject_address"].get("hints", {}), c)
+        r["confidence"] = _confidence(ns, rate, c)
+        if r["status"] in ("ok", "review"):
+            r["status"] = "ok" if r["confidence"] >= c["auto_accept_confidence"] else "review"
+
+
+def _per_row_chain(rows, subject, col, ctx: _Ctx) -> dict:
+    """Validate the sampled (chain, identifier) PAIRS: each identifier under the chain its own
+    row states. A pair whose chain name resolves to no supported chain is counted apart."""
+    adapters = chains.all_adapters()
+    per: dict[str, list[int]] = {}
+    unresolved = 0
+    pairs = _detect.paired_sample(rows, (col["column"], subject["column"]), ctx.c["sample_size"])
+    for chain_name, addr in pairs:
+        cid = chains.resolve_chain(chain_name)
+        if cid is None:
+            unresolved += 1
+            continue
+        tot = per.setdefault(cid, [0, 0])
+        tot[0] += 1
+        tot[1] += bool(adapters[cid].validate_address(addr))
+    n_res = sum(t[0] for t in per.values())
+    return dict(column=col["column"], n_pairs=len(pairs),
+                unresolved_share=round(unresolved / len(pairs), 4) if pairs else 0.0,
+                overall_rate=round(sum(t[1] for t in per.values()) / n_res, 4) if n_res else 0.0,
+                chains={cid: dict(share=round(t[0] / len(pairs), 4), n_sampled=t[0], valid_rate=round(t[1] / t[0], 4))
+                        for cid, t in sorted(per.items())})
+
+
+def _resolve_chain(subject, columns, ctx: _Ctx, user_chain: str | None, rows) -> dict:
+    """Chain from, in order: what the user chose, an explicit chain column (one chain for the
+    whole file, or a chain PER ROW), then the subject's values. Unknown or ambiguous is
+    reported as such: it is never defaulted, and a chain-dependent analysis waits for the user."""
     c = ctx.c
-    base = dict(value=None, status="not_required", source=None, confidence=None, candidates={})
+    base = dict(value=None, status="not_required", source=None, confidence=None, candidates={}, per_row=None)
     if subject is None or not c["subject_kinds"][subject["kind"]]["chain_dependent"]:
         return base
     rates = subject["rates"] if not user_chain else {
@@ -463,11 +548,15 @@ def _resolve_chain(subject, columns, ctx: _Ctx, user_chain: str | None) -> dict:
                     confidence=round(rates.get(user_chain, 0.0), 4))
     col = next((r for r in columns if r["semantic_type"] == "chain" and r["status"] != "invalid"), None)
     if col:
-        al = _chain_aliases()
-        seen = {al.get(v.strip().lower()) for v in ctx.profiles[col["column"]].sample}
-        if len(seen) == 1 and None not in seen:
-            return dict(base, value=next(iter(seen)), status="determined",
+        seen = [chains.resolve_chain(v) for v in ctx.profiles[col["column"]].sample]
+        known = {x for x in seen if x}
+        if len(known) == 1 and None not in seen:
+            return dict(base, value=next(iter(known)), status="determined",
                         source=f"column:{col['column']}", confidence=col["confidence"])
+        if known and subject["kind"] == "address":
+            pr = _per_row_chain(rows, subject, col, ctx)
+            return dict(base, status="per_row", source=f"column:{col['column']}", confidence=pr["overall_rate"],
+                        per_row=pr)
     viable = sorted(((r, cid) for cid, r in rates.items() if r >= c["min_identifier_valid_rate"]), reverse=True)
     if not viable:
         return dict(base, status="undetermined")
@@ -480,7 +569,11 @@ def _detection(rows, fieldnames, subject, chain_res, n_sample) -> dict:
     """The legacy detection block (UI/CLI/tests read it), corrected to the
     subject and chain the pre-flight actually settled on."""
     d = _detect.detect(rows, fieldnames, n_sample)
-    if subject and subject["kind"] == "address" and chain_res["value"] and subject["status"] != "invalid":
+    if subject and subject["kind"] == "address" and subject["status"] != "invalid" and chain_res["status"] == "per_row":
+        pr = chain_res["per_row"]
+        d.update(blockchain=None, blockchains=sorted(pr["chains"]), address_field=subject["column"],
+                 sample_hit_rate=pr["overall_rate"], confidence=_detect.confidence_of(pr["overall_rate"]))
+    elif subject and subject["kind"] == "address" and chain_res["value"] and subject["status"] != "invalid":
         rate = subject["rates"].get(chain_res["value"], 0.0)
         d.update(blockchain=chain_res["value"], address_field=subject["column"], sample_hit_rate=rate,
                  confidence=_detect.confidence_of(rate))
@@ -494,13 +587,42 @@ def _dataset_type(subject, label_col, market, detection, columns, c) -> str:
         if not subject["analyzable"]:
             return "unsupported_subject_kind"
         return "attribution_claims"
+    if any(r["origin"] == "user" and r["status"] == "invalid" for r in columns):
+        return "mapping_unresolved"         # what you set does not fit the file: say that, not what the file is
+    # an identifier-like column that failed validation next to an attribution label: the file has the
+    # SHAPE of attribution data, and what failed is the identifiers or THEMIS's schema, not proof the
+    # data is something else
+    candidate = any(r["rejected_as_subject"] or (r["semantic_type"].startswith("subject_") and r["status"] == "invalid")
+                    for r in columns)
+    stated_chain = any(r["semantic_type"] == "chain" and r["status"] != "invalid" for r in columns)
+    if label_col is not None and candidate and stated_chain:
+        return "attribution_like_unresolved"        # the file names a supported chain: these identifiers fail ON it
     if detection.get("unsupported_chain_field"):
         return "unsupported_chain_attribution"
     if market:
         return "market_timeseries"
+    if label_col is not None and candidate:
+        return "attribution_like_unresolved"
     if detection.get("crypto_asset_field") or any(r["semantic_type"] == "chain" for r in columns):
         return "crypto_non_attribution"
     return "non_crypto"
+
+
+def _established(columns, label_col, profiles) -> list[str]:
+    """What THEMIS DID establish about a file it could not analyse: a list of facts, each traceable
+    to a column, so a person learns what was found and not only what was not."""
+    out = []
+    if label_col:
+        out.append(f"'{label_col['column']}' holds attribution labels ({label_col['semantic_label']}).")
+    for r in columns:
+        if r["semantic_type"] == "chain" and r["status"] != "invalid":
+            seen = collections.Counter(chains.resolve_chain(v) or "unrecognised" for v in profiles[r["column"]].sample)
+            out.append(f"'{r['column']}' names the chain per row: " + ", ".join(
+                f"{k} {n / profiles[r['column']].n:.0%}" for k, n in seen.most_common()) + " of sampled rows.")
+        if r["rejected_as_subject"] or (r["semantic_type"].startswith("subject_") and r["status"] == "invalid"):
+            out.append(f"'{r['column']}' looks like an identifier column, but its sampled values do not validate "
+                       "as identifiers on the chain(s) the file states or that THEMIS supports.")
+    return out
 
 
 def _blockers(subject, chain_res, label_col, columns, detection, dataset_type, confirmed, input_type, c) -> list[dict]:
@@ -526,6 +648,16 @@ def _blockers(subject, chain_res, label_col, columns, detection, dataset_type, c
             add("needs_confirmation", "Low-confidence mapping for " + ", ".join(
                 f"'{r['column']}' ({r['semantic_label']}, {r['confidence']:.0%})" for r in need) +
                 ": review it and confirm before running.")
+    elif dataset_type == "mapping_unresolved":
+        for r in columns:
+            if r["origin"] == "user" and r["status"] == "invalid":
+                add("user_mapping_invalid", f"'{r['column']}' -> {r['semantic_label']}: " + "; ".join(r["notes"]))
+        if subject is not None and subject["status"] == "invalid":
+            rec = next(r for r in columns if r["column"] == subject["column"])
+            add("subject_invalid", f"Column '{subject['column']}' cannot be the claim subject: "
+                + "; ".join(rec["notes"]) + ". THEMIS does not accept a subject that fails validation.")
+        add("reset_hint", "Reset to THEMIS's inferred mapping to see what THEMIS established on its own; "
+            "nothing was analysed.")
     elif dataset_type == "unsupported_subject_kind":
         add("subject_kind_unsupported", f"Column '{subject['column']}' is a {subject['kind']} identifier. THEMIS "
             "recognises that kind of claim subject, but its claim pipeline (reference matching, provenance, "
@@ -543,6 +675,64 @@ def _blockers(subject, chain_res, label_col, columns, detection, dataset_type, c
     if input_type not in c["analysis_supported_inputs"]:
         add("input_type_unsupported", f"Analysis of '{input_type}' inputs is not implemented in this build: the "
             "table was inspected and pre-flighted on a sample only.")
+    return out
+
+
+def _label_structure(rows, by_sem, c) -> dict:
+    """Is the claim's label column (every row of it) a list of tokens ("a,b")? Decided from the column's own values,
+    never assumed: most multi-token cells must be built only from tokens that also occur, on their
+    own, as whole cells elsewhere in the column. Whitespace inside a token, a quoted literal that
+    merely contains a separator, or a one-off combination never qualifies."""
+    ml = c["multi_label"]
+    rec = next((by_sem[k] for k in ("attribution_category", "attribution_label") if k in by_sem
+                and by_sem[k]["status"] != "invalid"), None)
+    none = dict(status="single_label", column=rec["column"] if rec else None, separator=None)
+    if rec is None:
+        return none
+    # every row, not the profile sample: whether a rare token also occurs on its own is exactly what a
+    # sample gets wrong, and one pass over a column that is already in memory is cheap
+    values = [v for v in ((r.get(rec["column"]) or "").strip() for r in rows) if v]
+    tok = re.compile(ml["token_pattern"])
+    for sep in ml["separators"]:
+        whole = collections.Counter(v for v in values if sep not in v)
+        multi = [v for v in values if sep in v and all(tok.fullmatch(t) for t in v.split(sep))]
+        if not values or len(multi) / len(values) < ml["min_multi_share_of_cells"]:
+            continue
+        known = [v for v in multi if all(whole[t] >= ml["min_atomic_occurrences"] for t in v.split(sep))]
+        if len(known) / len(multi) >= ml["min_known_token_share"]:
+            return dict(status="multi_label", column=rec["column"], separator=sep, n_cells=len(values),
+                        n_multi_token_cells=len(multi), known_token_share=round(len(known) / len(multi), 4),
+                        n_established_tokens=sum(1 for n in whole.values() if n >= ml["min_atomic_occurrences"]))
+    return none
+
+
+def _source_class(columns, profiles, c, n_total) -> int | None:
+    """The number of distinct values of a declared-source column that has so few (against many rows)
+    that it names a class or method of evidence rather than where each claim came from; else None."""
+    for r in columns:
+        if r["semantic_type"] == "attribution_source" and r["status"] != "invalid":
+            d = profiles[r["column"]].distinct
+            if d <= c["source_class_max_distinct"] and n_total > 10 * d:
+                return d
+    return None
+
+
+def _extra_warnings(columns, chain_res, profiles, c, n_total) -> list[str]:
+    out = []
+    if chain_res["status"] == "per_row":
+        pr = chain_res["per_row"]
+        out += [f"{cid}: only {v['valid_rate']:.0%} of sampled identifiers are valid on this chain "
+                f"(minimum {c['min_identifier_valid_rate']:.0%}); its rows will be rejected"
+                for cid, v in pr["chains"].items() if v["valid_rate"] < c["min_identifier_valid_rate"]]
+        if pr["unresolved_share"]:
+            out.append(f"{pr['unresolved_share']:.0%} of sampled rows name a chain THEMIS has no adapter for; "
+                       "those rows will be rejected, not assigned a chain")
+    d = _source_class(columns, profiles, c, n_total)
+    if d is not None:
+        src = next(r for r in columns if r["semantic_type"] == "attribution_source" and r["status"] != "invalid")
+        out.append(f"{src['column']}: only {d} distinct values across {n_total:,} rows. A handful of values names a "
+                   "class or method of evidence, not where each claim came from: it does not establish provenance, "
+                   "and different values are not independent sources")
     return out
 
 
@@ -571,10 +761,25 @@ def _claim_mapping(columns, basis, c) -> dict:
         if role and r["status"] != "invalid":
             roles[role] = r["column"]
     roles["timestamp"] = basis["column"] if basis else None
+    if roles.get("entity") and not roles.get("label") and not roles.get("category"):
+        roles["label"] = roles["entity"]      # no other claim content: the entity is what is claimed
     return roles
 
 
+# what THEMIS established about the file, in the three terms a person acts on
+DATASET_STATES = {
+    "attribution_claims": "supported_attribution_data",
+    "unsupported_subject_kind": "attribution_like_schema_unresolved",
+    "unsupported_chain_attribution": "attribution_like_schema_unresolved",
+    "attribution_like_unresolved": "attribution_like_schema_unresolved",
+    "mapping_unresolved": "schema_unresolved",
+    "market_timeseries": "not_attribution_data",
+    "crypto_non_attribution": "not_attribution_data",
+    "non_crypto": "not_attribution_data",
+}
 DATASET_TYPE_LABELS = {
+    "mapping_unresolved": "Schema unresolved: a mapping you set does not fit this file",
+    "attribution_like_unresolved": "Attribution-like data: THEMIS could not establish a schema automatically",
     "attribution_claims": "Attribution claims (a subject and what is claimed about it)",
     "unsupported_subject_kind": "Attribution claims about a subject THEMIS does not analyse yet",
     "unsupported_chain_attribution": "Attribution data on a chain THEMIS has no adapter for",
@@ -584,7 +789,8 @@ DATASET_TYPE_LABELS = {
 }
 
 
-def _checks(dataset_type, subject, chain_res, columns, basis, label_col, timestamp_roles, input_type, c) -> list[dict]:
+def _checks(dataset_type, subject, chain_res, columns, basis, label_col, timestamp_roles, input_type, c,
+            source_class=None) -> list[dict]:
     """The pre-flight as a short reviewable list: {level: ok|warn|fail, text, detail}.
     Built here so no screen re-derives what was checked."""
     by_col = {r["column"]: r for r in columns}
@@ -603,7 +809,14 @@ def _checks(dataset_type, subject, chain_res, columns, basis, label_col, timesta
                         detail=(next((n for r in columns if subject and r["column"] == subject["column"]
                                       for n in r["notes"]), None)
                                 or "no column holds valid wallet addresses or another supported identifier")))
-    if chain_res["status"] == "determined":
+    if chain_res["status"] == "per_row":
+        pr = chain_res["per_row"]
+        out.append(dict(level="ok", text=f"Blockchain: stated per row by '{pr['column']}' ({len(pr['chains'])} chains)",
+                        detail="; ".join(f"{cid} {v['share']:.0%} of rows, {v['valid_rate']:.0%} valid identifiers"
+                                         for cid, v in pr["chains"].items())
+                        + (f"; {pr['unresolved_share']:.0%} name a chain THEMIS cannot validate"
+                           if pr["unresolved_share"] else "")))
+    elif chain_res["status"] == "determined":
         how = {"user": "selected by you", "detected": "detected from the identifier values"}.get(
             chain_res["source"], f"stated by {chain_res['source']}")
         out.append(dict(level="ok", text=f"Blockchain: {chain_res['value']} ({how})",
@@ -625,16 +838,21 @@ def _checks(dataset_type, subject, chain_res, columns, basis, label_col, timesta
         out.append(dict(level="warn", text="No attribution timestamp mapped: staleness will not be computed",
                         detail=(f"date columns present but none dates the attribution: {others}" if others else None)))
     src = next((r for r in columns if r["semantic_type"] == "attribution_source" and r["status"] != "invalid"), None)
-    out.append(dict(level="ok" if src else "warn",
-                    text=f"Declared source: '{src['column']}'" if src else "No declared-source column mapped",
-                    detail=None if src else "provenance of these claims cannot be established"))
+    if src and source_class:
+        out.append(dict(level="warn", text=f"Declared source: '{src['column']}' (a class of evidence, not a per-claim source)",
+                        detail=f"only {source_class} distinct values: it says how a label was made, not where it came "
+                               "from, so it establishes no provenance and different values are not independent sources"))
+    else:
+        out.append(dict(level="ok" if src else "warn",
+                        text=f"Declared source: '{src['column']}'" if src else "No declared-source column mapped",
+                        detail=None if src else "provenance of these claims cannot be established"))
     if input_type not in c["analysis_supported_inputs"]:
         out.append(dict(level="fail", text=f"Input type '{input_type}': analysis not implemented",
                         detail="inspected and pre-flighted on a sample only"))
     return out
 
 
-def _message(status, dataset_type, blockers, detection) -> str | None:
+def _message(status, dataset_type, blockers, detection, established=()) -> str | None:
     if status == "ready":
         return None
     if dataset_type == "unsupported_chain_attribution":
@@ -646,6 +864,11 @@ def _message(status, dataset_type, blockers, detection) -> str | None:
         body = CRYPTO_NON_ATTRIBUTION_MESSAGE.format(field=detection.get("crypto_asset_field") or "chain")
     elif dataset_type == "non_crypto":
         body = NOT_CRYPTO_MESSAGE
+    elif dataset_type == "mapping_unresolved":
+        return "Schema unresolved: a mapping you set does not fit this file.\n" + "\n".join(f"- {b['message']}" for b in blockers)
+    elif dataset_type == "attribution_like_unresolved":
+        return (ATTRIBUTION_LIKE_HEADLINE + "\n" + "\n".join(f"- {t}" for t in established)
+                + "\n\nWhy nothing was analysed:\n" + "\n".join(f"- {b['message']}" for b in blockers))
     else:
         return "Analysis blocked at pre-flight.\n\n" + "\n".join(f"- {b['message']}" for b in blockers)
     return f"{HEADLINE_UNSUPPORTED}.\n{NO_SCHEMA}\n\n{body}"

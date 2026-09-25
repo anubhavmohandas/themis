@@ -83,8 +83,125 @@ class TestChainNames(unittest.TestCase):
             self.assertIsNone(chains.resolve_chain(name), name)
 
 
+def _mixed_rows(n_btc, n_evm, chain_btc="bitcoin", chain_evm="ethereum"):
+    rows = [{"chain": chain_btc, "address": btc_address(i).lower(), "category": "exchange"} for i in range(n_btc)]
+    rows += [{"chain": chain_evm, "address": evm(i), "category": "mixer"} for i in range(n_evm)]
+    return rows
+
+
+class TestSamplingIsOrderIndependent(unittest.TestCase):
+    """What a column is profiled on must not be whichever rows the file happens to start with."""
+    fields = ["chain", "address", "category"]
+
+    def signature(self, rows):
+        pf = run(rows, self.fields)
+        return (pf["dataset_type"], pf["chain"]["status"], pf["subject"]["column"],
+                tuple(sorted((c["column"], c["semantic_type"]) for c in pf["columns"])))
+
+    def test_sorted_shuffled_and_reversed_orders_agree(self):
+        rows = _mixed_rows(3000, 3000)                       # a long run of one chain, then the other
+        shuffled = rows[:]
+        random.Random(7).shuffle(shuffled)
+        sigs = {self.signature(rows), self.signature(shuffled), self.signature(rows[::-1])}
+        self.assertEqual(len(sigs), 1, sigs)
+
+    def test_a_head_of_unusable_identifiers_does_not_hide_the_rest(self):
+        # the first 2,000 rows are lowercase (checksum-broken) Bitcoin; 4,000 valid EVM rows follow
+        pf = run(_mixed_rows(2000, 4000), self.fields)
+        self.assertEqual(pf["dataset_type"], "attribution_claims")
+        self.assertEqual(pf["dataset_state"], "supported_attribution_data")
+
+    def test_the_sample_is_deterministic(self):
+        rows = _mixed_rows(500, 500)
+        a = run(rows, self.fields)["chain"]["per_row"]
+        b = run(rows, self.fields)["chain"]["per_row"]
+        self.assertEqual(a, b)
+
+    def test_a_row_counter_is_still_recognised_from_a_random_sample(self):
+        rows = [{"id": str(i), "label": "exchange"} for i in range(5000)]
+        pf = run(rows, ["id", "label"])
+        self.assertTrue(any("row index" in n for c in pf["columns"] for n in c["notes"]))
+
+
+class TestMappingsAreJudgedOnValues(unittest.TestCase):
+    """A choice picks the column; it never waives what the column contains."""
+    fields = ["chain", "address", "category", "when", "grade"]
+
+    def rows(self):
+        return [{"chain": "ethereum" if i % 2 else "bitcoin", "address": evm(i) if i % 2 else btc_address(i),
+                 "category": "exchange", "when": f"2024-01-{1 + i % 28:02d}", "grade": "high" if i % 3 else "low"}
+                for i in range(200)]
+
+    def status(self, column, sem):
+        pf = run(self.rows(), self.fields, overrides={column: sem})
+        return next(c for c in pf["columns"] if c["column"] == column)
+
+    def test_an_address_cannot_be_a_timestamp_of_any_kind(self):
+        for sem in ("ts_market_candle", "ts_dataset_created", "ts_attribution_last_updated", "ts_unclassified"):
+            with self.subTest(sem=sem):
+                self.assertEqual(self.status("address", sem)["status"], "invalid")
+
+    def test_a_chain_name_cannot_be_a_confidence(self):
+        self.assertEqual(self.status("chain", "attribution_confidence")["status"], "invalid")
+
+    def test_a_category_cannot_be_a_timestamp(self):
+        self.assertEqual(self.status("category", "ts_dataset_created")["status"], "invalid")
+
+    def test_an_identifier_column_cannot_be_a_label_or_a_chain(self):
+        for sem in ("attribution_label", "attribution_category", "attribution_actor", "chain"):
+            with self.subTest(sem=sem):
+                self.assertEqual(self.status("address", sem)["status"], "invalid")
+
+    def test_a_timestamp_and_a_grade_are_accepted_where_the_values_fit(self):
+        self.assertEqual(self.status("when", "ts_attribution_last_updated")["status"], "ok")
+        self.assertEqual(self.status("grade", "attribution_confidence")["status"], "ok")
+
+    def test_an_inferred_mapping_is_never_labelled_as_the_users(self):
+        pf = run(self.rows(), self.fields)
+        self.assertNotIn("user", {c["origin"] for c in pf["columns"]})
+        pf = run(self.rows(), self.fields, overrides={"grade": "attribution_confidence"})
+        self.assertEqual({c["column"] for c in pf["columns"] if c["origin"] == "user"}, {"grade"})
+
+
 class TestChainPerRow(unittest.TestCase):
     fields = ["chain", "address", "category"]
+
+    def test_each_row_is_validated_under_its_own_chain(self):
+        rows = [{"chain": "bitcoin_mainnet", "address": btc_address(i), "category": "exchange"} for i in range(30)]
+        rows += [{"chain": "ethereum_mainnet", "address": evm(i), "category": "mixer"} for i in range(30)]
+        rows += [{"chain": "bitcoin_mainnet", "address": evm(99), "category": "exchange"}]      # EVM string on Bitcoin
+        r = ingest(rows, self.fields)
+        self.assertFalse(r["stopped"])
+        self.assertEqual(r["dataset_preflight"]["chain"]["status"], "per_row")
+        v = r["validation"]
+        self.assertEqual(v["per_chain_checked"], {"bitcoin": 31, "ethereum": 30})
+        self.assertEqual(v["per_chain_invalid"], {"bitcoin": 1, "ethereum": 0})
+        self.assertEqual({c["blockchain"] for c in r["claims"]}, {"bitcoin", "ethereum"})
+
+    def test_an_unsupported_chain_name_rejects_the_row_and_is_never_assigned_a_chain(self):
+        rows = _mixed_rows(0, 40)
+        rows += [{"chain": "solana", "address": evm(500 + i), "category": "mixer"} for i in range(3)]
+        r = ingest(rows, self.fields)
+        self.assertEqual(r["validation"]["rejected_by_reason"], {"unresolved chain": 3})
+        self.assertEqual(len(r["claims"]), 40)
+
+    def test_the_same_string_on_four_chains_is_four_subjects_and_four_claims(self):
+        a = evm(7)
+        rows = [{"chain": c, "address": a, "category": lab} for c, lab in
+                [("ethereum", "exchange"), ("polygon", "scam"), ("bnb_smart_chain", "wallet"), ("avalanche_c", "sanctioned")]]
+        rows += [{"chain": "ethereum", "address": evm(1000 + i), "category": "exchange"} for i in range(30)]
+        r = ingest(rows, self.fields)
+        mine = [c for c in r["claims"] if c["address"] == a]
+        self.assertEqual(len(mine), 4)
+        self.assertEqual(len({provenance.subject_key(c) for c in mine}), 4)
+        self.assertEqual(r["validation"]["rejected_by_reason"], {})       # not "duplicate" of one another
+
+    def test_the_same_claim_twice_on_one_chain_is_still_one_claim_and_case_is_not_identity(self):
+        rows = [{"chain": "ethereum", "address": evm(1), "category": "exchange"},
+                {"chain": "ethereum", "address": evm(1).upper().replace("0X", "0x"), "category": "exchange"}]
+        rows += [{"chain": "ethereum", "address": evm(i), "category": "mixer"} for i in range(2, 30)]
+        r = ingest(rows, self.fields)
+        self.assertEqual(r["validation"]["rejected_by_reason"], {"duplicate claim": 1})
 
     def test_a_reference_source_on_another_chain_never_matches_by_string(self):
         s = "ransomwhere"                                                 # a bundled source that declares chain: bitcoin
@@ -100,7 +217,130 @@ class TestChainPerRow(unittest.TestCase):
         self.assertEqual(btc["profile"]["reference_comparability"]["comparable"], 1)
 
 
+class TestIdentifierIntegrityIsReportedNotRepaired(unittest.TestCase):
+    fields = ["chain", "address", "category"]
 
+    def test_padding_is_trimmed_and_counted_but_invisible_characters_are_rejected(self):
+        rows = [{"chain": "ethereum", "address": evm(i), "category": "exchange"} for i in range(60)]
+        rows.append({"chain": "ethereum", "address": evm(100) + "\n", "category": "exchange"})
+        rows.append({"chain": "ethereum", "address": "\u200b" + evm(101) + "\u200b", "category": "exchange"})
+        r = ingest(rows, self.fields)
+        v = r["validation"]
+        self.assertEqual(v["n_identifiers_trimmed"], 1)
+        self.assertEqual(v["rejected_by_reason"], {"invalid address": 1})
+        self.assertTrue(any("trimmed" in s for s in r["limitations"]))
+
+    def test_lowercased_case_sensitive_identifiers_are_rejected_not_fixed(self):
+        rows = [{"chain": "bitcoin", "address": btc_address(i), "category": "exchange"} for i in range(10)]
+        rows += [{"chain": "bitcoin", "address": btc_address(100 + i).lower(), "category": "exchange"} for i in range(60)]
+        rows += [{"chain": "ethereum", "address": evm(i), "category": "exchange"} for i in range(100)]
+        r = ingest(rows, self.fields)
+        lowered = sum(1 for i in range(60) if not chains.get("bitcoin").validate_address(btc_address(100 + i).lower()))
+        self.assertGreater(lowered, 50)
+        self.assertEqual(r["validation"]["per_chain_invalid"]["bitcoin"], lowered)
+        self.assertTrue(any(s.startswith("bitcoin:") and "failed validation" in s for s in r["limitations"]))
+
+    def test_an_absent_checksum_is_reported_as_absent(self):
+        r = ingest([{"chain": "ethereum", "address": evm(i), "category": "exchange"} for i in range(40)], self.fields)
+        self.assertTrue(any("EIP-55" in s and "none of the" in s for s in r["limitations"]))
+
+
+class TestHonestStates(unittest.TestCase):
+    def test_attribution_shaped_data_with_unresolvable_identifiers_is_not_called_non_attribution(self):
+        rows = [{"address": f"acct-{i:05d}-zz", "category": "exchange"} for i in range(80)]
+        pf = run(rows, ["address", "category"])
+        self.assertEqual(pf["dataset_state"], "attribution_like_schema_unresolved")
+        self.assertNotIn("does not appear to contain", pf["message"] or "")
+        self.assertIn("could not establish a schema", pf["message"])
+
+    def test_a_plain_table_is_not_attribution_data(self):
+        pf = run([{"name": "Alice", "age": "30"}, {"name": "Bob", "age": "25"}], ["name", "age"])
+        self.assertEqual(pf["dataset_state"], "not_attribution_data")
+
+    def test_a_supported_file_says_so(self):
+        pf = run(_mixed_rows(0, 50), ["chain", "address", "category"])
+        self.assertEqual(pf["dataset_state"], "supported_attribution_data")
+
+
+class TestInvalidUserMappingIsTheMappingsProblem(unittest.TestCase):
+    fields = ["chain", "address", "category", "source"]
+
+    def rows(self):
+        return [{"chain": "ethereum", "address": evm(i), "category": "exchange", "source": ("a", "b", "c")[i % 3]}
+                for i in range(200)]
+
+    def test_a_broken_user_mapping_is_not_a_verdict_that_the_file_is_not_attribution_data(self):
+        pf = run(self.rows(), self.fields, overrides={"address": "ts_market_candle", "chain": "attribution_confidence"})
+        self.assertEqual(pf["dataset_type"], "mapping_unresolved")
+        self.assertEqual(pf["dataset_state"], "schema_unresolved")
+        self.assertNotIn("does not appear to contain", pf["message"])
+        self.assertIn("user_mapping_invalid", {b["code"] for b in pf["blockers"]})
+        self.assertFalse(pf["can_analyze"])
+
+    def test_an_invalid_column_is_never_listed_as_a_date_that_could_date_a_claim(self):
+        pf = run(self.rows(), self.fields, overrides={"address": "ts_market_candle"})
+        self.assertNotIn("address", pf["timestamp_roles"])
+        self.assertFalse(any("address (Market" in (c["detail"] or "") for c in pf["checks"]))
+
+    def test_the_checks_do_not_tick_a_class_of_evidence_as_a_source(self):
+        pf = run(self.rows(), self.fields)
+        line = next(c for c in pf["checks"] if c["text"].startswith("Declared source"))
+        self.assertEqual(line["level"], "warn")
+        self.assertIn("not a per-claim source", line["text"])
+
+
+class TestNoStateLeaksBetweenRequests(unittest.TestCase):
+    """An automatic mapping is never a manual one, and one analysis never colours the next."""
+
+    def upload(self, semantics=None, data=None):
+        from fastapi.testclient import TestClient
+        from themis.api import app
+        rows = [{"chain": "ethereum", "address": evm(i), "category": "exchange", "grade": "high"} for i in range(60)]
+        form = {} if semantics is None else {"semantics": semantics}
+        return TestClient(app, base_url="http://localhost").post(
+            "/api/preflight", data=form,
+            files={"file": ("a.csv", data or to_csv(rows, ["chain", "address", "category", "grade"]), "text/csv")}).json()
+
+    def test_an_override_in_one_request_is_not_visible_in_the_next(self):
+        import json
+        first = self.upload(json.dumps({"grade": "attribution_confidence"}))
+        self.assertEqual({c["column"] for c in first["preflight"]["columns"] if c["origin"] == "user"}, {"grade"})
+        second = self.upload()
+        self.assertNotIn("user", {c["origin"] for c in second["preflight"]["columns"]})
+        self.assertEqual(second["preflight"]["user_overrides"], {})
+
+    def test_an_invalid_user_mapping_is_reported_invalid_by_the_api(self):
+        import json
+        r = self.upload(json.dumps({"address": "ts_market_candle", "chain": "attribution_confidence"}))
+        by = {c["column"]: c for c in r["preflight"]["columns"]}
+        self.assertEqual(by["address"]["status"], "invalid")
+        self.assertEqual(by["chain"]["status"], "invalid")
+        self.assertFalse(r["preflight"]["can_analyze"])
+
+
+class TestLogicalCsvRecords(unittest.TestCase):
+    def test_quoted_newlines_commas_quotes_empties_long_fields_unicode_and_crlf_keep_every_column_aligned(self):
+        long = "x" * 100_000
+        rows = [["chain", "address", "category", "entity", "source"],
+                ["ethereum", evm(1) + "\n", "a,b", "", "s"],                    # embedded newline, quoted comma
+                ["ethereum", evm(2), 'say "hi"', "ünï-çødé 交易所", "s"],          # double quote, unicode
+                ["ethereum", evm(3), "c", long, ""],                            # long field, empty field
+                ["ethereum", evm(4), "d\r\ne", "", "s"]]                        # CRLF inside a quoted field
+        buf = io.StringIO(newline="")
+        csv.writer(buf, lineterminator="\r\n").writerows(rows)
+        path = write_tmp(buf.getvalue().encode("utf-8"))
+        try:
+            got, fields = pipeline.load_csv(path)
+        finally:
+            os.remove(path)
+        self.assertEqual(fields, rows[0])
+        self.assertEqual(len(got), 4)                                           # logical records, not physical lines
+        self.assertEqual([r["address"] for r in got], [evm(1) + "\n", evm(2), evm(3), evm(4)])
+        self.assertEqual(got[0]["category"], "a,b")
+        self.assertEqual(got[1]["category"], 'say "hi"')
+        self.assertEqual(got[2]["entity"], long)
+        self.assertEqual(got[3]["category"], "d\r\ne")
+        self.assertTrue(all(len(r) == 5 for r in got))
 
 
 if __name__ == "__main__":

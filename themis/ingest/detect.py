@@ -5,7 +5,7 @@ checks) when nothing looks like an address at a rate too high to be
 coincidence.
 """
 from __future__ import annotations
-import re
+import functools, random, re
 from .. import chains, config_io
 
 HIGH, MEDIUM, LOW, NONE = "HIGH", "MEDIUM", "LOW", "NONE"
@@ -66,12 +66,39 @@ def _looks_like_unrecognized_address(sample: list[str]) -> bool:
     return all(_OPAQUE_TOKEN_RE.match(v) for v in sample)
 
 
-def sample_values(rows: list[dict], field: str, limit: int) -> list[str]:
+@functools.lru_cache(maxsize=16)
+def _row_order(n: int, seed: int, cap: int) -> tuple[int, ...]:
+    """A seeded, uniformly random order over (up to `cap` of) the row positions, so what a
+    column is profiled on never depends on how the file happens to be sorted."""
+    return tuple(random.Random(seed).sample(range(n), min(n, cap)))
+
+
+def sample_pairs(rows: list[dict], field: str, limit: int) -> list[tuple[int, str]]:
+    """(row position, value) for up to `limit` non-empty values drawn uniformly from the
+    whole input, returned in file order. Deterministic: same file, same sample."""
+    c = cfg()
     out = []
-    for r in rows:
-        v = (r.get(field) or "").strip()
+    for i in _row_order(len(rows), c["sample_seed"], c["profile_rows"]):
+        v = (rows[i].get(field) or "").strip()
         if v:
-            out.append(v)
+            out.append((i, v))
+            if len(out) >= limit:
+                break
+    return sorted(out)
+
+
+def sample_values(rows: list[dict], field: str, limit: int) -> list[str]:
+    return [v for _, v in sample_pairs(rows, field, limit)]
+
+
+def paired_sample(rows: list[dict], fields: tuple[str, ...], limit: int) -> list[tuple[str, ...]]:
+    """Values of several columns from the SAME rows (rows where all are non-empty)."""
+    c = cfg()
+    out = []
+    for i in _row_order(len(rows), c["sample_seed"], c["profile_rows"]):
+        vals = tuple((rows[i].get(f) or "").strip() for f in fields)
+        if all(vals):
+            out.append(vals)
             if len(out) >= limit:
                 break
     return out

@@ -209,12 +209,17 @@ class TestIdentifierValidation(unittest.TestCase):
         self.assertEqual(r["validation"]["rejected_by_reason"], {"invalid address": 2})
 
     def test_file_whose_addresses_mostly_fail_after_a_clean_head_is_stopped_on_the_full_check(self):
-        # the sample (first rows) looks fine; the rest of the file does not
+        # An unlucky sample that saw only the clean head must not let the file through: every row is
+        # checked afterwards. (The real sample is drawn uniformly, so it would see the bad rows itself:
+        # see TestSamplingIsOrderIndependent. Here the sample is forced to be the head.)
+        from unittest import mock
+        from themis.ingest import detect
         rows = [{"wallet_address": btc_address(i), "category": "exchange"} for i in range(500)]
         rows += [{"wallet_address": str(i), "category": "exchange"} for i in range(5000)]
         path = write_tmp(to_csv(rows, ["wallet_address", "category"]))
         try:
-            r = pipeline.ingest(path, "front_loaded", reference=None)
+            with mock.patch.object(detect, "_row_order", lambda n, seed, cap: tuple(range(min(n, cap)))):
+                r = pipeline.ingest(path, "front_loaded", reference=None)
         finally:
             os.remove(path)
         self.assertTrue(r["stopped"])

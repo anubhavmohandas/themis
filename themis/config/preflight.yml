@@ -14,6 +14,11 @@ schema_version: "preflight-1.0"
 # values read from a column to profile it (first N non-empty, plus a strided
 # sample for SQLite tables). The full file is validated row by row afterwards.
 sample_size: 500
+# Which rows are profiled: a seeded uniform draw over the WHOLE input (never its first rows,
+# which say only how the file happens to be sorted), out of at most `profile_rows` candidate
+# positions. Same file + same seed = same sample.
+sample_seed: 0
+profile_rows: 20000
 
 # confidence = name * name_score + value * value_score, each score in [0, 1]
 confidence_weights: {name: 0.4, value: 0.6}
@@ -57,7 +62,7 @@ value_inferable: [subject_address, subject_transaction, attribution_source]
 # satisfied by one of their members.
 required:
   - {name: subject, any_of: [subject_address]}
-  - {name: attribution_label, any_of: [attribution_label, attribution_category]}
+  - {name: attribution_label, any_of: [attribution_label, attribution_category, attribution_entity]}
 
 # Semantic field vocabulary. `unique: false` means several columns may share it.
 # hints.exact: whole normalized column name (lowercase, non-alphanumerics -> _).
@@ -89,7 +94,14 @@ semantic_fields:
   attribution_category:
     label: "Attribution category"
     claim_role: category
-    hints: {exact: [category, classification, class, type], tokens: [category, classification, type]}
+    hints: {exact: [category, categories, classification, class, type], tokens: [category, categories, classification, type]}
+  # Who the address is said to belong to, as metadata ABOUT the claim. It never decides truth,
+  # provenance, independence or confidence. Only when a file has no label and no category
+  # column does the entity stand in as the thing claimed.
+  attribution_entity:
+    label: "Entity (who)"
+    claim_role: entity
+    hints: {exact: [entity, entities], tokens: []}     # exact only: entity_type / entity_name stay label-like
   attribution_actor:
     label: "Actor"
     claim_role: actor
@@ -174,6 +186,8 @@ legacy_roles:
   actor: attribution_actor
   source: attribution_source
   confidence: attribution_confidence
+  entity: attribution_entity
+  chain: chain
   timestamp: ts_attribution_last_updated
 
 # Staleness / currency may only be computed from a timestamp that dates the
@@ -221,8 +235,37 @@ target_audit:
   min_source_name_length: 4
 # how many rejected rows preflight.json keeps as examples (the counts are always complete)
 rejected_examples: 50
-# a confidence column holds numbers, or a small closed set of grades
-confidence_categorical_max_distinct: 10
+# a confidence column holds numbers, or grades from this vocabulary. A small closed set of
+# values that are NOT grades (chain names, evidence classes, categories) is not confidence.
+confidence_grades: [very_high, high, medium, med, moderate, low, very_low, strong, weak, certain,
+                    probable, possible, unlikely, tentative, confirmed, unverified]
+
+# Semantics a mapping can only carry when the column's VALUES fit them (share >= review_confidence).
+# The user's choice picks the column; it never waives this. Free-text roles (label, category,
+# actor, evidence, source) have no closed value test, so they only reject identifier-shaped
+# columns (below); subject_* and ts_* are always value-validated.
+strict_value_semantics: [chain, attribution_confidence, market_numeric, numeric_unclassified]
+# a column whose sampled values are at least min_identifier_valid_rate valid identifiers can
+# not also be one of these free-text roles: an address is not a label
+identifier_excluded_semantics: [attribution_label, attribution_category, attribution_entity,
+                                attribution_actor, attribution_evidence, attribution_confidence,
+                                attribution_source, chain]
+# a declared-source column with at most this many distinct values is a source CLASS or
+# method (a handful of kinds of evidence), not proof of where each claim came from
+source_class_max_distinct: 12
+
+# Multi-label cells ("a,b"). A label/category column is split ONLY when the column's own
+# values show it is a token list: most multi-token cells are made entirely of tokens that also
+# occur as whole single-token cells elsewhere in the column. Tokens must contain no whitespace.
+# Nothing is split by default, the first token is never picked, and no hierarchy is inferred.
+multi_label:
+  separators: [","]
+  token_pattern: "[A-Za-z0-9_.+-]+"
+  min_multi_share_of_cells: 0.001      # at least this share of non-empty cells has several tokens
+  min_known_token_share: 0.9           # of multi-token cells: share whose tokens are all established
+  min_atomic_occurrences: 2            # a token is established after this many whole-cell uses
+# Chain names a per-row chain column may hold: at least this share must resolve to a supported chain
+chain_column_min_resolved: 0.5
 
 # Per-input capabilities. SQLite tables are streamed and validated in bounded
 # chunks (ingest/relational.py) - a whole table is never loaded into memory.
