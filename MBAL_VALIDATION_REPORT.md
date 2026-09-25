@@ -256,7 +256,7 @@ rows, 40 rejected as invalid addresses, 3 identifiers trimmed (trailing newline)
 | multi-label structure | 607,165 rows (6.07%) carry ≥ 2 labels |
 | entity coverage | 34.47% of rows; 50.7% Ethereum, 12.6% Bitcoin, ~0% BNB/Polygon/Avalanche |
 | declared evidence method | ground_truth 62.4%, external 17.8%, heuristic 19.8%, confounded with chain (§6) |
-| conflicts | within the file none can arise from unique addresses (a row's own labels are simultaneous, not competing); against the bundled reference sample 19 of 31 comparable subjects disagree (§21) |
+| conflicts | within the file none can arise from unique addresses (a row's own labels are simultaneous, not competing); against the bundled reference sample 16 of 31 comparable subjects disagree (corrected, §21) |
 | missing fields | entity blank on 65.5%; no timestamp, no per-row provenance URL, no confidence column |
 | timestamps | none: staleness "not applicable", stated |
 | provenance information present | none beyond the three-value method class; every root UNRESOLVED |
@@ -276,14 +276,25 @@ with a reference source is not truth; one overlap is not corroboration.
 
 **Full file (10,000,000 rows), same reference sample, through the real GUI/API:** 31 of 8,239,773 subjects
 (0.0004%) are also named by the reference corpus; all 31 are native-SegWit addresses, the only Bitcoin
-identifiers whose lowercase form survives folding. Outcomes over those 31: exact agreement 10 (32.3%),
-entity-type conflict 10 (32.3%), licit/illicit conflict 9 (29.0%; Wilson 95% interval 16–47%), incomparable 2,
+identifiers whose lowercase form survives folding. Outcomes over those 31 (**corrected 2026-09-25**, see the
+note below): exact agreement 2, entity-type conflict 9, licit/illicit conflict 7, incomparable 13,
 hierarchical refinement 0. Independence: 31 apparent multi-source subjects, **0 confirmed independent, 31
 unresolved** (MBAL's own root is unresolved in every case). What that does and does not say: the reference
 corpus here is a sample of Bitcoin sources under a different taxonomy; the 31 are an unrepresentative
 slice; disagreement between two label vocabularies is not evidence about which is right; and agreement
 with a reference source is not truth. No agreement rate is offered for MBAL as a whole because 31 subjects
 in 8.2 million cannot support one. All 1,104 case-folded overlaps of §13 are excluded by design.
+
+> **Correction (2026-09-25, found while validating a second external dataset).** This section originally
+> reported 10 exact / 10 entity-type / 9 licit-illicit / 2 incomparable for the 31 subjects. Those figures were
+> wrong: when a target claim's label did not map to a category, THEMIS classified the address over the reference
+> sources alone, so two *reference* sources agreeing or conflicting with each other was counted as the target's
+> own outcome. The fix (`taxonomy.classify_target_address`, regression tests in `tests/test_target_audit.py`)
+> makes such an address `incomparable`. Re-running the same 31 MBAL rows on the fixed code gives 2 exact, 9
+> entity-type, 7 licit/illicit, 13 incomparable; independence is unchanged (0 confirmed, 31 unresolved). The
+> "19 of 31 disagree" statements in §20 and §32 become 16 of 31 (9 entity-type, 7 licit/illicit); only 18 of the 31
+> could be compared at all (the other 13 are incomparable), so 16 of 18 comparable subjects disagree. The Wilson interval and
+> percentages that accompanied the old counts are withdrawn. Nothing else in this report depended on it.
 
 ## 22. GUI ↔ backend consistency
 
@@ -418,7 +429,7 @@ independent of, or agrees with, any reference source beyond one address; how MBA
 | DECLARED EVIDENCE METHOD | present as a 3-value class, confounded with chain; **not a provenance root** |
 | PROVENANCE RESOLUTION | **PROVENANCE UNRESOLVED** for every claim |
 | INDEPENDENT CORROBORATION | **INSUFFICIENT INDEPENDENT CORROBORATION**: nothing to corroborate with |
-| CONFLICTS | none inside the file; against the reference sample 19 of 31 comparable subjects disagree (10 entity-type, 9 licit/illicit), a slice too small and too unrepresentative to generalise |
+| CONFLICTS | none inside the file; against the reference sample 16 of 31 comparable subjects disagree (9 entity-type, 7 licit/illicit; corrected, §21), a slice too small and too unrepresentative to generalise |
 | REFERENCE-CORPUS AGREEMENT | not estimable for the dataset: 31 comparable subjects in 8,239,773 (exact 10, entity-type 10, licit/illicit 9, incomparable 2) |
 | LIMITATIONS | see §24 |
 | FORENSIC DEFENSIBILITY | **INSUFFICIENT EVIDENCE FOR A FORENSIC RELIABILITY CONCLUSION.** The evidence available is limited to identifier syntax, label structure and method class; no reliability percentage is offered because none is supported |
