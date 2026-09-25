@@ -51,6 +51,14 @@ __MACOSX/
 /mbal_evidence/
 mbal_*.csv
 dataset_10m_ads*.csv
+# Later external-validation experiments follow the same rule: raw third-party rows, API
+# captures and driver scripts live in sibling directories and must never be added; only the
+# row-free reports are tracked
+/bitcoinheist_testdata/
+/bitcoinheist_evidence/
+/forta_testdata/
+/forta_evidence/
+/final_dataset_testdata/
 /results/
 /external_data/
 /release/
