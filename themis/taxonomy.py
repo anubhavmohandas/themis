@@ -6,7 +6,7 @@ config/taxonomy.yml rather than declared here - a new category or a new
 source's verified roots need a config edit, not a code change.
 """
 from __future__ import annotations
-import datetime
+import collections, datetime
 from . import config_io, provenance
 
 _cfg = config_io.load()
@@ -165,6 +165,27 @@ def currency_flags(claim: dict, today: datetime.date | None = None) -> list[str]
     return ["stale"] if age > STALE_AFTER_YEARS else []
 
 
+def label_relationship(cats: set) -> str:
+    """Core polarity/hierarchy classification for >= 2 canonical categories claimed about one
+    subject: the same category, a hierarchical refinement, or an outright conflict. Shared by
+    `classify_address` (cross-source: are >= 2 *sources* consistent?) and `internal_consistency`
+    (within one source: is a single source consistent with itself?) - the sourcing question differs,
+    the category-compatibility question is identical, and used to be duplicated between this module
+    and `ingest/relational.py`."""
+    if len(cats) == 1:
+        return "exact"
+    pol = {POLARITY.get(c, "unknown") for c in cats} - {"unknown"}
+    if len(pol) > 1:
+        return "licit/illicit conflict"
+    specific = cats - GENERIC
+    if len(specific) <= 1:
+        return "hierarchical refinement"
+    anc = {c: ancestors(c) for c in specific}
+    if all(a in anc[b] or b in anc[a] for a in specific for b in specific):
+        return "hierarchical refinement"
+    return "entity-type conflict"
+
+
 def classify_address(claims: list[dict]) -> str:
     """Agreement outcome for one address carrying claims from >= 2 datasets.
 
@@ -188,18 +209,7 @@ def classify_address(claims: list[dict]) -> str:
     cats = {c["canon"] for c in claims if c["canon"] != "unknown"}
     if len(known_sources) < 2:
         return "incomparable"
-    if len(cats) == 1:
-        return "exact"
-    pol = {POLARITY.get(c, "unknown") for c in cats} - {"unknown"}
-    if len(pol) > 1:
-        return "licit/illicit conflict"
-    specific = cats - GENERIC
-    if len(specific) <= 1:
-        return "hierarchical refinement"
-    anc = {c: ancestors(c) for c in specific}
-    if all(a in anc[b] or b in anc[a] for a in specific for b in specific):
-        return "hierarchical refinement"
-    return "entity-type conflict"
+    return label_relationship(cats)
 
 
 def classify_target_address(target_claims: list[dict], reference_claims: list[dict]) -> str:
@@ -215,9 +225,62 @@ def classify_target_address(target_claims: list[dict], reference_claims: list[di
     return classify_address(list(target_claims) + list(reference_claims))
 
 
-
 OUTCOMES = ["exact", "hierarchical refinement", "entity-type conflict",
             "licit/illicit conflict", "incomparable"]
+
+#: internal_consistency bucket names, most to least informative
+INTERNAL_CONSISTENCY_OUTCOMES = ["repeated observation", "repeated same label",
+                                 "compatible multi-label claim", "internal contradiction"]
+
+
+def internal_consistency(claims: list[dict]) -> dict:
+    """Within one dataset's own claims: does the same normalized subject ((chain, address) -
+    see provenance.subject_key, so the same address string on two different chains is never
+    conflated) carry labels that cannot all be true together?
+
+    `classify_address` answers a different question - it requires >= 2 distinct *sources* and is
+    deliberately blind to one source repeating or contradicting itself. This is the opposite case: a
+    single uploaded dataset naming one subject more than once (a repeated row, several categories on
+    one row, or two rows that disagree). Every subject with more than one claim lands in exactly one
+    bucket:
+
+      - repeated observation: every claim is byte-identical (same source, raw label and category) -
+        the file said the same thing more than once. Normal ingestion already collapses this before a
+        claim list is built, so a real dataset reports zero here; the bucket exists so that is a
+        measured zero, not a silent absence.
+      - repeated same label: more than one claim, all with the same canonical category, but not all
+        identical (e.g. a different raw label spelling or revision date for the same subject).
+      - compatible multi-label claim: different categories that coexist without contradiction - one
+        is the polarity's generic placeholder, or the categories sit on the same taxonomy branch
+        (the relationship `classify_address` calls "hierarchical refinement").
+      - internal contradiction: different categories that cannot both be true - opposite polarity, or
+        unrelated branches (the relationship `classify_address` calls a conflict).
+
+    A subject whose claims are all `canon: unknown` is left out: it made no interpretable claim to
+    contradict itself with, so it is neither repetition nor contradiction.
+    """
+    by_subject = collections.defaultdict(list)
+    for c in claims:
+        by_subject[provenance.subject_key(c)].append(c)
+
+    buckets: dict[str, list] = {k: [] for k in INTERNAL_CONSISTENCY_OUTCOMES}
+    for subject, group in by_subject.items():
+        if len(group) < 2:
+            continue
+        cats = {c["canon"] for c in group if c["canon"] != "unknown"}
+        if not cats:
+            continue
+        if len(cats) == 1:
+            first = group[0]
+            identical = all(c.get("raw_label") == first.get("raw_label")
+                            and c.get("source") == first.get("source") for c in group)
+            bucket = "repeated observation" if identical else "repeated same label"
+        else:
+            rel = label_relationship(cats)
+            bucket = "compatible multi-label claim" if rel == "hierarchical refinement" else "internal contradiction"
+        buckets[bucket].append(dict(subject=subject, categories=sorted(cats),
+                                    claims=[c.get("claim_id") for c in group]))
+    return {k: dict(n=len(v), addresses=v) for k, v in buckets.items()}
 
 
 def flags_for_address(claims: list[dict], today=None) -> list[str]:

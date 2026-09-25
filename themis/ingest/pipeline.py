@@ -18,7 +18,7 @@ reference relationships the target never touched leak into its numbers.
 from __future__ import annotations
 import csv, gzip, hashlib
 
-from .. import corpus as _corpus, analysis, target_audit, chains, config_io
+from .. import corpus as _corpus, analysis, target_audit, chains, config_io, taxonomy
 from ..errors import InputError, RowLimitError
 from . import gating as _gating, preflight as _preflight, validate as _validate, claims as _claims
 
@@ -142,6 +142,7 @@ def ingest(path: str, source_id: str, mapping_override: dict | None = None,
                                   row_chains=validation["valid_chains"], row_labels=validation["valid_labels"])
     _p("complete", "normalize", f"{len(claims):,} claims")
 
+    internal_consistency = taxonomy.internal_consistency(claims)
     capabilities = {"address_validation": True, "claim_normalization": True,
                     "internal_consistency": True}
     limitations = _validation_limitations(validation, pf, len(rows), len(claims))
@@ -211,6 +212,7 @@ def ingest(path: str, source_id: str, mapping_override: dict | None = None,
         validation=summary,
         claims=claims, capabilities=capabilities, limitations=limitations,
         target_audit=target_result, reliability_profile=target_result["profile"],
+        internal_consistency=internal_consistency,
     )
 
 

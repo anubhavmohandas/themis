@@ -717,48 +717,33 @@ def dependency_candidates(declared_sources: list[str]) -> list[dict]:
 
 # ------------------------------------------------------------------ conflicts
 def conflicts(claims: list[dict]) -> dict:
-    """Section 10, intra-dataset case: the same address given incompatible
+    """Section 10, intra-dataset case: the same subject given incompatible
     classifications *within one extraction* (e.g. two rows for one address
     after a join fans it out). This is not cross-source corroboration -
     `taxonomy.classify_address` (which THEMIS's cross-source agreement uses)
     requires >=2 distinct sources by design, and a joined dataset is one
-    source - so the outcome classes are computed directly here, reusing the
-    same taxonomy primitives (polarity, generic placeholders, ancestors)."""
-    by_addr: dict[str, list[dict]] = {}
+    source. Grouped by `provenance.subject_key` (chain + address), not the
+    bare address string, so the same address on two different chains is two
+    subjects, never one contradicting itself. `internal_consistency` is the
+    full within-dataset picture (repeats, compatible multi-label claims and
+    contradictions); this keeps only the conflict subset, in the shape this
+    module's callers already expect."""
+    internal = taxonomy.internal_consistency(claims)
+    by_subject: dict[str, list[dict]] = {}
     for c in claims:
-        by_addr.setdefault(c["address"], []).append(c)
+        by_subject.setdefault(_provenance.subject_key(c), []).append(c)
     conflicting = []
-    for addr, group in by_addr.items():
-        cats = {c["canon"] for c in group if c["canon"] != "unknown"}
-        if len(cats) < 2:
-            continue
-        outcome = _pairwise_outcome(cats)
-        # THEMIS's own conflict vocabulary (themis/views.py's _CONFLICT_KIND_MAP)
-        # only ever calls "entity-type conflict" and "licit/illicit conflict" a
-        # conflict; "exact" agrees, and "hierarchical refinement" is a category
-        # granularity difference, not a contradiction (spec Section 10).
-        if outcome not in ("entity-type conflict", "licit/illicit conflict"):
-            continue
-        conflicting.append(dict(address=addr, outcome=outcome, categories=sorted(cats),
+    for entry in internal["internal contradiction"]["addresses"]:
+        group = by_subject[entry["subject"]]
+        conflicting.append(dict(address=group[0]["address"], chain=group[0].get("blockchain"),
+                                outcome=taxonomy.label_relationship(set(entry["categories"])),
+                                categories=entry["categories"],
                                 claims=[dict(claim_id=c["claim_id"], canon=c["canon"], raw_label=c["raw_label"],
                                             provenance_record=c.get("provenance_record")) for c in group]))
     return dict(conflicting_addresses=conflicting,
-                n_addresses_checked=sum(1 for g in by_addr.values() if len(g) > 1),
+                n_addresses_checked=sum(1 for g in by_subject.values() if len(g) > 1),
+                internal_consistency=internal,
                 note="conflicts among rows of the SAME extraction (duplicate/joined-fanout rows), not cross-source "
                      "corroboration; see /api/analysis/{id}/conflicts for cross-source agreement against a "
-                     "reference corpus.")
-
-
-def _pairwise_outcome(cats: set) -> str:
-    if len(cats) == 1:
-        return "exact"
-    pol = {taxonomy.POLARITY.get(c, "unknown") for c in cats} - {"unknown"}
-    if len(pol) > 1:
-        return "licit/illicit conflict"
-    specific = cats - taxonomy.GENERIC
-    if len(specific) <= 1:
-        return "hierarchical refinement"
-    anc = {c: taxonomy.ancestors(c) for c in specific}
-    if all(a in anc[b] or b in anc[a] for a in specific for b in specific):
-        return "hierarchical refinement"
-    return "entity-type conflict"
+                     "reference corpus. `internal_consistency` also separates repeated and compatible "
+                     "multi-label rows from actual contradictions.")
