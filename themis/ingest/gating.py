@@ -9,6 +9,7 @@ the labels were compared and agreed, when nothing was comparable.
     unsupported_schema  the dataset failed pre-flight; nothing may run
 """
 from __future__ import annotations
+from .. import config_io
 
 COMPUTED = "computed"
 NOT_APPLICABLE = "not_applicable"
@@ -33,12 +34,26 @@ def evaluate(preflight: dict, claims: list[dict], target_result: dict, reference
     profile = target_result["profile"]
     out = {}
 
-    declared = sum(1 for c in claims if (c.get("prov_family") or "").strip())
-    out["provenance"] = (
-        _s(COMPUTED, f"{declared:,} of {len(claims):,} claims name a declared source", n_declared=declared)
-        if declared else
-        _s(INSUFFICIENT_DATA, "no declared-source field is mapped (or it is empty), so the provenance of this "
-                              "dataset's claims cannot be established; every claim's root stays UNRESOLVED"))
+    declared_values = [(c.get("prov_family") or "").strip() for c in claims]
+    declared = sum(1 for v in declared_values if v)
+    distinct = len({v for v in declared_values if v})
+    if not declared:
+        out["provenance"] = _s(INSUFFICIENT_DATA, "no declared-source field is mapped (or it is empty), so the "
+                               "provenance of this dataset's claims cannot be established; every claim's root "
+                               "stays UNRESOLVED")
+    elif (distinct <= config_io.load().preflight["source_class_max_distinct"]
+          and len(claims) > config_io.load().preflight["source_class_min_rows_per_value"] * distinct):
+        # a handful of values repeated over every claim is a class or method of evidence: it says how a
+        # label was made, not which source made it, so it cannot resolve a provenance root
+        out["provenance"] = _s(
+            INSUFFICIENT_DATA,
+            f"the declared-source column holds only {distinct} distinct value(s) across {len(claims):,} claims: a "
+            "class or method of evidence, not where each claim came from. No provenance root can be established "
+            "from it, and different values are not independent sources; every claim's root stays UNRESOLVED",
+            n_declared=declared, n_distinct_declared=distinct)
+    else:
+        out["provenance"] = _s(COMPUTED, f"{declared:,} of {len(claims):,} claims name a declared source",
+                               n_declared=declared, n_distinct_declared=distinct)
 
     if reference is None:
         out["reference_match"] = _s(NOT_APPLICABLE, "no reference corpus was supplied")

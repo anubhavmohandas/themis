@@ -23,7 +23,7 @@ def declared_source(row: dict, mapping: dict) -> str:
 
 def build_claim(row: dict, mapping: dict, source_id: str, default_heuristic: str = "unknown",
                 record_id: str | int | None = None, blockchain: str | None = None,
-                provenance_record: dict | None = None) -> dict:
+                provenance_record: dict | None = None, label_token: str | None = None) -> dict:
     """One row, one claim. `source_id` should not collide with a bundled
     source id in config/sources/ unless this really is that source - an
     unrecognized id gets no provenance rule and resolves UNRESOLVED, which
@@ -37,6 +37,15 @@ def build_claim(row: dict, mapping: dict, source_id: str, default_heuristic: str
     """
     raw_label = (row.get(mapping.get("label")) or "").strip() if mapping.get("label") else ""
     raw_category = (row.get(mapping.get("category")) or "").strip() if mapping.get("category") else ""
+    label_cell = None
+    if label_token is not None:
+        # one token of a multi-label cell: it replaces the cell it was split from (the category when there
+        # is one, as validation chose it), and the whole cell stays on the claim so nothing is lost
+        label_cell = raw_category or raw_label
+        if raw_category:
+            raw_category = label_token
+        else:
+            raw_label = label_token
     # A dataset can carry a free-text label/name column (label role - might
     # be an entity name, not a category word at all) alongside a distinct,
     # dedicated classification column (category role). Schema inference
@@ -70,6 +79,9 @@ def build_claim(row: dict, mapping: dict, source_id: str, default_heuristic: str
         "raw_address": raw_address,
         "source": source_id,
         "actor": (row.get(mapping.get("actor")) or "").strip() if mapping.get("actor") else "",
+        # who the address is said to belong to: metadata about the claim, never evidence for it
+        "entity": (row.get(mapping.get("entity")) or "").strip() if mapping.get("entity") else "",
+        "label_cell": label_cell,
         "raw_label": raw_label,
         "canon": canon,
         "polarity": taxonomy.POLARITY.get(canon, "unknown"),
@@ -83,7 +95,7 @@ def build_claim(row: dict, mapping: dict, source_id: str, default_heuristic: str
         "confidence_raw": (row.get(mapping.get("confidence")) or "").strip() if mapping.get("confidence") else "",
         "confidence_normalized": None,
         "heuristic": default_heuristic,
-        "subcat": (row.get(mapping.get("category")) or "").strip() if mapping.get("category") else "",
+        "subcat": raw_category,
         "notes": f"structured_label_entity={structured_entity}" if structured_entity else "",
         # STEP: relational extraction (ingest/relational.py) - which database
         # table/row(s) this claim was built from, so a joined claim never
@@ -94,9 +106,15 @@ def build_claim(row: dict, mapping: dict, source_id: str, default_heuristic: str
 
 
 def build_claims(rows: list[dict], mapping: dict, source_id: str, default_heuristic: str = "unknown",
-                 blockchain: str | None = None, row_chains: list | None = None) -> list[dict]:
-    """One claim per row. `row_chains[i]` is the row's own chain when the file states it per row;
-    `blockchain` is the file's single chain otherwise."""
-    return [build_claim(r, mapping, source_id, default_heuristic, record_id=i,
-                        blockchain=row_chains[i] if row_chains else blockchain)
-            for i, r in enumerate(rows)]
+                 blockchain: str | None = None, row_chains: list | None = None,
+                 row_labels: list | None = None) -> list[dict]:
+    """One claim per row, or one per label token for a row whose label cell was split
+    (`row_labels[i]` lists that row's tokens). `row_chains[i]` is the row's own chain when the
+    file states it per row; `blockchain` is the file's single chain otherwise."""
+    out = []
+    for i, r in enumerate(rows):
+        chain = row_chains[i] if row_chains else blockchain
+        for tok in (row_labels[i] if row_labels and row_labels[i] else [None]):
+            out.append(build_claim(r, mapping, source_id, default_heuristic, record_id=i, blockchain=chain,
+                                   label_token=tok))
+    return out

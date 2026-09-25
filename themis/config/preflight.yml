@@ -253,6 +253,10 @@ identifier_excluded_semantics: [attribution_label, attribution_category, attribu
 # a declared-source column with at most this many distinct values is a source CLASS or
 # method (a handful of kinds of evidence), not proof of where each claim came from
 source_class_max_distinct: 12
+# ... and only when the file has more than this many rows per distinct value (a small file
+# with few sources is not evidence that the column is a class). Read by both the pre-flight
+# and the analysis gating, so the two can never disagree.
+source_class_min_rows_per_value: 10
 
 # Multi-label cells ("a,b"). A label/category column is split ONLY when the column's own
 # values show it is a token list: most multi-token cells are made entirely of tokens that also

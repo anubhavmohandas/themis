@@ -13,7 +13,7 @@ is synthetic and names no real dataset: each test pins a rule that must hold for
 import csv, hashlib, io, json, os, pathlib, random, sys, tempfile, unittest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from themis import chains, corpus as corpus_mod, provenance, target_audit
+from themis import chains, config_io, corpus as corpus_mod, provenance, target_audit
 from themis.chains.evm import keccak256
 from themis.ingest import detect, gating, pipeline, preflight, validate
 from test_preflight import btc_address, to_csv, write_tmp
@@ -215,6 +215,129 @@ class TestChainPerRow(unittest.TestCase):
         self.assertEqual(eth["profile"]["reference_comparability"]["comparable"], 0)
         btc = target_audit.audit_target_against_reference([claim("bitcoin")], ref)
         self.assertEqual(btc["profile"]["reference_comparability"]["comparable"], 1)
+
+
+class TestMultiLabelCells(unittest.TestCase):
+    fields = ["chain", "address", "category"]
+
+    def file(self, cells, extra_singles=("exchange", "mixer", "scam")):
+        rows = [{"chain": "ethereum", "address": evm(i), "category": c} for i, c in enumerate(cells)]
+        n = len(rows)
+        for j, s in enumerate(extra_singles):                        # tokens must also occur on their own
+            rows += [{"chain": "ethereum", "address": evm(n + 100 * j + k), "category": s} for k in range(20)]
+        return rows
+
+    def test_a_column_of_token_lists_is_split_into_one_claim_per_token(self):
+        rows = self.file(["exchange,mixer"] * 30 + ["exchange,mixer,scam"] * 10)
+        r = ingest(rows, self.fields)
+        self.assertEqual(r["dataset_preflight"]["label_structure"]["status"], "multi_label")
+        two = [c for c in r["claims"] if c["label_cell"] == "exchange,mixer"]
+        self.assertEqual(len(two), 60)
+        self.assertEqual({c["subcat"] for c in two}, {"exchange", "mixer"})
+        three = [c for c in r["claims"] if c["label_cell"] == "exchange,mixer,scam"]
+        self.assertEqual(len(three), 30)
+
+    def test_rows_addresses_and_claims_are_counted_separately(self):
+        rows = self.file(["exchange,mixer"] * 30)
+        r = ingest(rows, self.fields)
+        v = r["validation"]
+        self.assertEqual((v["n_valid"], v["n_claims"]), (90, 120))
+        self.assertEqual(len(r["claims"]), 120)
+        self.assertEqual(len({c["address"] for c in r["claims"]}), 90)
+        self.assertTrue(any("label claims" in s for s in r["limitations"]))
+
+    def test_the_first_token_is_never_picked_and_nothing_is_dropped(self):
+        rows = self.file(["exchange,mixer"] * 30)
+        r = ingest(rows, self.fields)
+        for addr in {c["address"] for c in r["claims"] if c["label_cell"]}:
+            self.assertEqual({c["subcat"] for c in r["claims"] if c["address"] == addr}, {"exchange", "mixer"})
+
+    def test_a_known_and_an_unknown_token_both_become_claims(self):
+        rows = self.file(["exchange,mixer"] * 30 + ["exchange,zzz_new"] * 2)
+        pf = run(rows, self.fields)
+        self.assertEqual(pf["label_structure"]["status"], "multi_label")
+        toks = validate.split_label("exchange,zzz_new", pf["label_structure"])
+        self.assertEqual(toks, ["exchange", "zzz_new"])
+
+    def test_a_comma_inside_a_literal_is_not_a_separator(self):
+        cells = ["Doe, John"] * 30 + ["Roe, Jane"] * 30 + ["acme"] * 20
+        pf = run(self.file(cells, extra_singles=("acme",)), self.fields)
+        self.assertEqual(pf["label_structure"]["status"], "single_label")
+        self.assertEqual(validate.split_label("Doe, John", {"status": "multi_label", "separator": ",", "column": "category"}),
+                         ["Doe, John"])                              # whitespace: not a token list, kept whole
+
+    def test_unestablished_combinations_are_not_split_by_default(self):
+        cells = [f"a{i},b{i}" for i in range(50)]                    # every token appears once, never alone
+        pf = run(self.file(cells), self.fields)
+        self.assertEqual(pf["label_structure"]["status"], "single_label")
+
+    def test_hierarchical_looking_labels_are_not_split_and_no_hierarchy_is_invented(self):
+        cells = ["exchange/cex"] * 30 + ["exchange:binance"] * 30
+        r = ingest(self.file(cells, extra_singles=("exchange",)), self.fields)
+        self.assertEqual(r["dataset_preflight"]["label_structure"]["status"], "single_label")
+        self.assertIn("exchange/cex", {c["subcat"] for c in r["claims"]})
+
+
+class TestEvidenceEntityAndSourceAreNotTruth(unittest.TestCase):
+    fields = ["chain", "address", "category", "entity", "source"]
+
+    def rows(self, n=300):
+        return [{"chain": "ethereum", "address": evm(i), "category": "exchange",
+                 "entity": "acme" if i % 3 == 0 else "", "source": ("ground_truth", "heuristic", "external")[i % 3]}
+                for i in range(n)]
+
+    def test_a_blank_entity_does_not_reject_a_row_that_has_a_category(self):
+        r = ingest(self.rows(), self.fields)
+        self.assertEqual(r["validation"]["rejected_by_reason"], {})
+        self.assertEqual(len(r["claims"]), 300)
+
+    def test_entity_is_metadata_and_not_the_claimed_label_when_a_category_exists(self):
+        pf = run(self.rows(), self.fields)
+        by = {c["column"]: c["semantic_type"] for c in pf["columns"]}
+        self.assertEqual(by["entity"], "attribution_entity")
+        self.assertEqual(by["category"], "attribution_category")
+        self.assertIsNone(pf["mapping"]["label"])
+        claim = ingest(self.rows(), self.fields)["claims"][0]
+        self.assertEqual((claim["raw_label"], claim["entity"]), ("", "acme"))   # kept as metadata, never as the label
+
+    def test_an_entity_alone_is_what_is_claimed(self):
+        rows = [{"chain": "ethereum", "address": evm(i), "entity": "acme"} for i in range(60)]
+        pf = run(rows, ["chain", "address", "entity"])
+        self.assertEqual(pf["mapping"]["label"], "entity")
+
+    def test_a_three_value_source_column_is_a_class_of_evidence_not_provenance(self):
+        r = ingest(self.rows(), self.fields)
+        st = r["analysis_states"]["provenance"]
+        self.assertEqual(st["state"], gating.INSUFFICIENT_DATA)
+        self.assertIn("class or method", st["reason"])
+        self.assertTrue(any("different values are not independent sources" in w
+                            for w in r["dataset_preflight"]["warnings"]))
+        self.assertTrue(all(provenance.resolve(c)["resolved"] is False for c in r["claims"]))
+
+    def test_the_class_of_evidence_threshold_is_read_from_config_by_both_code_paths(self):
+        # 300 rows over 3 values = 100 rows per value: a class at the configured 10, not at 200
+        c = config_io.load().preflight
+        original = c["source_class_min_rows_per_value"]
+        try:
+            for threshold, is_class in ((10, True), (200, False)):
+                c["source_class_min_rows_per_value"] = threshold
+                r = ingest(self.rows(), self.fields)
+                self.assertEqual(r["analysis_states"]["provenance"]["state"] == gating.INSUFFICIENT_DATA, is_class)
+                self.assertEqual(any("class or method" in w for w in r["dataset_preflight"]["warnings"]), is_class)
+        finally:
+            c["source_class_min_rows_per_value"] = original
+
+    def test_the_declared_string_never_becomes_verified_evidence(self):
+        from themis import taxonomy
+        r = ingest(self.rows(), self.fields)
+        self.assertEqual({taxonomy.tier_of(c) for c in r["claims"]}, {taxonomy.TIER_UNKNOWN})
+
+    def test_many_distinct_source_names_are_still_a_declared_source(self):
+        rows = self.rows()
+        for i, row in enumerate(rows):
+            row["source"] = f"https://example.org/list/{i}"
+        r = ingest(rows, self.fields)
+        self.assertEqual(r["analysis_states"]["provenance"]["state"], gating.COMPUTED)
 
 
 class TestIdentifierIntegrityIsReportedNotRepaired(unittest.TestCase):

@@ -712,7 +712,7 @@ def _source_class(columns, profiles, c, n_total) -> int | None:
     for r in columns:
         if r["semantic_type"] == "attribution_source" and r["status"] != "invalid":
             d = profiles[r["column"]].distinct
-            if d <= c["source_class_max_distinct"] and n_total > 10 * d:
+            if d <= c["source_class_max_distinct"] and n_total > c["source_class_min_rows_per_value"] * d:
                 return d
     return None
 

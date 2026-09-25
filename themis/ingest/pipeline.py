@@ -31,7 +31,7 @@ CRYPTO_NON_ATTRIBUTION_MESSAGE = _preflight.CRYPTO_NON_ATTRIBUTION_MESSAGE
 
 #: validation outputs with one entry per row: the claim builder consumes them, but they never belong in a
 #: result that is stored, served or exported (at ten million rows they are hundreds of MB)
-_PER_ROW = ("valid_rows", "valid_chains", "rejected")
+_PER_ROW = ("valid_rows", "valid_chains", "valid_labels", "rejected")
 
 
 def load_csv(path: str) -> tuple[list[dict], list[str]]:
@@ -112,7 +112,7 @@ def ingest(path: str, source_id: str, mapping_override: dict | None = None,
 
     mapping, chain_id = pf["mapping"], pf["chain"]["value"]
     _p("start", "validate")
-    validation = _validate.validate_rows(rows, mapping, chain_id)
+    validation = _validate.validate_rows(rows, mapping, chain_id, multi_label=pf["label_structure"])
     _p("complete", "validate", f"{len(validation['valid_rows']):,} of {len(rows):,} rows have a valid address")
     # the sample said the subject looked valid; every row is now checked. A file whose
     # identifiers mostly fail is not an attribution dataset, whatever its first rows held.
@@ -128,7 +128,7 @@ def ingest(path: str, source_id: str, mapping_override: dict | None = None,
                         {k: v for k, v in validation.items() if k not in _PER_ROW})
     _p("start", "normalize")
     claims = _claims.build_claims(validation["valid_rows"], mapping, source_id, blockchain=chain_id,
-                                  row_chains=validation["valid_chains"])
+                                  row_chains=validation["valid_chains"], row_labels=validation["valid_labels"])
     _p("complete", "normalize", f"{len(claims):,} claims")
 
     capabilities = {"address_validation": True, "claim_normalization": True,
@@ -224,6 +224,9 @@ def _validation_limitations(v: dict, pf: dict, n_rows: int, n_claims: int) -> li
     if v["n_identifiers_trimmed"]:
         out.append(f"{v['n_identifiers_trimmed']:,} identifiers carried leading or trailing whitespace, which was trimmed "
                    "before validation; the identifier itself was not altered.")
+    if v["n_claims"] > v["n_valid"]:
+        out.append(f"{v['n_valid']:,} valid rows carry {v['n_claims']:,} label claims: rows that list several labels "
+                   "(one claim per label). Rows, addresses and claims are counted separately.")
     return out
 
 
