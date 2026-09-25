@@ -9,3 +9,7 @@ Subclasses ValueError so existing `except ValueError` callers are unaffected."""
 
 class InputError(ValueError):
     pass
+
+
+class RowLimitError(InputError):
+    """The input has more logical rows than the service is configured to hold in memory."""

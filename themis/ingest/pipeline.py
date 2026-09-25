@@ -19,7 +19,7 @@ from __future__ import annotations
 import csv, gzip, hashlib
 
 from .. import corpus as _corpus, analysis, target_audit, chains, config_io
-from ..errors import InputError
+from ..errors import InputError, RowLimitError
 from . import gating as _gating, preflight as _preflight, validate as _validate, claims as _claims
 
 # The user-facing stop messages live with the pre-flight that decides them;
@@ -34,7 +34,7 @@ CRYPTO_NON_ATTRIBUTION_MESSAGE = _preflight.CRYPTO_NON_ATTRIBUTION_MESSAGE
 _PER_ROW = ("valid_rows", "valid_chains", "valid_labels", "rejected")
 
 
-def load_csv(path: str) -> tuple[list[dict], list[str]]:
+def load_csv(path: str, max_rows: int | None = None) -> tuple[list[dict], list[str]]:
     # utf-8-sig strips a leading UTF-8 BOM if present (common from
     # Excel-exported CSVs) and is otherwise identical to utf-8, so a
     # BOM-free file is unaffected; without it the BOM survives as part of
@@ -47,7 +47,17 @@ def load_csv(path: str) -> tuple[list[dict], list[str]]:
     opener = gzip.open if str(path).endswith(".gz") else open
     with opener(path, "rt", newline="", encoding="utf-8-sig", errors="replace") as f:
         reader = csv.DictReader(f)
-        rows = list(reader)
+        if max_rows is None:
+            rows = list(reader)
+        else:
+            # logical records, counted as the parser yields them (never physical lines), and the
+            # read stops at the first one over the limit: a refused file is not held in memory
+            rows = []
+            for row in reader:
+                if len(rows) >= max_rows:
+                    raise RowLimitError(f"The file has more than {max_rows:,} rows, the most this service "
+                                        "analyses (it holds the whole dataset in memory). Nothing was analysed.")
+                rows.append(row)
         return rows, list(reader.fieldnames or [])
 
 
@@ -75,7 +85,8 @@ def _stopped(source_id: str, pf: dict, rows: list, fieldnames: list, validation:
 def ingest(path: str, source_id: str, mapping_override: dict | None = None,
           reference: "_corpus.Corpus | None" = None, sample_size: int | None = None,
           analysis_as_of_date=None, progress=None, *, semantics: dict | None = None,
-          chain: str | None = None, confirmed: bool = False, original_filename: str | None = None) -> dict:
+          chain: str | None = None, confirmed: bool = False, original_filename: str | None = None,
+          max_rows: int | None = None) -> dict:
     """`mapping_override` is {role: column} (CLI `--map`, semantic ids or the
     legacy role names) and `semantics` is {column: semantic type} (the mapping
     screen). Either way the pre-flight re-validates the choice: a mapping can
@@ -95,7 +106,7 @@ def ingest(path: str, source_id: str, mapping_override: dict | None = None,
                          "id so the uploaded file is not given that source's provenance")
 
     _p("start", "parse")
-    rows, fieldnames = load_csv(path)
+    rows, fieldnames = load_csv(path, max_rows)
     _p("complete", "parse", f"{len(rows):,} rows \u00b7 {len(fieldnames)} columns")
 
     _p("start", "detect")

@@ -26,7 +26,7 @@ from .corpus import Corpus
 from . import chains as chains_mod
 from . import analysis, config_io, overview as _overview, provenance, report as _report, graph as _graph, taxonomy, views
 from . import __version__
-from .errors import InputError
+from .errors import InputError, RowLimitError
 from .paper import reproduce as _paper_repro, verify as _paper_verify
 from . import workspace as _workspace
 from .ingest import (gating as _gating, pipeline as _ingest_pipeline, preflight as _preflight,
@@ -44,6 +44,7 @@ _ALLOWED_ORIGINS = frozenset(_api_cfg["cors"]["allowed_origins"])
 _ALLOWED_HOSTS = list(_api_cfg["hosts"]["allowed"])
 _MAX_UPLOAD = _api_cfg["upload"]["max_bytes"]
 _MAX_BODY = _MAX_UPLOAD + _api_cfg["upload"]["multipart_overhead_bytes"]
+_MAX_ROWS = _api_cfg["upload"]["max_rows"]
 _PAGING = _api_cfg["paging"]
 
 
@@ -203,6 +204,8 @@ def _bad_request(fn):
     and reaches the generic handler, with the detail in the server log only."""
     try:
         return fn()
+    except RowLimitError as e:
+        raise HTTPException(413, str(e)) from e
     except InputError as e:
         raise HTTPException(400, str(e)) from e
     except sqlite3.DatabaseError as e:
@@ -268,7 +271,7 @@ async def preflight(file: UploadFile = File(...), sample_rows: int = Form(5), ma
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(data)
-        rows, fieldnames = _bad_request(lambda: _ingest_pipeline.load_csv(tmp_path))
+        rows, fieldnames = _bad_request(lambda: _ingest_pipeline.load_csv(tmp_path, _MAX_ROWS))
     finally:
         os.remove(tmp_path)
 
@@ -514,7 +517,7 @@ def _run_upload(data: bytes, filename: str | None, source_id: str, use_reference
         result = _bad_request(lambda: _ingest_pipeline.ingest(
             tmp_path, source_id, mapping_override=mapping_override, reference=reference,
             analysis_as_of_date=today, progress=progress, semantics=semantics, chain=chain,
-            confirmed=confirmed, original_filename=filename))
+            confirmed=confirmed, original_filename=filename, max_rows=_MAX_ROWS))
     finally:
         os.remove(tmp_path)
 

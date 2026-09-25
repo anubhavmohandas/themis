@@ -46,6 +46,13 @@ upload:
   # that travel in the same body as the file. Only bounds what is read off the
   # wire; the file itself is checked against max_bytes exactly. 1 MiB.
   multipart_overhead_bytes: 1048576
+  # Most LOGICAL rows (CSV records: a quoted newline inside a field is one row, never two) an
+  # uploaded file may hold. THEMIS is in-memory: measured ~2.5 KB of RAM per row (an 850 MB /
+  # 10M-row file peaked near 24.7 GB), so 1,000,000 rows is about 2.5 GB, which a shared or
+  # public service can carry. The size limit above cannot stand in for it: a file of short
+  # rows holds far more rows per byte. Larger analyses are a scale test run under an explicit
+  # local config (THEMIS_CONFIG_DIR) on a machine sized for it, not the default path.
+  max_rows: 1000000
   # Largest file the BROWSER will hash itself before upload (Web Crypto has no streaming digest, so it must
   # read the whole file into the tab's memory: at hundreds of MiB that crashed the tab). Larger files show the
   # hash the server computed instead. 128 MiB.
