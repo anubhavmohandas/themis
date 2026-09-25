@@ -157,7 +157,7 @@ def audit_target_against_reference(target_claims: list[dict], reference_corpus,
         # STEP 3: the outcome for this address is classified over the
         # target's own claim(s) plus only *its* matched reference claims -
         # never the reference corpus's other, unrelated internal agreement.
-        outcome_counter[taxonomy.classify_address(claims + ref_claims)] += 1
+        outcome_counter[taxonomy.classify_target_address(claims, ref_claims)] += 1
 
     comparable_addrs = [a for a, s in comparability.items() if s != NO_REFERENCE_MATCH]
     n_comparable = len(comparable_addrs)

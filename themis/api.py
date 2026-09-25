@@ -1272,7 +1272,7 @@ def _explain_in_workspace(ws: _workspace.AnalysisWorkspace, address: str, chain:
     combined = target_claims + ref_claims
     indep = provenance.address_independence(combined)
     srcs = sorted({c["source"] for c in combined})
-    outcome = taxonomy.classify_address(combined) if len(srcs) >= 2 else "single-source"
+    outcome = taxonomy.classify_target_address(target_claims, ref_claims) if len(srcs) >= 2 else "single-source"
 
     def _claim_view(c):
         return dict(source=c["source"], label=c["canon"], raw=c.get("raw_label") or c.get("subcat") or "",

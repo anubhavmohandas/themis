@@ -190,5 +190,61 @@ class TestReferenceIndependenceIsNotCreditedToTheTarget(unittest.TestCase):
         self.assertEqual(ind["apparent_multi_source"], 1)
 
 
+class TestUninterpretedTargetIsNotAgreement(unittest.TestCase):
+    """A target whose labels THEMIS could not map (`canon == "unknown"`) said nothing THEMIS understood, so the
+    address is `incomparable` for the target however the reference sources treat each other. Their mutual
+    agreement or conflict is reference-reference evidence and must not be reported as the target's own outcome
+    (found on an external file whose vocabulary was entirely unmapped: 1,508 "exact" outcomes came from two
+    reference sources agreeing with each other)."""
+
+    BASE = dict(polarity="unknown", prov_family="", lastmod="", heuristic="", subcat="")
+
+    def _ref(self, second="ransomware"):
+        from themis import corpus as corpus_mod
+        b = dict(self.BASE, polarity="illicit")
+        return corpus_mod.Corpus([dict(b, address="a1", source="ref_a", raw_label="x", canon="ransomware"),
+                                  dict(b, address="a1", source="ref_b", raw_label="x", canon=second,
+                                       polarity="licit" if second == "exchange" else "illicit")])
+
+    def _mine(self, canon="unknown"):
+        return [dict(self.BASE, address="a1", blockchain="bitcoin", source="upload", raw_label="some opaque code",
+                     canon=canon)]
+
+    def _ws(self, ref, mine):
+        from themis import workspace
+        return workspace.AnalysisWorkspace(analysis_id="t", mode=workspace.MODE_UPLOADED, dataset_name="t.csv",
+                                           created_at="", analysis_as_of_date="2026-01-01",
+                                           reference_corpus=ref, claims=mine)
+
+    def test_target_audit_counts_no_agreement_when_target_label_is_unmapped(self):
+        for second in ("ransomware", "exchange"):            # reference sources agree / conflict with each other
+            r = target_audit.audit_target_against_reference(self._mine(), self._ref(second))
+            outcomes = r["profile"]["agreement"]["outcomes"]
+            self.assertEqual(outcomes["incomparable"]["n"], 1, second)
+            for k in ("exact", "licit/illicit conflict", "entity-type conflict", "hierarchical refinement"):
+                self.assertEqual(outcomes[k]["n"], 0, (second, k))
+            self.assertEqual(r["profile"]["reference_comparability"]["comparable"], 1)   # still matched
+
+    def test_claims_and_conflicts_views_agree_with_the_audit(self):
+        from themis import views
+        for second in ("ransomware", "exchange"):
+            mine = self._mine()
+            ws = self._ws(self._ref(second), mine)
+            self.assertEqual(views.outcome_for(ws, mine[0]), "incomparable", second)
+
+    def test_address_inspector_does_not_report_a_reference_only_outcome_for_the_target(self):
+        from themis import api
+        for second in ("ransomware", "exchange"):
+            ws = self._ws(self._ref(second), self._mine())
+            self.assertEqual(api._explain_in_workspace(ws, "a1", "bitcoin")["outcome"], "incomparable", second)
+
+    def test_an_interpreted_target_label_is_still_compared(self):
+        # control: the same reference, but the target's label maps, so its own opinion is compared
+        r = target_audit.audit_target_against_reference(self._mine("ransomware"), self._ref("ransomware"))
+        self.assertEqual(r["profile"]["agreement"]["outcomes"]["exact"]["n"], 1)
+        r = target_audit.audit_target_against_reference(self._mine("exchange"), self._ref("ransomware"))
+        self.assertEqual(r["profile"]["agreement"]["outcomes"]["licit/illicit conflict"]["n"], 1)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

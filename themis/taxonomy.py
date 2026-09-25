@@ -202,6 +202,20 @@ def classify_address(claims: list[dict]) -> str:
     return "entity-type conflict"
 
 
+def classify_target_address(target_claims: list[dict], reference_claims: list[dict]) -> str:
+    """`classify_address` for an uploaded dataset's subject against the reference corpus.
+
+    If the target says something about the address but none of it maps to a category (every `canon` is
+    "unknown"), it contributed no interpretable opinion. Whatever the reference sources say about each other
+    (agree, refine, conflict) is then reference-reference evidence, not a comparison with the target, so the
+    address is `incomparable` for the target. Only reference claims that were actually set against an
+    interpretable target claim may produce an outcome."""
+    if target_claims and all(c["canon"] == "unknown" for c in target_claims):
+        return "incomparable"
+    return classify_address(list(target_claims) + list(reference_claims))
+
+
+
 OUTCOMES = ["exact", "hierarchical refinement", "entity-type conflict",
             "licit/illicit conflict", "incomparable"]
 

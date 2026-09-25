@@ -99,10 +99,11 @@ def _cache(ws) -> dict:
     return ws.__dict__.setdefault("_views", {})
 
 
-def _comparable_groups(ws) -> dict[str, list]:
+def _comparable_groups(ws) -> dict[str, tuple[list, list]]:
+    """{subject: (the target's claims, the reference claims)}; a paper reproduction has no target."""
     ref = ws.reference_corpus
     if ws.mode == _workspace.MODE_PAPER:
-        return {a: ref.by_addr[a] for a in ref.multi_source_addresses()}
+        return {a: ([], ref.by_addr[a]) for a in ref.multi_source_addresses()}
     if ref is None:
         return {}
     mine = collections.defaultdict(list)          # subject (chain + address) -> the target's claims
@@ -112,7 +113,7 @@ def _comparable_groups(ws) -> dict[str, list]:
     for key, cs in mine.items():
         ref_cs = ref.for_subject(cs[0].get("blockchain"), cs[0]["address"])
         if ref_cs:
-            out[key] = cs + ref_cs
+            out[key] = (cs, ref_cs)
     return out
 
 
@@ -122,8 +123,9 @@ def address_index(ws) -> dict[str, dict]:
     if "index" in cache:
         return cache["index"]
     idx = {}
-    for key, claims in _comparable_groups(ws).items():
-        outcome = taxonomy.classify_address(claims)
+    for key, (target_cs, ref_cs) in _comparable_groups(ws).items():
+        claims = target_cs + ref_cs
+        outcome = taxonomy.classify_target_address(target_cs, ref_cs)
         indep = provenance.address_independence(claims)
         idx[key] = dict(address=claims[0]["address"], chain=claims[0].get("blockchain"), outcome=outcome, kind=KIND_OF_OUTCOME[outcome],
                          circular=indep["circular"], relationship=relationship_of(indep),
