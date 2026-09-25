@@ -59,6 +59,15 @@ def run(cmd, cwd=ROOT, check=True):
     return subprocess.run(cmd, cwd=cwd, check=check)
 
 
+def sync(stamp, deps, cmd, cwd=ROOT):
+    """Run the install only on first run or when a dep file is newer than the stamp
+    (e.g. after a pull changes it) - pip -e rebuilds and hits the network every time otherwise."""
+    if stamp.exists() and all(d.stat().st_mtime <= stamp.stat().st_mtime for d in deps):
+        return
+    run(cmd, cwd=cwd)
+    stamp.touch()
+
+
 def stop(p):
     if p.poll() is not None:
         return
@@ -84,8 +93,11 @@ def main():
     if not venv.exists():
         run([sys.executable, "-m", "venv", str(venv)])
     py = str(venv / ("Scripts/python.exe" if WIN else "bin/python"))
-    run([py, "-m", "pip", "install", "-q", "-e", ".[ui]"])
-    run([npm, "install", "--no-audit", "--no-fund", "--silent"], cwd=ROOT / "frontend")
+    sync(venv / ".deps-stamp", [ROOT / "pyproject.toml"],
+         [py, "-m", "pip", "install", "-q", "-e", ".[ui]"])
+    web = ROOT / "frontend"
+    sync(web / "node_modules" / ".deps-stamp", [web / "package.json", web / "package-lock.json"],
+         [npm, "install", "--no-audit", "--no-fund", "--silent"], cwd=web)
 
     procs = [
         subprocess.Popen([py, "-m", "themis.api"], cwd=ROOT,
