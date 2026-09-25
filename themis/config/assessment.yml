@@ -1,0 +1,42 @@
+# The closing verdict on an uploaded dataset (themis/assessment.py): is this public
+# source dataset reliable enough to use, and why. Every number the verdict turns on
+# is here, so a reviewer can see, and change, exactly what "trustworthy" means.
+# Kept out of thresholds.yml on purpose: that file's hash is recorded by every
+# paper-reproduction run, and a verdict rule is not part of the paper.
+#
+# Each measure has a `caveat` level (the dataset can still be called trustworthy,
+# but the reader is told) and, where a bad value is proof of a problem rather than
+# absence of evidence, a `fail` level (the dataset is called NOT TRUSTWORTHY).
+# All values are shares in [0, 1] of the stated denominator.
+
+# The reference corpus must have spoken about at least this many of the dataset's
+# addresses before agreement or conflict with it is treated as evidence. Below it
+# the verdict is NOT ESTABLISHED, never trustworthy: nothing external was tested.
+min_comparable_addresses: 30
+
+# Rows that failed validation / rows in the file.
+rejected_row_share: {caveat: 0.01, fail: 0.25}
+
+# Addresses whose own rows contradict each other / addresses in the file.
+internal_contradiction_share: {caveat: 0.001, fail: 0.02}
+
+# Licit/illicit or entity-type conflicts with the reference / addresses the
+# reference could classify (incomparable pairs are not in the denominator).
+reference_conflict_share: {caveat: 0.02, fail: 0.10}
+
+# Claims whose label THEMIS's taxonomy cannot place / claims. Such a label can be
+# neither confirmed nor contradicted, so a high share limits what can be said.
+uninterpretable_label_share: {caveat: 0.25}
+
+# Addresses with no claim in the reference corpus / addresses in the file.
+no_reference_match_share: {caveat: 0.5}
+
+# Matched addresses whose reference match traces to the same provenance (so the
+# agreement is inherited, not independent) / matched addresses.
+same_provenance_share: {caveat: 0.5}
+
+# Addresses whose provenance could not be resolved / addresses in the file.
+unresolved_provenance_share: {caveat: 0.5}
+
+# Claims judged stale / claims. Only judged when a real attribution date exists.
+stale_share: {caveat: 0.5}

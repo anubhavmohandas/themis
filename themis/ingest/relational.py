@@ -23,7 +23,7 @@ from __future__ import annotations
 import re, sqlite3, time
 from collections.abc import Iterator
 
-from .. import chains, config_io, provenance as _provenance, taxonomy
+from .. import assessment as _assessment, chains, config_io, provenance as _provenance, taxonomy
 from ..errors import InputError
 from . import claims as _claims, gating as _gating, preflight as _preflight, sqlite_source as _sq
 from .pipeline import sha256_file as _sha256_file
@@ -551,13 +551,15 @@ def extract(path: str, spec: dict, source_id: str, semantics: dict | None = None
     pf["validation"] = summary
     pf["analysis_states"] = states
     pf["sqlite_metadata"] = _export_metadata(path, spec, mapping, pf, validation, __version__)
-    return dict(
+    res = dict(
         source_id=source_id, stopped=False, detection=detection, schema_mapping=mapping,
         dataset_preflight=pf, analysis_states=states, validation=summary, claims=claims,
         capabilities=capabilities, limitations=limitations, target_audit=target_result,
         reliability_profile=target_result["profile"], dataset_profile=profile,
         relational_provenance=prov_states, conflicts=conflict_report, dependency_candidates=deps,
     )
+    res["assessment"] = _assessment.assess(res)
+    return res
 
 
 def _export_metadata(path: str, spec: dict, mapping: dict, pf: dict, validation: dict, version: str) -> dict:

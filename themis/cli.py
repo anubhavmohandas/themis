@@ -289,6 +289,20 @@ def _print_preflight(pf: dict) -> None:
         print(_c(f"  blocked [{b['code']}]: {b['message']}", YEL))
 
 
+def _print_assessment(a: dict) -> None:
+    """The closing executive summary: the verdict and the measured reasons behind it."""
+    colour = {"TRUSTWORTHY": GRN, "TRUSTWORTHY WITH CAVEATS": GRN, "NOT ESTABLISHED": YEL,
+              "NOT TRUSTWORTHY": RED, "CANNOT ASSESS": YEL}[a["verdict"]]
+    rule("EXECUTIVE SUMMARY")
+    print(f"  According to the THEMIS report, this dataset is {_c(a['verdict'], colour)}.")
+    print(f"  {a['meaning']}")
+    print("\n  because:")
+    mark = {"ok": _c("+", GRN), "caveat": _c("!", YEL), "fail": _c("x", RED), "info": _c("-", DIM)}
+    for f in a["findings"]:
+        print(f"    {mark[f['level']]} {f['text']}")
+    print(_c(f"\n  {a['scope']}", DIM))
+
+
 def cmd_ingest(args):
     """STEP 23 - new dataset mode: upload a previously unseen CSV. The pre-flight
     runs first and decides whether any analysis may happen at all."""
@@ -322,6 +336,7 @@ def cmd_ingest(args):
         _print_preflight(pf)
         rule("STOPPED AT PRE-FLIGHT")
         print(_c(r["message"], YEL))
+        _print_assessment(r["assessment"])
         if args.json:
             out = dict(r)
             out.pop("claims", None)
@@ -354,6 +369,7 @@ def cmd_ingest(args):
                 if k == "available":
                     continue
                 print(f"    {k:<26}{v2}")
+    _print_assessment(r["assessment"])
     if args.json:
         out = dict(r)
         out["claims"] = len(r["claims"])   # the full claim list is large; keep the JSON small by default

@@ -168,6 +168,14 @@ Schema roles (address, label, category, source, timestamp, confidence) are
 inferred from column names and sampled values and can be overridden. Try it with
 the synthetic files in `examples/`.
 
+**The closing verdict.** Every analysis ends with an executive summary: *"According to the
+THEMIS report, this dataset is X, because …"*, where X is `TRUSTWORTHY`,
+`TRUSTWORTHY WITH CAVEATS`, `NOT ESTABLISHED` (nothing wrong, but too little independent
+evidence to say it is right), `NOT TRUSTWORTHY` (a measured problem rules the labels out) or
+`CANNOT ASSESS` (failed pre-flight). It reads only figures the pipeline already measured and
+the cut-offs in `themis/config/assessment.yml`, and lists the numbers behind it. It judges the
+evidence for the labels, not any single label: coverage is not accuracy.
+
 An unrecognized `--source-id` has no provenance rule in `config/sources/`, so
 every claim resolves **UNRESOLVED** by construction — a new dataset is never
 assumed independent. Cross-source comparison needs a reference corpus (§6);

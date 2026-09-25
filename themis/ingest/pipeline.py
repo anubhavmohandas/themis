@@ -18,7 +18,7 @@ reference relationships the target never touched leak into its numbers.
 from __future__ import annotations
 import csv, gzip, hashlib
 
-from .. import corpus as _corpus, analysis, target_audit, chains, config_io, taxonomy
+from .. import corpus as _corpus, analysis, assessment, target_audit, chains, config_io, taxonomy
 from ..errors import InputError, RowLimitError
 from . import gating as _gating, preflight as _preflight, validate as _validate, claims as _claims
 
@@ -75,11 +75,13 @@ def sha256_file(path: str) -> str:
 
 def _stopped(source_id: str, pf: dict, rows: list, fieldnames: list, validation: dict | None = None) -> dict:
     """The result for a dataset that must not be analysed: no claims exist."""
-    return dict(source_id=source_id, stopped=True, message=pf["message"], detection=pf["detection"],
-                dataset_preflight=pf, analysis_states=_gating.blocked(pf), claims=[],
-                validation=validation,
-                basic_quality=dict(rows=len(rows), columns=fieldnames,
-                                   empty_rows=sum(1 for r in rows if not any(r.values()))))
+    res = dict(source_id=source_id, stopped=True, message=pf["message"], detection=pf["detection"],
+               dataset_preflight=pf, analysis_states=_gating.blocked(pf), claims=[],
+               validation=validation,
+               basic_quality=dict(rows=len(rows), columns=fieldnames,
+                                  empty_rows=sum(1 for r in rows if not any(r.values()))))
+    res["assessment"] = assessment.assess(res)
+    return res
 
 
 def ingest(path: str, source_id: str, mapping_override: dict | None = None,
@@ -206,7 +208,7 @@ def ingest(path: str, source_id: str, mapping_override: dict | None = None,
     summary["rejected_examples"] = validation["rejected"][:_preflight.cfg()["rejected_examples"]]
     pf["validation"] = summary
     pf["analysis_states"] = states
-    return dict(
+    res = dict(
         source_id=source_id, stopped=False,
         detection=detection, schema_mapping=mapping, dataset_preflight=pf, analysis_states=states,
         validation=summary,
@@ -214,6 +216,8 @@ def ingest(path: str, source_id: str, mapping_override: dict | None = None,
         target_audit=target_result, reliability_profile=target_result["profile"],
         internal_consistency=internal_consistency,
     )
+    res["assessment"] = assessment.assess(res)
+    return res
 
 
 def _validation_limitations(v: dict, pf: dict, n_rows: int, n_claims: int) -> list[str]:

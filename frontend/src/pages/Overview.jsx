@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useAnalysis } from "../lib/AnalysisContext.jsx";
 import { fmt, humanize, kappaText, pct } from "../lib/format.js";
 import { OUTCOMES, SCOPE_INTRO, SCOPE_LABEL, popNoun, popTag } from "../lib/vocab.js";
-import { BarRows, Gate, Legend, Limitations, MetricStrip, PageHead, Section, Status } from "../components/ui.jsx";
+import { BarRows, ExecutiveSummary, Gate, Legend, Limitations, MetricStrip, PageHead, Section, Status } from "../components/ui.jsx";
 
 // Every figure below is read from the backend's result object. Percentages
 // are the backend's shares; each is printed next to its count and denominator.
@@ -446,6 +446,7 @@ function UploadOverview() {
 
       <Limitations items={limits} />
       <ReliabilityProfile profile={r.reliability_profile || p} />
+      <ExecutiveSummary assessment={r.assessment} />
     </div>
   );
 }

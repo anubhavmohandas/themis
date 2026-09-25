@@ -251,4 +251,26 @@ export function Limitations({ items, title = "Evidential limitations" }) {
   );
 }
 
+// The closing verdict on an uploaded dataset (themis/assessment.py). The text carries the verdict, never the colour alone.
+const VERDICT_TONE = { "TRUSTWORTHY": "--tl", "TRUSTWORTHY WITH CAVEATS": "--tl", "NOT ESTABLISHED": "--oc", "NOT TRUSTWORTHY": "--ac", "CANNOT ASSESS": "--nt" };
+const FINDING_MARK = { ok: "+", caveat: "!", fail: "×", info: "–" };
+
+export function ExecutiveSummary({ assessment: a }) {
+  if (!a) return null;
+  const tone = `var(${VERDICT_TONE[a.verdict] || "--nt"})`;
+  return (
+    <Section title="Executive summary" note="The closing verdict, computed only from the measured figures above and the cut-offs in config/assessment.yml.">
+      <div className="panel pad" role="region" aria-label="Executive summary" style={{ borderLeft: `4px solid ${tone}` }}>
+        <p style={{ margin: 0 }}>According to the THEMIS report, this dataset is <b style={{ color: tone }}>{a.verdict}</b>.</p>
+        <p className="small mut" style={{ margin: "4px 0 10px" }}>{a.meaning}</p>
+        <div className="small" style={{ fontWeight: 600 }}>because:</div>
+        <ul className="small" style={{ margin: "4px 0 10px", paddingLeft: 18, listStyle: "none" }}>
+          {a.findings.map((f, i) => <li key={i}><span className="mono" aria-hidden="true">{FINDING_MARK[f.level]}</span> {f.text}</li>)}
+        </ul>
+        <div className="small mut">{a.scope}</div>
+      </div>
+    </Section>
+  );
+}
+
 export const Mono = ({ children }) => <span className="mono">{children}</span>;

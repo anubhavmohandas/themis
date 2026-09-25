@@ -42,6 +42,9 @@ class Config:
         # chains.yml: same fallback, so a custom config tree never loses the EVM chains
         ch = root / "chains.yml"
         self.chains = _load_yaml(ch if ch.exists() else PKG_CONFIG / "chains.yml")
+        # assessment.yml: same fallback, so a custom config tree never loses the closing verdict's rules
+        asm = root / "assessment.yml"
+        self.assessment = _load_yaml(asm if asm.exists() else PKG_CONFIG / "assessment.yml")
         notable = root / "notable_roots.yml"
         self.notable_roots = (_load_yaml(notable) or []) if notable.exists() else []
         self.sources = {}
