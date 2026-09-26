@@ -210,7 +210,7 @@ themis ingest path/to/your.csv --source-id my_dataset [--reference build/observa
 
 A CSV with no address-shaped column is stopped with an explanation; an
 unsupported chain, a crypto-but-not-attribution file and a malformed file each
-get their own message (`README.md` §8). A source id the registry does not know
+get their own message ([docs/wiki/your-own-data.md](docs/wiki/your-own-data.md), "Pre-flight behavior"). A source id the registry does not know
 resolves UNRESOLVED, never independent.
 
 ## 8. The executable paper (`reproduce-paper`)

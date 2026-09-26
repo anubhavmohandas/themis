@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 730" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif">
+<title>How THEMIS works: trace each label to its origin, test different trust rules, get a plain-English verdict</title>
+<rect x="0" y="0" width="960" height="730" rx="14" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#57606a"/></marker></defs>
+<text x="480" y="38" text-anchor="middle" font-size="20" font-weight="700" fill="#1f2328">How THEMIS tells you if a crypto address label deserves trust</text>
+<circle cx="38" cy="79" r="14" fill="#0969da"/>
+<text x="38" y="84" text-anchor="middle" font-size="16" font-weight="700" fill="#ffffff">1</text>
+<text x="62" y="84" text-anchor="start" font-size="17" font-weight="700" fill="#1f2328">Trace every label back to where it really came from</text>
+<text x="936" y="84" text-anchor="end" font-size="13" font-family="ui-monospace,Menlo,Consolas,monospace" fill="#57606a">themis explain · themis audit</text>
+<text x="480" y="112" text-anchor="middle" font-size="14" fill="#57606a">One address. Four public datasets all label it &#8220;ransomware&#8221;.</text>
+<rect x="80" y="124" width="170" height="54" rx="10" fill="#ddf4ff" stroke="#0969da" stroke-width="2"/>
+<text x="165" y="148" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">Dataset A</text>
+<text x="165" y="167" text-anchor="middle" font-size="13" fill="#1f2328">says: ransomware</text>
+<rect x="290" y="124" width="170" height="54" rx="10" fill="#ddf4ff" stroke="#0969da" stroke-width="2"/>
+<text x="375" y="148" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">Dataset B</text>
+<text x="375" y="167" text-anchor="middle" font-size="13" fill="#1f2328">says: ransomware</text>
+<rect x="500" y="124" width="170" height="54" rx="10" fill="#ddf4ff" stroke="#0969da" stroke-width="2"/>
+<text x="585" y="148" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">Dataset C</text>
+<text x="585" y="167" text-anchor="middle" font-size="13" fill="#1f2328">says: ransomware</text>
+<rect x="710" y="124" width="170" height="54" rx="10" fill="#ddf4ff" stroke="#0969da" stroke-width="2"/>
+<text x="795" y="148" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">Dataset D</text>
+<text x="795" y="167" text-anchor="middle" font-size="13" fill="#1f2328">says: ransomware</text>
+<rect x="245" y="262" width="260" height="60" rx="10" fill="#fff8c5" stroke="#9a6700" stroke-width="2"/>
+<text x="375" y="286" text-anchor="middle" font-size="14" font-weight="700" fill="#1f2328">Origin 1: one original report</text>
+<text x="375" y="306" text-anchor="middle" font-size="13" fill="#1f2328">(A, B and C all copied it)</text>
+<rect x="695" y="262" width="200" height="60" rx="10" fill="#fff8c5" stroke="#9a6700" stroke-width="2"/>
+<text x="795" y="286" text-anchor="middle" font-size="14" font-weight="700" fill="#1f2328">Origin 2: separate evidence</text>
+<text x="795" y="306" text-anchor="middle" font-size="13" fill="#1f2328">(D found it on its own)</text>
+<line x1="165" y1="180" x2="330" y2="260" stroke="#57606a" stroke-width="2.5" marker-end="url(#a)"/>
+<line x1="375" y1="180" x2="375" y2="260" stroke="#57606a" stroke-width="2.5" marker-end="url(#a)"/>
+<line x1="585" y1="180" x2="420" y2="260" stroke="#57606a" stroke-width="2.5" marker-end="url(#a)"/>
+<line x1="795" y1="180" x2="795" y2="260" stroke="#57606a" stroke-width="2.5" marker-end="url(#a)"/>
+<rect x="80" y="338" width="800" height="52" rx="10" fill="#ffebe9" stroke="#cf222e" stroke-width="2"/>
+<text x="480" y="361" text-anchor="middle" font-size="16" font-weight="700" fill="#1f2328">Looks like 4 datasets confirm it. Really only 2 independent sources.</text>
+<text x="480" y="381" text-anchor="middle" font-size="13" fill="#1f2328">THEMIS counts 2, not 4. If an origin is unknown, it is marked &#8220;unknown&#8221;: never counted as independent.</text>
+<circle cx="38" cy="435" r="14" fill="#0969da"/>
+<text x="38" y="440" text-anchor="middle" font-size="16" font-weight="700" fill="#ffffff">2</text>
+<text x="62" y="440" text-anchor="start" font-size="17" font-weight="700" fill="#1f2328">Ask: does the answer change if I trust different things?</text>
+<text x="936" y="440" text-anchor="end" font-size="13" font-family="ui-monospace,Menlo,Consolas,monospace" fill="#57606a">themis drift</text>
+<text x="480" y="466" text-anchor="middle" font-size="14" fill="#57606a">Same money question (how much ransomware revenue?), four trust rules.</text>
+<rect x="26" y="478" width="210" height="74" rx="10" fill="#ddf4ff" stroke="#0969da" stroke-width="2"/>
+<text x="131" y="503" text-anchor="middle" font-size="14" font-weight="700" fill="#1f2328">A. Trust everything</text>
+<text x="131" y="526" text-anchor="middle" font-size="13" fill="#1f2328">Every label counts</text>
+<rect x="262" y="478" width="210" height="74" rx="10" fill="#ddf4ff" stroke="#0969da" stroke-width="2"/>
+<text x="367" y="503" text-anchor="middle" font-size="14" font-weight="700" fill="#1f2328">B. Count each address once</text>
+<text x="367" y="526" text-anchor="middle" font-size="13" fill="#1f2328">Same address = one vote</text>
+<rect x="498" y="478" width="210" height="74" rx="10" fill="#ddf4ff" stroke="#0969da" stroke-width="2"/>
+<text x="603" y="503" text-anchor="middle" font-size="14" font-weight="700" fill="#1f2328">C. Merge copied claims</text>
+<text x="603" y="526" text-anchor="middle" font-size="13" fill="#1f2328">Copies count as 1 claim</text>
+<rect x="734" y="478" width="210" height="74" rx="10" fill="#ddf4ff" stroke="#0969da" stroke-width="2"/>
+<text x="839" y="503" text-anchor="middle" font-size="14" font-weight="700" fill="#1f2328">D. Reference set only</text>
+<text x="839" y="526" text-anchor="middle" font-size="13" fill="#1f2328">Only anchor-set addresses</text>
+<line x1="140" y1="572" x2="820" y2="572" stroke="#57606a" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="30" y="568" text-anchor="start" font-size="13" fill="#57606a">loosest</text>
+<text x="930" y="568" text-anchor="end" font-size="13" fill="#57606a">strictest</text>
+<text x="480" y="596" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">Four rules, four different answers. The strictest one keeps only 13.8% of addresses.</text>
+<text x="480" y="615" text-anchor="middle" font-size="13" fill="#57606a">So a result without its trust rule and coverage is incomplete. THEMIS prints both.</text>
+<circle cx="38" cy="647" r="14" fill="#0969da"/>
+<text x="38" y="652" text-anchor="middle" font-size="16" font-weight="700" fill="#ffffff">3</text>
+<text x="62" y="652" text-anchor="start" font-size="17" font-weight="700" fill="#1f2328">Get a plain-English verdict</text>
+<text x="936" y="652" text-anchor="end" font-size="13" font-family="ui-monospace,Menlo,Consolas,monospace" fill="#57606a">themis report</text>
+<rect x="20" y="664" width="176" height="58" rx="10" fill="#dafbe1" stroke="#1a7f37" stroke-width="2"/>
+<text x="108" y="683" text-anchor="middle" font-size="13" font-weight="700" fill="#1f2328">Evidence holds up</text>
+<text x="108" y="700" text-anchor="middle" font-size="12" fill="#1f2328">Strong and</text>
+<text x="108" y="715" text-anchor="middle" font-size="12" fill="#1f2328">independent</text>
+<rect x="206" y="664" width="176" height="58" rx="10" fill="#e6f6ea" stroke="#1a7f37" stroke-width="2"/>
+<text x="294" y="683" text-anchor="middle" font-size="13" font-weight="700" fill="#1f2328">Holds up, with caveats</text>
+<text x="294" y="700" text-anchor="middle" font-size="12" fill="#1f2328">Good, but</text>
+<text x="294" y="715" text-anchor="middle" font-size="12" fill="#1f2328">gaps remain</text>
+<rect x="392" y="664" width="176" height="58" rx="10" fill="#fff8c5" stroke="#9a6700" stroke-width="2"/>
+<text x="480" y="683" text-anchor="middle" font-size="13" font-weight="700" fill="#1f2328">Not established</text>
+<text x="480" y="700" text-anchor="middle" font-size="12" fill="#1f2328">Too little independent</text>
+<text x="480" y="715" text-anchor="middle" font-size="12" fill="#1f2328">evidence to say</text>
+<rect x="578" y="664" width="176" height="58" rx="10" fill="#ffebe9" stroke="#cf222e" stroke-width="2"/>
+<text x="666" y="683" text-anchor="middle" font-size="13" font-weight="700" fill="#1f2328">Evidence concerns</text>
+<text x="666" y="700" text-anchor="middle" font-size="12" fill="#1f2328">A measured problem</text>
+<text x="666" y="715" text-anchor="middle" font-size="12" fill="#1f2328">rules the labels out</text>
+<rect x="764" y="664" width="176" height="58" rx="10" fill="#eaeef2" stroke="#57606a" stroke-width="2"/>
+<text x="852" y="683" text-anchor="middle" font-size="13" font-weight="700" fill="#1f2328">Cannot assess</text>
+<text x="852" y="700" text-anchor="middle" font-size="12" fill="#1f2328">File failed the</text>
+<text x="852" y="715" text-anchor="middle" font-size="12" fill="#1f2328">pre-flight checks</text>
+</svg>
