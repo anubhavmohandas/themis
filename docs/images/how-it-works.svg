@@ -2,7 +2,7 @@
 <title>How THEMIS works: trace each label to its origin, test different trust rules, get a plain-English verdict</title>
 <rect x="0" y="0" width="960" height="730" rx="14" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
 <defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#57606a"/></marker></defs>
-<text x="480" y="38" text-anchor="middle" font-size="20" font-weight="700" fill="#1f2328">How THEMIS tells you if a crypto address label deserves trust</text>
+<text x="480" y="38" text-anchor="middle" font-size="20" font-weight="700" fill="#1f2328">How THEMIS audits the evidence behind a crypto address label</text>
 <circle cx="38" cy="79" r="14" fill="#0969da"/>
 <text x="38" y="84" text-anchor="middle" font-size="16" font-weight="700" fill="#ffffff">1</text>
 <text x="62" y="84" text-anchor="start" font-size="17" font-weight="700" fill="#1f2328">Trace every label back to where it really came from</text>
@@ -57,14 +57,14 @@
 <text x="480" y="615" text-anchor="middle" font-size="13" fill="#57606a">So a result without its trust rule and coverage is incomplete. THEMIS prints both.</text>
 <circle cx="38" cy="647" r="14" fill="#0969da"/>
 <text x="38" y="652" text-anchor="middle" font-size="16" font-weight="700" fill="#ffffff">3</text>
-<text x="62" y="652" text-anchor="start" font-size="17" font-weight="700" fill="#1f2328">Get a plain-English verdict</text>
+<text x="62" y="652" text-anchor="start" font-size="17" font-weight="700" fill="#1f2328">Get a plain-English assessment</text>
 <text x="936" y="652" text-anchor="end" font-size="13" font-family="ui-monospace,Menlo,Consolas,monospace" fill="#57606a">themis report</text>
 <rect x="20" y="664" width="176" height="58" rx="10" fill="#dafbe1" stroke="#1a7f37" stroke-width="2"/>
-<text x="108" y="683" text-anchor="middle" font-size="13" font-weight="700" fill="#1f2328">Evidence holds up</text>
+<text x="108" y="683" text-anchor="middle" font-size="13" font-weight="700" fill="#1f2328">Evidence supported</text>
 <text x="108" y="700" text-anchor="middle" font-size="12" fill="#1f2328">Strong and</text>
 <text x="108" y="715" text-anchor="middle" font-size="12" fill="#1f2328">independent</text>
 <rect x="206" y="664" width="176" height="58" rx="10" fill="#e6f6ea" stroke="#1a7f37" stroke-width="2"/>
-<text x="294" y="683" text-anchor="middle" font-size="13" font-weight="700" fill="#1f2328">Holds up, with caveats</text>
+<text x="294" y="683" text-anchor="middle" font-size="13" font-weight="700" fill="#1f2328">Supported with caveats</text>
 <text x="294" y="700" text-anchor="middle" font-size="12" fill="#1f2328">Good, but</text>
 <text x="294" y="715" text-anchor="middle" font-size="12" fill="#1f2328">gaps remain</text>
 <rect x="392" y="664" width="176" height="58" rx="10" fill="#fff8c5" stroke="#9a6700" stroke-width="2"/>
