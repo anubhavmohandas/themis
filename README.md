@@ -293,8 +293,8 @@ export the corpus uses is unconfirmed; Elliptic++ (53% of claims) and both
 Rodwald releases state no terms; WatchYourBack's GPL-3.0 covers its code (its
 reach over the data is unstated).
 **This release ships no third-party data and no observation table.** THEMIS's
-own code has **no LICENSE file yet** — an author decision, separate from the
-dataset terms.
+own code is MIT-licensed (`LICENSE`); that licence covers the code only and grants
+no rights over any third-party dataset, whose terms are in `THIRD_PARTY_DATA.md`.
 
 ## 14. Testing
 
