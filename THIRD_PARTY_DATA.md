@@ -1,12 +1,14 @@
 # Third-party data
 
-THEMIS's own code license is a separate question (see `README.md` §11: no
-`LICENSE` file has been chosen yet). This document covers only the public
-datasets the bundled sample derives from, and the one government list the
-anchor file draws on.
+THEMIS's own code is MIT-licensed (`LICENSE`); that is a separate question. This
+document covers only the public datasets the author's private reference corpus
+derives from, and the one government list the anchor file draws on.
 
-**What is bundled** (all under `demo_data/`, all *derived*, none a source's
-original file):
+**Nothing below is shipped.** As of the `v1.0-paper` release the repository and the release contain
+no third-party record: the files that used to live under `demo_data/` are untracked and git-ignored
+(Option B, decided by the author on 2026-09-26; `demo_data/README.md` explains). Earlier commits
+still contain them: history was deliberately not rewritten. The table below describes the files the
+author keeps privately, all *derived*, none a source's original file:
 
 | file | contents | derived from |
 |---|---|---|
@@ -45,9 +47,9 @@ confirmed, that is stated as `UNCONFIRMED`; the decision is the author's.
   stated redistribution terms.
 - **Partially confirmed** — WatchYourBack (0.02%): code license only.
 
-The development repository is already public and has contained
-`observations_sample.csv.gz` since its first commit; nothing here rewrites that
-history — that would be a separate decision.
+Earlier commits of the public repository still contain `observations_sample.csv.gz`
+and the other four files; the final release commit untracks them and history was not
+rewritten (author's decision, 2026-09-26).
 
 ### Conservative release options (the author's choice; the release below applies option 2 by default)
 
@@ -72,8 +74,7 @@ tests (those that need the corpus skip with a stated reason), the rebuild script
 `expected_output/` (aggregate statistics only) and small synthetic examples. A
 reviewer fetches the sources from their published locations and runs
 `scripts/build_corpus.py`; `REPRODUCE.md` gives the commands. The
-development repository still tracks `demo_data/` (already public since its first
-commit); changing that is a separate decision.
+final release commit untracks `demo_data/` (Option B); earlier commits still contain the files.
 
 Two things this leaves to the author: whether to confirm terms with the
 Elliptic++ and Rodwald authors and then ship a sample after all, and how a
@@ -112,8 +113,9 @@ policy is the author's (see "What is decided and what is not").
 
 ### What is decided and what is not
 
-- **Not decided, by rule:** whether `demo_data/` stays tracked. Until the author chooses, nothing was removed. The conservative
-  default already applied to a *release build* (`scripts/make_release.py`) ships none of the `demo_data/` files.
+- **Decided by the author (2026-09-26): Option B.** The five `demo_data/` files are untracked (`git rm --cached`) and
+  git-ignored, kept only on the author's machine; a tracked `demo_data/README.md` explains why. History was not rewritten.
+  `scripts/make_release.py` also ships none of them.
 - **The repository is public** (github.com/anubhavmohandas/themis, created 2026-09-16; on 2026-09-24 it reported 0 forks, 0 stars,
   0 watchers and no releases; `main` only was pushed, the `v1.0-paper*` tags exist locally). `demo_data/` has been in it since
   the first commit (`b47da84`).
@@ -124,7 +126,7 @@ policy is the author's (see "What is decided and what is not").
   ZIP hashes recorded in `REPRODUCE.md` and the report, and does not remove copies already cloned or cached by GitHub
   (cached views and unreachable objects can be purged only through GitHub Support). Because no fork exists today, the practical exposure
   is the public clone URL itself. **No history rewrite was performed or prepared.**
-- **Options for the author** (each also needs the paper's "openly redistributable" wording in §8 changed if it stays as written,
+- **Options that were considered** (each also needs the paper's "openly redistributable" wording in §8 changed if it stays as written,
   since it is not supported for Elliptic++ or Rodwald):
   1. *Confirm and keep*: ask the Elliptic++ and Rodwald authors (and ransomwhe.re) in writing; record each answer here.
   2. *Untrack going forward only* (`git rm --cached`, commit): stops new distribution; history still serves the old files.

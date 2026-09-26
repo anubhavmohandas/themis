@@ -37,7 +37,7 @@ class TestWithoutARun(Isolated):
 
     def test_status_names_the_paper_the_modes_and_the_experiments(self):
         s = client.get("/api/paper/status").json()
-        self.assertEqual(s["paper"]["version"], "final_verified")
+        self.assertEqual(s["paper"]["version"], "conference_revised")
         self.assertEqual({m["id"] for m in s["modes"]}, {"live", "frozen", "declared"})
         self.assertIsNone(s["latest_run"])
         self.assertEqual({e["status"] for e in s["experiments"]}, {"NOT_RUN"})

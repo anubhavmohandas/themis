@@ -21,10 +21,16 @@
 # failure does to the overall verdict. `id@suffix` reuses one metric under a second rule.
 
 paper:
-  file: ICISHCT2026_THEMIS_Final_Verified.pdf
-  sha256: 11ad4bd19a7618ac578068ebef1e7377838af530b1caf65a99f958ae673bd8ea
+  # The definitive conference manuscript (9 pages, 828,801 bytes). The hash is its
+  # identity; a browser may have saved it as "...Conference_Revised(3).pdf".
+  file: ICISHCT2026_THEMIS_Conference_Revised.pdf
+  sha256: 16cfb693980a5175ccfc8f99acee15c8ae4e62c9401a53f124a84f6d468a011f
   title: 'Provenance Before Precision: Auditing Public Bitcoin Attribution Labels and Their Effect on Forensic Conclusions'
-  version: final_verified
+  version: conference_revised
+  # Historical only, not an active pin: the earlier pin, whose file is no longer on disk.
+  superseded:
+    file: ICISHCT2026_THEMIS_Final_Verified.pdf
+    sha256: 11ad4bd19a7618ac578068ebef1e7377838af530b1caf65a99f958ae673bd8ea
 policy:
   HEADLINE_STABLE:
     on_fail: fail
@@ -168,8 +174,8 @@ claims:
     expected: 7
     comparison: exact_integer
     pdf:
-      text: '{v} publicly accessible address-level label sources'
-      token: Seven
+      text: We normalised {v} publicly accessible sources into
+      token: seven
   corpus.claims:
     section: '4.1'
     class: HEADLINE_STABLE
@@ -178,7 +184,7 @@ claims:
     expected: 1545710
     comparison: exact_integer
     pdf:
-      text: '{v} claims across roughly 1.5 million unique Bitcoin addresses'
+      text: sources into {v} attribution claims covering
   corpus.addresses@roughly:
     section: '4.1'
     class: SUPPORTING_STABLE
@@ -189,8 +195,7 @@ claims:
     comparison: approximate_text
     decimals: 1
     scale: !!float '1e-06'
-    pdf:
-      text: roughly {v} million unique Bitcoin addresses
+    # not printed in the conference PDF (ICISHCT2026_THEMIS_Conference_Revised.pdf): checked against THEMIS only
   corpus.provenance_roots:
     section: '4.1'
     class: HEADLINE_STABLE
@@ -208,7 +213,7 @@ claims:
     expected: 21
     comparison: exact_integer
     pdf:
-      text: of which {v} could be identified
+      text: provenance roots, {v} of which we could identify
   corpus.unresolved_roots:
     section: '4.1'
     class: HEADLINE_STABLE
@@ -217,7 +222,8 @@ claims:
     expected: 4
     comparison: exact_integer
     pdf:
-      text: and {v} unresolved)
+      text: the remaining {v} are unresolved
+      token: four
   corpus.provenance_descriptors:
     section: '4.1'
     class: SUPPORTING_STABLE
@@ -225,8 +231,7 @@ claims:
     text: the datasets declare 33 provenance descriptors
     expected: 33
     comparison: exact_integer
-    pdf:
-      text: declare {v} provenance descriptors
+    # not printed in the conference PDF (ICISHCT2026_THEMIS_Conference_Revised.pdf): checked against THEMIS only
   table1.ellipticpp.addresses:
     section: '4.1'
     class: SUPPORTING_STABLE
@@ -236,8 +241,8 @@ claims:
     expected: 822937
     comparison: exact_integer
     pdf:
-      row: Elliptic++ [14]
-      col: 1
+      row: Elliptic++ (2023) [14]
+      col: 4
   table1.ellipticpp.claims:
     section: '4.1'
     class: SUPPORTING_STABLE
@@ -247,8 +252,9 @@ claims:
     expected: 822937
     comparison: exact_integer
     pdf:
-      row: Elliptic++ [14]
-      col: 2
+      row: Elliptic++ (2023) [14]
+      col: 3
+      token: 822,937ᵃ
   table1.ellipticpp.revision_field:
     section: '4.1'
     class: SUPPORTING_STABLE
@@ -266,8 +272,8 @@ claims:
     expected: 483296
     comparison: exact_integer
     pdf:
-      row: GraphSense TagPack [1]
-      col: 1
+      row: GraphSense TagPack (2021;
+      col: 4
   table1.tagpack.claims:
     section: '4.1'
     class: SUPPORTING_STABLE
@@ -277,8 +283,8 @@ claims:
     expected: 499327
     comparison: exact_integer
     pdf:
-      row: GraphSense TagPack [1]
-      col: 2
+      row: GraphSense TagPack (2021;
+      col: 3
   table1.tagpack.revision_field:
     section: '4.1'
     class: SUPPORTING_STABLE
@@ -296,8 +302,8 @@ claims:
     expected: 101387
     comparison: exact_integer
     pdf:
-      row: Schnoering label set [2]
-      col: 1
+      row: Schnoering (2025) [2, 25]
+      col: 4
   table1.schnoering.claims:
     section: '4.1'
     class: SUPPORTING_STABLE
@@ -307,8 +313,8 @@ claims:
     expected: 103812
     comparison: exact_integer
     pdf:
-      row: Schnoering label set [2]
-      col: 2
+      row: Schnoering (2025) [2, 25]
+      col: 3
   table1.schnoering.revision_field:
     section: '4.1'
     class: SUPPORTING_STABLE
@@ -326,8 +332,8 @@ claims:
     expected: 57817
     comparison: exact_integer
     pdf:
-      row: Rodwald mixers [16]
-      col: 1
+      row: Rodwald mixers (2025) [16,
+      col: 4
   table1.rodwald_mixers.claims:
     section: '4.1'
     class: SUPPORTING_STABLE
@@ -337,8 +343,8 @@ claims:
     expected: 57817
     comparison: exact_integer
     pdf:
-      row: Rodwald mixers [16]
-      col: 2
+      row: Rodwald mixers (2025) [16,
+      col: 3
   table1.rodwald_mixers.revision_field:
     section: '4.1'
     class: SUPPORTING_STABLE
@@ -356,8 +362,8 @@ claims:
     expected: 50322
     comparison: exact_integer
     pdf:
-      row: Rodwald ransomware [15]
-      col: 1
+      row: Rodwald ransomware (2024)
+      col: 4
   table1.rodwald_ransom.claims:
     section: '4.1'
     class: SUPPORTING_STABLE
@@ -367,8 +373,8 @@ claims:
     expected: 50322
     comparison: exact_integer
     pdf:
-      row: Rodwald ransomware [15]
-      col: 2
+      row: Rodwald ransomware (2024)
+      col: 3
   table1.rodwald_ransom.revision_field:
     section: '4.1'
     class: SUPPORTING_STABLE
@@ -386,8 +392,8 @@ claims:
     expected: 11186
     comparison: exact_integer
     pdf:
-      row: Ransomwhere [17]
-      col: 1
+      row: Ransomwhere (export 2026)
+      col: 4
   table1.ransomwhere.claims:
     section: '4.1'
     class: SUPPORTING_STABLE
@@ -397,8 +403,8 @@ claims:
     expected: 11186
     comparison: exact_integer
     pdf:
-      row: Ransomwhere [17]
-      col: 2
+      row: Ransomwhere (export 2026)
+      col: 3
   table1.ransomwhere.revision_field:
     section: '4.1'
     class: SUPPORTING_STABLE
@@ -416,8 +422,8 @@ claims:
     expected: 309
     comparison: exact_integer
     pdf:
-      row: WatchYourBack [6]
-      col: 1
+      row: WatchYourBack (2022) [6]
+      col: 4
   table1.watchyourback.claims:
     section: '4.1'
     class: SUPPORTING_STABLE
@@ -427,8 +433,8 @@ claims:
     expected: 309
     comparison: exact_integer
     pdf:
-      row: WatchYourBack [6]
-      col: 2
+      row: WatchYourBack (2022) [6]
+      col: 3
   table1.watchyourback.revision_field:
     section: '4.1'
     class: SUPPORTING_STABLE
@@ -470,7 +476,7 @@ claims:
     expected: 15413
     comparison: exact_integer
     pdf:
-      text: only {v} addresses appear in two or more
+      text: and {v} (1.03%) in two or more
   coverage.multi_dataset_distribution.2:
     section: '5.1'
     class: SUPPORTING_STABLE
@@ -479,7 +485,7 @@ claims:
     expected: 7845
     comparison: exact_integer
     pdf:
-      text: '{v} addresses in two datasets'
+      text: '{v} in two datasets'
   coverage.multi_dataset_distribution.3:
     section: '5.1'
     class: SUPPORTING_STABLE
@@ -506,7 +512,7 @@ claims:
     expected: 27
     comparison: exact_integer
     pdf:
-      text: '{v} in five or more'
+      text: '{v} in five or six'
   coverage.elliptic_max_overlap_share:
     section: '5.1'
     class: HEADLINE_STABLE
@@ -517,18 +523,18 @@ claims:
     comparison: rounded_percent
     decimals: 2
     pdf:
-      text: by at most {v}
+      text: no other single dataset by more than {v}
   coverage.elliptic_no_cross_source_check:
     section: '5.1'
     class: SUPPORTING_STABLE
     experiment: overlap_coverage
-    text: about 99.5% of Elliptic++ addresses have no public cross-source check
+    text: 99.48% of Elliptic++ addresses have no label in any other source
     metric: coverage.by_source.ellipticpp.no_cross_source_check_share
-    expected: 0.995
+    expected: 0.9948
     comparison: rounded_percent
-    decimals: 1
+    decimals: 2
     pdf:
-      text: about {v} of Elliptic++ addresses have no public cross-source check
+      text: Taken together, {v} of Elliptic++ addresses have no label in any other source
   coverage.overlap.ellipticpp.schnoering:
     section: '5.1'
     class: SUPPORTING_STABLE
@@ -579,6 +585,7 @@ claims:
     comparison: exact_integer
     pdf:
       text: '{v} with Ransomwhere'
+      token: seven
   coverage.overlap.ellipticpp.watchyourback:
     section: '5.1'
     class: SUPPORTING_STABLE
@@ -589,6 +596,7 @@ claims:
     comparison: exact_integer
     pdf:
       text: and {v} with WatchYourBack
+      token: eight
   coverage.overlap.ellipticpp.schnoering.share:
     section: '5.1'
     class: SUPPORTING_STABLE
@@ -599,7 +607,7 @@ claims:
     comparison: rounded_percent
     decimals: 2
     pdf:
-      text: only {v} of Elliptic++
+      text: ({v} of Elliptic++)
   coverage.overlap.ransomwhere.rodwald_ransom.share:
     section: '5.1'
     class: SUPPORTING_STABLE
@@ -610,7 +618,7 @@ claims:
     comparison: rounded_percent
     decimals: 2
     pdf:
-      text: Of Ransomwhere, {v} appears in Rodwald ransomware
+      text: and {v} of Ransomwhere
   coverage.overlap.ransomwhere.tagpack.share:
     section: '5.1'
     class: SUPPORTING_STABLE
@@ -620,8 +628,7 @@ claims:
     expected: 0.6666
     comparison: rounded_percent
     decimals: 2
-    pdf:
-      text: ', {v} in TagPack'
+    # not printed in the conference PDF (ICISHCT2026_THEMIS_Conference_Revised.pdf): checked against THEMIS only
   coverage.overlap.ransomwhere.schnoering.share:
     section: '5.1'
     class: SUPPORTING_STABLE
@@ -631,8 +638,7 @@ claims:
     expected: 0.645
     comparison: rounded_percent
     decimals: 2
-    pdf:
-      text: '{v} in Schnoering'
+    # not printed in the conference PDF (ICISHCT2026_THEMIS_Conference_Revised.pdf): checked against THEMIS only
   currency.missing_revision_claims:
     section: '5.1'
     class: SUPPORTING_STABLE
@@ -641,7 +647,7 @@ claims:
     expected: 1035420
     comparison: exact_integer
     pdf:
-      text: Of the 1,545,710 claims, {v} (
+      text: '{v} claims (67.0%) carry no revision date'
   currency.missing_revision_share:
     section: '5.1'
     class: SUPPORTING_STABLE
@@ -651,7 +657,7 @@ claims:
     comparison: rounded_percent
     decimals: 1
     pdf:
-      text: ({v}) have no revision field
+      text: claims ({v}) carry no revision date
   currency.tagpack_older_than_three_years:
     section: '5.1'
     class: SUPPORTING_STABLE
@@ -662,7 +668,7 @@ claims:
     comparison: rounded_percent
     decimals: 1
     pdf:
-      text: '{v} of dated TagPack claims are more than three years old'
+      text: and {v} of dated TagPack claims were more than three years old
   circularity.rodwald.group.RSH:
     section: '5.2'
     class: SUPPORTING_STABLE
@@ -733,6 +739,7 @@ claims:
     comparison: exact_integer
     pdf:
       text: and {v} in SR,
+      token: one
   circularity.rodwald.well_formed_inside:
     section: '5.2'
     class: SUPPORTING_STABLE
@@ -742,7 +749,7 @@ claims:
     expected: 7507
     comparison: exact_integer
     pdf:
-      text: for {v} addresses in total
+      text: in SR, {v} in total
   circularity.rodwald.outside:
     section: '5.2'
     class: SUPPORTING_STABLE
@@ -752,7 +759,7 @@ claims:
     expected: 42815
     comparison: exact_integer
     pdf:
-      text: without R cover {v} addresses
+      text: The groups without R contain {v} addresses
   circularity.rodwald.outside_overlap:
     section: '5.2'
     class: SUPPORTING_STABLE
@@ -762,7 +769,7 @@ claims:
     expected: 1
     comparison: exact_integer
     pdf:
-      text: only {v} of them appears in Ransomwhere
+      text: of which only {v} malformed H,S record appears in Ransomwhere
       token: one
   circularity.rodwald.clean_split:
     section: '5.2'
@@ -781,7 +788,7 @@ claims:
     expected: 7508
     comparison: exact_integer
     pdf:
-      text: the two datasets share {v} addresses
+      text: In all, {v} addresses are shared
   circularity.rodwald_ransomwhere_shared@abstract:
     section: Abstract
     class: HEADLINE_STABLE
@@ -791,7 +798,7 @@ claims:
     expected: 7508
     comparison: exact_integer
     pdf:
-      text: reveals {v} addresses inherited
+      text: that {v} Rodwald ransomware addresses were inherited from Ransomwhere
   circularity.rodwald_ransomwhere_share_of_rodwald:
     section: '5.2'
     class: HEADLINE_STABLE
@@ -802,7 +809,7 @@ claims:
     comparison: rounded_percent
     decimals: 2
     pdf:
-      text: equal to {v} of Rodwald
+      text: which is {v} of Rodwald ransomware
   circularity.rodwald_ransomwhere_share_of_ransomwhere:
     section: '5.2'
     class: HEADLINE_STABLE
@@ -823,7 +830,7 @@ claims:
     expected: 9176
     comparison: exact_integer
     pdf:
-      text: '{v} addresses prefixed princeton'
+      text: '{v} addresses carry a princeton prefix'
   circularity.naming_residue.padua_conti_2018:
     section: '5.2'
     class: SUPPORTING_STABLE
@@ -833,7 +840,7 @@ claims:
     expected: 1801
     comparison: exact_integer
     pdf:
-      text: '{v} padua'
+      text: '{v} carry padua'
   circularity.naming_residue.montreal_paquet_clouston_2019:
     section: '5.2'
     class: SUPPORTING_STABLE
@@ -843,7 +850,7 @@ claims:
     expected: 819
     comparison: exact_integer
     pdf:
-      text: and {v} montreal
+      text: and {v} carry montreal
   circularity.naming_residue.attributed:
     section: '5.2'
     class: SUPPORTING_STABLE
@@ -853,7 +860,7 @@ claims:
     expected: 11796
     comparison: exact_integer
     pdf:
-      text: linking {v} of 50,322
+      text: For {v} of the 50,322 addresses
   circularity.naming_residue.total:
     section: '5.2'
     class: SUPPORTING_STABLE
@@ -863,7 +870,7 @@ claims:
     expected: 50322
     comparison: exact_integer
     pdf:
-      text: 11,796 of {v} addresses
+      text: For 11,796 of the {v} addresses
   circularity.naming_residue.share:
     section: '5.2'
     class: SUPPORTING_STABLE
@@ -874,7 +881,7 @@ claims:
     comparison: rounded_percent
     decimals: 2
     pdf:
-      text: ({v}) to earlier
+      text: addresses ({v}), the upstream family
   circularity.montreal_seed:
     section: '5.2'
     class: HEADLINE_STABLE
@@ -884,7 +891,7 @@ claims:
     expected: 7222
     comparison: exact_integer
     pdf:
-      text: Schnoering contains {v} addresses attributed
+      text: Schnoering contains {v} Montr
   circularity.montreal_ransomwhere:
     section: '5.2'
     class: HEADLINE_STABLE
@@ -894,7 +901,7 @@ claims:
     expected: 7208
     comparison: exact_integer
     pdf:
-      text: '{v} (99.81%) also occur in Ransomwhere'
+      text: of which {v} also appear in Ransomwhere
   circularity.montreal_ransomwhere_share:
     section: '5.2'
     class: SUPPORTING_STABLE
@@ -904,8 +911,7 @@ claims:
     expected: 0.9981
     comparison: rounded_percent
     decimals: 2
-    pdf:
-      text: ({v}) also occur in Ransomwhere
+    # not printed in the conference PDF (ICISHCT2026_THEMIS_Conference_Revised.pdf): checked against THEMIS only
   circularity.montreal_tagpack:
     section: '5.2'
     class: HEADLINE_STABLE
@@ -915,7 +921,7 @@ claims:
     expected: 7208
     comparison: exact_integer
     pdf:
-      text: Ransomwhere, {v} (99.81%) in TagPack
+      text: Ransomwhere, {v} in TagPack
   circularity.montreal_tagpack_share:
     section: '5.2'
     class: SUPPORTING_STABLE
@@ -925,8 +931,7 @@ claims:
     expected: 0.9981
     comparison: rounded_percent
     decimals: 2
-    pdf:
-      text: ({v}) in TagPack
+    # not printed in the conference PDF (ICISHCT2026_THEMIS_Conference_Revised.pdf): checked against THEMIS only
   circularity.montreal_rodwald:
     section: '5.2'
     class: HEADLINE_STABLE
@@ -936,7 +941,7 @@ claims:
     expected: 7122
     comparison: exact_integer
     pdf:
-      text: and {v} (98.62%) in Rodwald
+      text: TagPack and {v} in Rodwald
   circularity.montreal_rodwald_share:
     section: '5.2'
     class: SUPPORTING_STABLE
@@ -946,8 +951,7 @@ claims:
     expected: 0.9862
     comparison: rounded_percent
     decimals: 2
-    pdf:
-      text: ({v}) in Rodwald
+    # not printed in the conference PDF (ICISHCT2026_THEMIS_Conference_Revised.pdf): checked against THEMIS only
   circularity.montreal_range@low:
     section: Abstract
     class: HEADLINE_STABLE
@@ -970,7 +974,7 @@ claims:
     comparison: rounded_percent
     decimals: 1
     pdf:
-      text: at 98.6-{v} across four
+      text: at 98.6-{v} in four corpora
   unresolved.elliptic_block_share_of_claims:
     section: '5.2'
     class: SUPPORTING_STABLE
@@ -980,8 +984,7 @@ claims:
     expected: 0.532
     comparison: rounded_percent
     decimals: 1
-    pdf:
-      text: accounts for {v} of all claims
+    # not printed in the conference PDF (ICISHCT2026_THEMIS_Conference_Revised.pdf): checked against THEMIS only
   unresolved.graphsense_core_share_of_claims:
     section: '5.2'
     class: SUPPORTING_STABLE
@@ -991,8 +994,7 @@ claims:
     expected: 0.248
     comparison: rounded_percent
     decimals: 1
-    pdf:
-      text: resolved family at {v}
+    # not printed in the conference PDF (ICISHCT2026_THEMIS_Conference_Revised.pdf): checked against THEMIS only
   unresolved.schnoering_bitcointalk:
     section: '5.2'
     class: SUPPORTING_STABLE
@@ -1002,8 +1004,7 @@ claims:
     expected: 0.859
     comparison: rounded_percent
     decimals: 1
-    pdf:
-      text: '{v} of addresses come from BitcoinTalk'
+    # not printed in the conference PDF (ICISHCT2026_THEMIS_Conference_Revised.pdf): checked against THEMIS only
   unresolved.schnoering_ofac:
     section: '5.2'
     class: SUPPORTING_STABLE
@@ -1013,8 +1014,7 @@ claims:
     expected: 0.0018
     comparison: rounded_percent
     decimals: 2
-    pdf:
-      text: only {v} from OFAC SDN
+    # not printed in the conference PDF (ICISHCT2026_THEMIS_Conference_Revised.pdf): checked against THEMIS only
   drift.A.observations:
     section: '5.3'
     class: SUPPORTING_STABLE
@@ -1023,7 +1023,7 @@ claims:
     expected: 61508
     comparison: exact_integer
     pdf:
-      row: A - naive union
+      row: A – naive union
       col: 1
   drift.A.addresses:
     section: '5.3'
@@ -1033,7 +1033,7 @@ claims:
     expected: 54000
     comparison: exact_integer
     pdf:
-      row: A - naive union
+      row: A – naive union
       col: 2
   drift.A.revenue:
     section: '5.3'
@@ -1043,7 +1043,7 @@ claims:
     expected: 1367997318
     comparison: exact_integer
     pdf:
-      row: A - naive union
+      row: A – naive union
       col: 3
   drift.A.ratio_vs_B:
     section: '5.3'
@@ -1054,9 +1054,9 @@ claims:
     comparison: rounded_decimal
     decimals: 2
     pdf:
-      row: A - naive union
+      row: A – naive union
       col: 4
-      suffix: x
+      suffix: ×
   drift.A.coverage_vs_B:
     section: '5.3'
     class: SUPPORTING_STABLE
@@ -1066,7 +1066,7 @@ claims:
     comparison: rounded_percent
     decimals: 1
     pdf:
-      row: A - naive union
+      row: A – naive union
       col: 5
   drift.B.observations:
     section: '5.3'
@@ -1076,7 +1076,7 @@ claims:
     expected: 54000
     comparison: exact_integer
     pdf:
-      row: B - address
+      row: B – address deduplication
       col: 1
   drift.B.addresses:
     section: '5.3'
@@ -1086,7 +1086,7 @@ claims:
     expected: 54000
     comparison: exact_integer
     pdf:
-      row: B - address
+      row: B – address deduplication
       col: 2
   drift.B.revenue:
     section: '5.3'
@@ -1096,7 +1096,7 @@ claims:
     expected: 1101304945
     comparison: exact_integer
     pdf:
-      row: B - address
+      row: B – address deduplication
       col: 3
   drift.B.ratio_vs_B:
     section: '5.3'
@@ -1107,9 +1107,9 @@ claims:
     comparison: rounded_decimal
     decimals: 2
     pdf:
-      row: B - address
+      row: B – address deduplication
       col: 4
-      suffix: x
+      suffix: ×
   drift.B.coverage_vs_B:
     section: '5.3'
     class: SUPPORTING_STABLE
@@ -1119,7 +1119,7 @@ claims:
     comparison: rounded_percent
     decimals: 1
     pdf:
-      row: B - address
+      row: B – address deduplication
       col: 5
   drift.C.observations:
     section: '5.3'
@@ -1129,7 +1129,7 @@ claims:
     expected: 42237
     comparison: exact_integer
     pdf:
-      row: C - inheritance
+      row: C – inheritance collapsed
       col: 1
   drift.C.addresses:
     section: '5.3'
@@ -1139,7 +1139,7 @@ claims:
     expected: 42237
     comparison: exact_integer
     pdf:
-      row: C - inheritance
+      row: C – inheritance collapsed
       col: 2
   drift.C.revenue:
     section: '5.3'
@@ -1149,7 +1149,7 @@ claims:
     expected: 1045637069
     comparison: exact_integer
     pdf:
-      row: C - inheritance
+      row: C – inheritance collapsed
       col: 3
   drift.C.ratio_vs_B:
     section: '5.3'
@@ -1160,9 +1160,9 @@ claims:
     comparison: rounded_decimal
     decimals: 2
     pdf:
-      row: C - inheritance
+      row: C – inheritance collapsed
       col: 4
-      suffix: x
+      suffix: ×
   drift.C.coverage_vs_B:
     section: '5.3'
     class: SUPPORTING_STABLE
@@ -1172,7 +1172,7 @@ claims:
     comparison: rounded_percent
     decimals: 1
     pdf:
-      row: C - inheritance
+      row: C – inheritance collapsed
       col: 5
   drift.D.observations:
     section: '5.3'
@@ -1182,7 +1182,7 @@ claims:
     expected: 7457
     comparison: exact_integer
     pdf:
-      row: D - highest declared
+      row: D – highest declared confidence
       col: 1
   drift.D.addresses:
     section: '5.3'
@@ -1192,7 +1192,7 @@ claims:
     expected: 7457
     comparison: exact_integer
     pdf:
-      row: D - highest declared
+      row: D – highest declared confidence
       col: 2
   drift.D.revenue:
     section: '5.3'
@@ -1202,7 +1202,7 @@ claims:
     expected: 112426902
     comparison: exact_integer
     pdf:
-      row: D - highest declared
+      row: D – highest declared confidence
       col: 3
   drift.D.ratio_vs_B:
     section: '5.3'
@@ -1213,9 +1213,9 @@ claims:
     comparison: rounded_decimal
     decimals: 2
     pdf:
-      row: D - highest declared
+      row: D – highest declared confidence
       col: 4
-      suffix: x
+      suffix: ×
   drift.D.coverage_vs_B:
     section: '5.3'
     class: HEADLINE_STABLE
@@ -1225,7 +1225,7 @@ claims:
     comparison: rounded_percent
     decimals: 1
     pdf:
-      row: D - highest declared
+      row: D – highest declared confidence
       col: 5
   drift.B.revenue@abstract:
     section: Abstract
@@ -1238,7 +1238,7 @@ claims:
     decimals: 3
     scale: !!float '1e-09'
     pdf:
-      text: produce USD {v} billion at full coverage
+      text: fell from about USD {v} billion at full deduplicated coverage
   drift.D.revenue@abstract:
     section: Abstract
     class: HEADLINE_STABLE
@@ -1250,7 +1250,7 @@ claims:
     decimals: 1
     scale: !!float '1e-06'
     pdf:
-      text: produces USD {v} million at 13.8% coverage
+      text: to USD {v} million at 13.8% coverage
   drift.D.coverage@abstract:
     section: Abstract
     class: HEADLINE_STABLE
@@ -1271,7 +1271,7 @@ claims:
     comparison: rounded_decimal
     decimals: 1
     pdf:
-      text: That is a {v}x difference
+      text: a {v}× difference
   drift.naive_inflation:
     section: '5.3'
     class: SUPPORTING_STABLE
@@ -1282,7 +1282,7 @@ claims:
     comparison: rounded_percent
     decimals: 1
     pdf:
-      text: raises the estimate by {v}
+      text: The naive union inflates the baseline by {v}
   drift.double_counted:
     section: '5.3'
     class: SUPPORTING_STABLE
@@ -1291,8 +1291,7 @@ claims:
     metric: drift.double_counted_addresses
     expected: 7508
     comparison: exact_integer
-    pdf:
-      text: because {v} addresses are counted twice
+    # not printed in the conference PDF (ICISHCT2026_THEMIS_Conference_Revised.pdf): checked against THEMIS only
   drift.collapse_addresses_removed:
     section: '5.3'
     class: SUPPORTING_STABLE
@@ -1303,7 +1302,7 @@ claims:
     comparison: rounded_percent
     decimals: 1
     pdf:
-      text: removes {v} of the addresses
+      text: removes {v} of addresses
   drift.collapse_value_removed:
     section: '5.3'
     class: SUPPORTING_STABLE
@@ -1314,7 +1313,7 @@ claims:
     comparison: rounded_percent
     decimals: 1
     pdf:
-      text: but only {v} of the value
+      text: but only about {v} of the value
   unresolved_provenance.addresses:
     section: '5.4'
     class: HEADLINE_STABLE
@@ -1323,7 +1322,7 @@ claims:
     expected: 853583
     comparison: exact_integer
     pdf:
-      text: cover {v} addresses, about 57.0%
+      text: blocks account for {v} addresses, about 57.0%
   unresolved_provenance.share:
     section: '5.4'
     class: HEADLINE_STABLE
@@ -1342,7 +1341,7 @@ claims:
     expected: 2
     comparison: exact_integer
     pdf:
-      text: provide the {v} open reference roots
+      text: Only {v} of the seven sources are supported by at least two independent roots
       token: two
   anchors.source_accuracy_robustly_estimable:
     section: '4.3'
@@ -1352,7 +1351,7 @@ claims:
     expected: false
     comparison: exact_string
     pdf:
-      text: remain too wide to support a defensible claim
+      text: the open anchors are too sparse and too concentrated in a few provenance roots to establish accuracy for the corpus
       literal: true
   threats.revenue_inherited_from_upstream:
     section: '5.4'

@@ -1,5 +1,7 @@
 # Final dataset selection report
 
+> **Historical record.** Commit hashes, test counts, file states and open decisions below describe the repository when this report was written (for example: `HEAD` `30ffd0b`, no `LICENSE`, `demo_data/` tracked, the earlier paper pin). They were resolved afterwards. The final state is the `v1.0-paper` tag, described by `README.md`, `REPRODUCE.md` and `THIRD_PARTY_DATA.md`.
+
 Written for: the THEMIS author, to decide whether the selection is defensible and to stop future sessions repeating this search.
 
 **Selected: Forta Foundation `labelled-datasets`, file `labels/1/etherscan_malicious_labels.csv`** (Ethereum mainnet, 7,780 rows).

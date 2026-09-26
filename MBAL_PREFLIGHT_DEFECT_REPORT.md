@@ -1,5 +1,7 @@
 # MBAL pre-flight defect report
 
+> **Historical record.** Commit hashes, test counts, file states and open decisions below describe the repository when this report was written (for example: `HEAD` `30ffd0b`, no `LICENSE`, `demo_data/` tracked, the earlier paper pin). They were resolved afterwards. The final state is the `v1.0-paper` tag, described by `README.md`, `REPRODUCE.md` and `THIRD_PARTY_DATA.md`.
+
 Scope: what an unseen multi-chain attribution file (MBAL, 10,000,000 rows) exposed in THEMIS's
 pre-flight, and how each defect was fixed **generically**. Nothing here says MBAL is reliable.
 "Pre-flight now passes" means only: THEMIS understands enough of the schema to analyse the file

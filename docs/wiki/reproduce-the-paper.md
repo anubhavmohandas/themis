@@ -15,7 +15,7 @@ themis --observations build/observations.csv.gz --data-dir build/ --as-of 2026-0
 themis --observations build/observations.csv.gz --as-of 2026-09-15 bootstrap --both
 ```
 
-A development checkout also carries a 268,891-claim sample in `demo_data/`, so
+The author's machine also keeps a private 268,891-claim sample in `demo_data/` (git-ignored, never published), so
 plain `themis audit | drift | bootstrap --both | anchors | explain <address>` work
 there and match `expected_output/` byte for byte. [REPRODUCE.md](../../REPRODUCE.md) has exact
 commands, expected output, and which of the paper's numbers differ from THEMIS's

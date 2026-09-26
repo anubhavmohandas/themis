@@ -1,5 +1,7 @@
 # Final external validation report
 
+> **Historical record.** Commit hashes, test counts, file states and open decisions below describe the repository when this report was written (for example: `HEAD` `30ffd0b`, no `LICENSE`, `demo_data/` tracked, the earlier paper pin). They were resolved afterwards. The final state is the `v1.0-paper` tag, described by `README.md`, `REPRODUCE.md` and `THIRD_PARTY_DATA.md`.
+
 Written for: the THEMIS author, ahead of the paper's final revision.
 
 **Dataset:** Forta Foundation `labelled-datasets`, `labels/1/etherscan_malicious_labels.csv` (selection and rejection trail: `FINAL_DATASET_SELECTION_REPORT.md`).

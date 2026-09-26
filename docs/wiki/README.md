@@ -16,7 +16,7 @@ The README is the 5-minute version. This wiki holds the full detail, split by wh
 
 ## Reports at the repository root
 
-Longer write-ups of specific validation work, kept as plain files:
+Longer write-ups, kept as plain files. The MBAL, BitcoinHeist and final-dataset reports are implementation stress tests; they do not validate the paper's seven-source findings, and external validation on an unseen, provenance-documented dataset remains future work:
 [REPRODUCE.md](../../REPRODUCE.md) ·
 [THIRD_PARTY_DATA.md](../../THIRD_PARTY_DATA.md) ·
 [MBAL_VALIDATION_REPORT.md](../../MBAL_VALIDATION_REPORT.md) ·

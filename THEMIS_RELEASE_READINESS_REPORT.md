@@ -1,5 +1,7 @@
 # THEMIS release-readiness, security and scientific-integrity closure report
 
+> **Historical record.** Commit hashes, test counts, file states and open decisions below describe the repository when this report was written (for example: `HEAD` `30ffd0b`, no `LICENSE`, `demo_data/` tracked, the earlier paper pin). They were resolved afterwards. The final state is the `v1.0-paper` tag, described by `README.md`, `REPRODUCE.md` and `THIRD_PARTY_DATA.md`.
+
 Date: 2026-09-24. Scope: one repository-wide closure pass. This file is tracked on purpose: the release state
 must not depend on the gitignored `HARDENING_LOG.md`. Statements are labelled **OBSERVED** (seen in this
 run), **INFERRED**, **DOCUMENTED BY SOURCE** (a source's own documentation) or **CONFIRMED BY THEMIS** (established

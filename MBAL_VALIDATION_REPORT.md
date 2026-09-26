@@ -1,5 +1,7 @@
 # MBAL validation report
 
+> **Historical record.** Commit hashes, test counts, file states and open decisions below describe the repository when this report was written (for example: `HEAD` `30ffd0b`, no `LICENSE`, `demo_data/` tracked, the earlier paper pin). They were resolved afterwards. The final state is the `v1.0-paper` tag, described by `README.md`, `REPRODUCE.md` and `THIRD_PARTY_DATA.md`.
+
 **Two questions, kept apart.**
 **A.** Does THEMIS correctly understand and analyse an unfamiliar dataset?
 **B.** What can THEMIS scientifically establish about MBAL itself?

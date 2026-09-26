@@ -1,5 +1,7 @@
 # MBAL change-blast-radius audit
 
+> **Historical record.** Commit hashes, test counts, file states and open decisions below describe the repository when this report was written (for example: `HEAD` `30ffd0b`, no `LICENSE`, `demo_data/` tracked, the earlier paper pin). They were resolved afterwards. The final state is the `v1.0-paper` tag, described by `README.md`, `REPRODUCE.md` and `THIRD_PARTY_DATA.md`.
+
 Date: 2026-09-24. Scope: every file changed or untracked in the working tree when the MBAL work ended, audited before
 anything is committed. This audit made no commit, no `git add`, no revert and no code change.
 

@@ -102,7 +102,7 @@ figure this tool prints carries both.
 `themis drift` re-runs one task (ransomware revenue) under four rules: **A** naive
 union, **B** address-level deduplication (the baseline), **C** inherited claims
 collapsed to their root, **D** the addresses an anchor set names. D is *the
-highest declared confidence present*, not verified ground truth: in the bundled
+highest declared confidence present*, not verified ground truth: in the paper
 corpus it is exactly the addresses TagPack tags `confidence: forensic` (plus
 WatchYourBack's ransomware annotations), and almost all of it is one upstream
 study. Read the ratio and the coverage together; neither means anything alone.

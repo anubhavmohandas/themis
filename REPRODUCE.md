@@ -10,11 +10,22 @@ no other version has been run.
 |---|---|---|
 | a **release** (no data) | the test suite; the upload flow on `examples/`; the frontend build | §1, §5, §6 |
 | a release **plus the sources** you fetched | everything in the paper except the anchor validation | §3 |
-| a **development checkout** (`demo_data/` sample present) | every command, byte-identical to `expected_output/` | §2 |
+| the **author's private machine** (a local, git-ignored `demo_data/` sample) | every command, byte-identical to `expected_output/` | §2 |
 
 The paper's data statement is that the derived observation table is not
-redistributed, so a release contains none of `demo_data/`. `THIRD_PARTY_DATA.md`
-says why and lists where each source lives.
+redistributed, so neither the release nor the public repository contains any real
+file under `demo_data/` (only its `README.md`). `THIRD_PARTY_DATA.md` says why and
+lists where each source lives.
+
+**Release identity.** The tag `v1.0-paper` is the final release of the ICISHCT 2026 manuscript
+(`git rev-parse v1.0-paper^{commit}` gives its commit). The manuscript itself is not distributed;
+its identity is `ICISHCT2026_THEMIS_Conference_Revised.pdf`, 828,801 bytes, SHA-256
+`16cfb693980a5175ccfc8f99acee15c8ae4e62c9401a53f124a84f6d468a011f`, pinned in `paper/paper_claims.yml`.
+
+Exact reproduction of the Ransomwhere-dependent figures (including the revenue in Table 2) needs the
+author's retained, hashed 2026-09-20 export: the live service changes over time. Every other source is
+fetched from its published location and checked against the hashes in
+`expected_output/retained_table_build_manifest.json`.
 
 ## 1. Install and test
 
@@ -29,12 +40,12 @@ python -m pytest
 Only `pyproject.toml` supplies dependencies (PyYAML at runtime; pytest, httpx,
 fastapi, python-multipart for the tests). Expected:
 
-- **release / no reference corpus:** `556 passed, 135 skipped` - the 135 skipped
+- **release / no reference corpus:** `586 passed, 135 skipped` - the 135 skipped
   are the tests that assert a number printed in the paper or drive paper mode;
   each says `reference corpus not present (not redistributed - see
   THIRD_PARTY_DATA.md; set THEMIS_DATA_DIR)`.
-- **a corpus present** (development checkout, or `THEMIS_DATA_DIR` pointing at a
-  matching one): `685 passed, 6 skipped` in a clean environment with `.[test,figures]`
+- **a corpus present** (the author's machine with a local `demo_data/`, or `THEMIS_DATA_DIR` pointing at a
+  matching one): `715 passed, 6 skipped` in a clean environment with `.[test,figures]`
   installed (numpy arrives with matplotlib). Without numpy the numpy cross-check
   of the exploratory `--fast` bootstrap path is skipped and the count is one lower.
   The 6 skipped assert the full-corpus Overview figures and need a full build:
@@ -44,7 +55,7 @@ fastapi, python-multipart for the tests). Expected:
 
 If a test fails, stop here; the rest assumes a clean run.
 
-## 2. Paper commands on the bundled sample (development checkout)
+## 2. Paper commands on the local sample (author's machine only)
 
 ```
 themis audit
@@ -54,6 +65,7 @@ themis anchors
 themis explain 14BWrn1evbyvBGGxFzUCVQ61ntNtRjRdm7
 ```
 
+This sample is not in the public repository; without it, use the full rebuild (§3, §8).
 `expected_output/` holds the exact output; the CLI prints no timestamps, so
 `themis audit | diff - expected_output/audit.txt` is empty. Headline lines:
 
@@ -69,6 +81,9 @@ BOOTSTRAP   2,000 resamples, seed 42, 95% - exact 68.279% [6.012, 97.808] lower 
 ANCHORS     289 anchors -> 268 usable; 361 claims excluded as same-root
             schnoering 94.1% (3 roots) [71.4, 100.0]   tagpack 43.6% (5 roots) [7.0, 97.2]   the other five: not estimable
 ```
+
+(These are the sample's frozen figures: 1,497,191 is the raw address-key count, and the paper's
+1,497,106 is after WatchYourBack's `#`-prefixed addresses are joined, §6.)
 
 (`drift` USD totals equal the paper's Table 2: the bundle keeps each row at full
 precision, as the paper's own arithmetic does. An earlier cent-rounded bundle was $1–3 low; §8.)
@@ -130,7 +145,7 @@ newest revision date in its own claims, which is earlier than the retrieval date
 | Ransomwhere (live export, 2026-09-20) | 11,186 addresses; reproduces `pipeline/out/e3.json` for conditions A and B to the last float digit |
 
 All seven sources rebuilt together (`scripts/build_corpus.py`, 2026-09-20) give
-**1,545,710 claims over 1,497,191 addresses**, every per-source count equal to the
+**1,545,710 claims over 1,497,191 raw address keys (1,497,106 normalized addresses)**, every per-source count equal to the
 manifest's, and all 268,891 frozen sample rows present verbatim. The public
 sources had not moved since the paper's retrieval date.
 
@@ -146,10 +161,12 @@ last is a provenance *root*: `ofac_sdn` or `watchyourback_manual`). That file is
 curated from WatchYourBack's annotations and OFAC's SDN list and is not
 scripted, so it is the one paper command a release cannot reproduce.
 
-## 4. Where THEMIS and the paper differ
+## 4. Where THEMIS is stricter than the paper's original pipeline
 
-THEMIS is stricter than the paper's pipeline in three places, and the differences
-are what §5.1, §4.2 and §5.4 need updated:
+The final manuscript (`ICISHCT2026_THEMIS_Conference_Revised.pdf`) already states THEMIS's values;
+nothing here is an open disagreement. The three places where THEMIS is stricter than the paper's
+earlier pipeline (the differences earlier manuscripts had to be corrected for; history:
+`docs/history/paper_vs_themis_earlier_states.md`):
 
 1. **Agreement.** The pipeline counts an address `exact` when only one dataset
    contributed an interpretable category (13,673); THEMIS requires two (10,515)
@@ -162,7 +179,7 @@ are what §5.1, §4.2 and §5.4 need updated:
    uninterpretable claims out of the denominator, resamples roots for the
    interval, and roots WatchYourBack's Treasury-cited records at OFAC.
 
-Everything else in the paper that THEMIS computes reproduces.
+Everything else in the paper that THEMIS computes reproduces (`themis verify-paper`, §8).
 
 ## 5. Frontend
 
@@ -172,7 +189,7 @@ npm ci
 npm run build
 ```
 
-Expected: a clean Vite build (225 modules), producing `frontend/dist/`.
+Expected: a clean Vite build (228 modules), producing `frontend/dist/`.
 Only `package.json` and `package-lock.json` are used.
 
 ## 6. Running the dashboard
@@ -184,12 +201,12 @@ cd frontend && npm run dev           # frontend on http://127.0.0.1:5173
 ```
 
 "Reproduce paper" needs the reference corpus (`THEMIS_DATA_DIR` or a development
-checkout); without it the page shows the instruction to build one. Uploading a
+machine with a local corpus); without it the page shows the instruction to build one. Uploading a
 file works either way — without a corpus the audit runs without cross-source
-comparison and says so. The dashboard has been driven through its API only:
-**MANUAL BROWSER QA STILL REQUIRED.**
+comparison and says so. The dashboard is exercised in a real browser by
+`tests/e2e/` (optional, not part of `pytest`; see its README).
 
-By default the API loads the bundled sample, and the Overview then says so: every figure is labelled
+By default the API loads a local `demo_data/` sample when one exists (none ships), and the Overview then says so: every figure is labelled
 `BUNDLED SAMPLE`, `FULL-CORPUS MANIFEST` or `NOT AVAILABLE` (the sample cannot state the normalized
 address count, the single-source share or the full-corpus multi-dataset count). To load a full build
 instead, as the CLI's `--observations` / `--as-of` do:
@@ -217,7 +234,7 @@ resolves UNRESOLVED, never independent.
 
 ```
 themis reproduce-paper                 # writes results/reproduction/<run_id>/ and mirrors it to results/paper_proof/
-themis verify-paper --paper /path/to/ICISHCT2026_THEMIS_Final_Verified.pdf
+themis verify-paper --paper /path/to/ICISHCT2026_THEMIS_Conference_Revised.pdf
 themis figures                          # or: themis figures --from-data results/paper_proof  (no corpus needed)
 themis reproduce rodwald-containment
 ```
@@ -238,7 +255,7 @@ supply data: fetch the sources (§3), run `scripts/build_corpus.py`, then
 themis --observations build/observations.csv.gz --data-dir build --as-of 2026-09-15 reproduce-paper
 ```
 
-On the bundled sample (a development checkout) cross-dataset results (overlap,
+On a sample (the author's local `demo_data/`) cross-dataset results (overlap,
 Rodwald decode, Montréal recurrence, conclusion drift, anchors) are recomputed
 live; corpus-wide totals (claims, addresses, roots, unresolved provenance, the
 single-dataset share) are figures carried in `demo_data/manifest.json`, and
@@ -294,17 +311,15 @@ date, never the wall clock.
   on the old file reproduces the old figures exactly - both are faithful to their input.
   The artifact was the defect; `scripts/build_corpus.py` now writes `repr(float)` and the
   bundled file was replaced. No tolerance was added.
-- *Full-corpus reproduction, paper `ICISHCT2026_THEMIS_Final_Verified.pdf`:* every
-  machine-checkable claim is computed live. Its predecessor `..._Repaired_Final.pdf`
-  (Table 2 identical) failed on three statements that were wrong in the paper, and only
-  those were corrected: (a) "more than 99.5%" of Elliptic++ without a cross-source check
-  became "about 99.5% of Elliptic++ addresses" (live 99.4803%); (b) "only 15,400 addresses
-  appear in two or more datasets" became 15,413 and (c) "7,832 in two datasets" became 7,845
-  (the old 15,400 / 7,832 were pre-normalisation; 7,845 + 429 + 7,112 + 27 = 15,413). The
-  data statement also no longer calls the sources "openly redistributable" (no licence
-  was found for Elliptic++ or Rodwald): they are "publicly accessible". The bundled sample
-  cannot confirm (b)/(c) (it is 13 addresses short), so on the sample they are
-  `SAMPLE_OBSERVED`, not PASS.
+- *Full-corpus reproduction, final manuscript `ICISHCT2026_THEMIS_Conference_Revised.pdf`:* every
+  machine-checkable claim is computed live and every PDF locator in `paper/paper_claims.yml`
+  finds its printed value. Earlier manuscript versions were corrected on three statements
+  (the Elliptic++ "more than 99.5%", 15,400 and 7,832 multi-dataset addresses); the final
+  manuscript prints the corrected values (99.48%, 15,413, 7,845; 7,845 + 429 + 7,112 + 27 =
+  15,413) and calls the sources "publicly accessible", not "openly redistributable". It no
+  longer prints a few figures earlier versions did (the 33 provenance descriptors, several
+  overlap and unresolved-provenance shares); those stay in the manifest and are checked
+  against THEMIS only. On a sample, the corpus-wide claims are `SAMPLE_OBSERVED`, not PASS.
 - *The manuscript is not distributed.* The repository and the release hold only the
   manifest, which names the PDF and pins its SHA-256. To run the PDF-layer check, give
   the PDF with `--paper FILE` or `THEMIS_PAPER_PDF`, or place it in `paper/` (git-ignored).

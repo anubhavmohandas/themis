@@ -1,5 +1,7 @@
 # Third-party data redistribution: investigation and decision record
 
+> **Historical record.** Commit hashes, test counts, file states and open decisions below describe the repository when this report was written (for example: `HEAD` `30ffd0b`, no `LICENSE`, `demo_data/` tracked, the earlier paper pin). They were resolved afterwards. The final state is the `v1.0-paper` tag, described by `README.md`, `REPRODUCE.md` and `THIRD_PARTY_DATA.md`.
+
 Date of evidence: **2026-09-24**. Scope: the five files tracked under `demo_data/` in the public
 repository `github.com/anubhavmohandas/themis`. Investigation only: nothing was removed, rewritten,
 re-licensed or changed (no code, paper, taxonomy, corpus or history edits).

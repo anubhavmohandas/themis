@@ -9,7 +9,7 @@ What it removes from what git tracks: the third-party-derived data files under
 demo_data/ and provenance_register.html (the paper says the derived observation
 table is not redistributed - THIRD_PARTY_DATA.md), the previous dashboard kept
 under frontend/legacy, and this script (packaging tooling, needs git). It then
-writes demo_data/README.md and RELEASE_MANIFEST.json (commit, per-file sha256).
+writes RELEASE_MANIFEST.json (commit, per-file sha256).
 The ZIP is deterministic: sorted entries, fixed timestamps, fixed modes.
 """
 from __future__ import annotations
@@ -20,21 +20,6 @@ EXCLUDE = ("demo_data/manifest.json", "demo_data/observations_sample.csv.gz", "d
            "provenance_register.html", "frontend/legacy", "scripts/make_release.py")
 FORBIDDEN = re.compile(r"(^|/)(\.git|\.venv|venv|node_modules|__pycache__|\.pytest_cache|dist|external_data|results|"
                        r"__MACOSX|\.idea|\.vscode)(/|$)|\.DS_Store$|\.pyc$|\.egg-info(/|$)")
-DEMO_README = """# demo_data
-
-Intentionally empty in a release. The paper's data statement is that the derived
-observation table is not redistributed, because the redistribution terms of the
-constituent sources differ (see ../THIRD_PARTY_DATA.md), so the reference corpus is
-not shipped.
-
-Build it from the sources you fetch yourself:
-
-    python scripts/build_corpus.py --out build/ --tagpack ... (see ../REPRODUCE.md section 3)
-
-then point THEMIS at it with `--data-dir build` or `THEMIS_DATA_DIR=build`.
-`themis --observations build/observations.csv.gz ... audit` reads the corpus itself;
-`--data-dir` supplies the task inputs (revenue, anchors, ground truth).
-"""
 
 
 def sh(*a, **k):
@@ -73,8 +58,6 @@ def main():
             shutil.rmtree(p)
         elif p.exists():
             p.unlink()
-    (out / "demo_data").mkdir(exist_ok=True)
-    (out / "demo_data" / "README.md").write_text(DEMO_README)
     files = sorted(p for p in out.rglob("*") if p.is_file())
     bad = [str(p.relative_to(out)) for p in files if FORBIDDEN.search(p.relative_to(out).as_posix())]
     if bad:

@@ -1,5 +1,7 @@
 # Paper impact report: what the MBAL experiment changes in the manuscript
 
+> **Historical record.** Commit hashes, test counts, file states and open decisions below describe the repository when this report was written (for example: `HEAD` `30ffd0b`, no `LICENSE`, `demo_data/` tracked, the earlier paper pin). They were resolved afterwards. The final state is the `v1.0-paper` tag, described by `README.md`, `REPRODUCE.md` and `THIRD_PARTY_DATA.md`.
+
 Date: 2026-09-25. Status: **impact analysis only. The manuscript, the PDF, `paper/paper_claims.yml` and the
 code were not edited; nothing was committed.** Every recommendation below waits for author approval.
 

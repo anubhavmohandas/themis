@@ -1,5 +1,7 @@
 # BitcoinHeist validation report
 
+> **Historical record.** Commit hashes, test counts, file states and open decisions below describe the repository when this report was written (for example: `HEAD` `30ffd0b`, no `LICENSE`, `demo_data/` tracked, the earlier paper pin). They were resolved afterwards. The final state is the `v1.0-paper` tag, described by `README.md`, `REPRODUCE.md` and `THIRD_PARTY_DATA.md`.
+
 **Question asked.** Does THEMIS understand a second external dataset without dataset-specific tuning, and what
 can it establish about that dataset's labels? The dataset is UCI's *Bitcoin Heist Ransomware Address*.
 

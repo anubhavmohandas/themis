@@ -15,7 +15,7 @@ tests/             unit and paper-regression tests (paper tests skip without the
 examples/          synthetic CSVs for the upload flow
 expected_output/   frozen CLI output and metrics for comparison
 frontend/          React + Vite dashboard
-demo_data/         (development checkout only) bundled sample - not part of a release
+demo_data/         (only README.md is tracked; the real sample stays on the author's machine, git-ignored)
 ```
 
 **Config, not code, is dataset-specific.** Nothing under `themis/*.py` names a

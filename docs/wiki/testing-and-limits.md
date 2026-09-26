@@ -24,9 +24,9 @@ paper's own "99.9% over three years old" irreproducible.
 
 - Several paper figures need the **full corpus**, not the sample: the
   multi-dataset-rate interval, 853,604 upper-bound clusters, corpus-wide
-  freshness. The bundled sample keeps every multi-dataset address, so agreement,
+  freshness. The author's local sample keeps every multi-dataset address, so agreement,
   conflict and circularity figures are exact; corpus-wide totals come from a manifest.
-- **The bundled sample's multi-dataset total is pre-`#`-fix (15,400).** It was computed
+- **The local sample's multi-dataset total is pre-`#`-fix (15,400).** It was computed
   when WatchYourBack's 87 `#`-prefixed addresses were still unjoined; the full
   corpus, with them joined, has 15,413 multi-dataset addresses (7,845 / 429 / 7,112 / 27).
   The manuscript states the full-corpus value.
@@ -40,7 +40,7 @@ paper's own "99.9% over three years old" irreproducible.
 - Kappa keeps `unknown` as a class in its headline (an interpretable-only
   companion is printed beside it).
 - TagPack's proper-noun entity labels ("Antpool") are not mapped to categories.
-- `demo_data/revenue.csv.gz` keeps full float precision (an earlier cent-rounded
+- The private `demo_data/revenue.csv.gz` keeps full float precision (an earlier cent-rounded
   copy biased Table 2 low by $2.55-$3.16; see REPRODUCE.md section 8).
 - The dashboard was browser-tested against the Vite dev server with a real
   Chromium (2026-09-20): paper reproduction, evidence drill-down, upload,
