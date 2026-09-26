@@ -75,6 +75,7 @@ await step("A1 upload -> preflight -> analysis -> overview", async () => {
   await analyseCsv("normal.csv");
   await expectText(/Target claims/i);
   await expectText(/Unresolved provenance/i);
+  await expectText(/the assessment of this dataset is/i);      // the closing summary, worded from config/assessment.yml
 });
 await step("A2 claims table pages server-side", async () => {
   await page.getByRole("link", { name: "Claims", exact: true }).first().click();

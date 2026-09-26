@@ -6,13 +6,17 @@ consistency, the target-vs-reference audit, provenance, currency) and applies
 the cut-offs in config/assessment.yml. It computes nothing new about the data,
 so the verdict can never disagree with the tables above it.
 
-    TRUSTWORTHY               measured, and no problem found at any level
-    TRUSTWORTHY WITH CAVEATS  same, but limits the reader must carry are listed
-    NOT ESTABLISHED           nothing measured is wrong, yet too little independent
+    supported                 measured, and no problem found at any level
+    supported_with_caveats    same, but limits the reader must carry are listed
+    not_established           nothing measured is wrong, yet too little independent
                               evidence exists to say it is right (absence of evidence
-                              is never promoted to trust)
-    NOT TRUSTWORTHY           a measured problem large enough to rule the labels out
-    CANNOT ASSESS             the dataset did not pass pre-flight; nothing was analysed
+                              is never promoted to support)
+    concerns                  a measured problem large enough to rule the labels out
+    cannot_assess             the dataset did not pass pre-flight; nothing was analysed
+
+The stable ids above are what code compares; the words a reader sees (EVIDENCE
+SUPPORTED, ...) come from the `labels` map in config/assessment.yml, so wording is
+changed in one place and never by editing logic.
 
 The verdict speaks about the evidence for the labels (consistency, corroboration,
 independence, currency). It does not prove any single label correct: coverage is
@@ -23,17 +27,17 @@ import collections, hashlib, json
 
 from . import config_io, target_audit
 
-TRUSTWORTHY = "TRUSTWORTHY"
-WITH_CAVEATS = "TRUSTWORTHY WITH CAVEATS"
-NOT_ESTABLISHED = "NOT ESTABLISHED"
-NOT_TRUSTWORTHY = "NOT TRUSTWORTHY"
-CANNOT_ASSESS = "CANNOT ASSESS"
+SUPPORTED = "supported"
+WITH_CAVEATS = "supported_with_caveats"
+NOT_ESTABLISHED = "not_established"
+CONCERNS = "concerns"
+CANNOT_ASSESS = "cannot_assess"
 
 MEANING = {
-    TRUSTWORTHY: "The file is internally sound and independent public evidence agrees with it; no problem was measured.",
+    SUPPORTED: "The file is internally sound and independent public evidence agrees with it; no problem was measured.",
     WITH_CAVEATS: "The file is internally sound and public evidence agrees with it, but the limits listed below apply to any use of it.",
     NOT_ESTABLISHED: "Nothing measured is wrong, but there is not enough independent evidence to say the labels are right.",
-    NOT_TRUSTWORTHY: "A measured problem is large enough that the labels should not be relied on until it is resolved.",
+    CONCERNS: "A measured problem is large enough that the labels should not be relied on until it is resolved.",
     CANNOT_ASSESS: "The dataset did not pass pre-flight, so nothing was analysed and no verdict on its labels exists.",
 }
 SCOPE = ("This is a judgement of the evidence behind the labels (consistency, corroboration, independence, "
@@ -147,13 +151,13 @@ def assess(result: dict) -> dict:
 
     levels = {f["level"] for f in findings}
     if FAIL in levels:
-        verdict = NOT_TRUSTWORTHY
+        verdict = CONCERNS
     elif not enough:
         verdict = NOT_ESTABLISHED
     elif CAVEAT in levels:
         verdict = WITH_CAVEATS
     else:
-        verdict = TRUSTWORTHY
+        verdict = SUPPORTED
     return _pack(verdict, findings, cfg)
 
 
@@ -161,12 +165,12 @@ def _pack(verdict: str, findings: list[dict], cfg: dict) -> dict:
     # the reasons that decided the verdict come first: fails, then caveats, then the good news, then gaps
     order = {FAIL: 0, CAVEAT: 1, OK: 2, "info": 3}
     findings = sorted(findings, key=lambda f: order[f["level"]])
-    if verdict in (TRUSTWORTHY, WITH_CAVEATS):
-        # a "trustworthy" verdict is justified by what held up, and (with caveats) qualified by what did not
+    if verdict in (SUPPORTED, WITH_CAVEATS):
+        # a "supported" verdict is justified by what held up, and (with caveats) qualified by what did not
         because = [f["text"] for f in findings if f["level"] in (OK, CAVEAT)]
     else:
         because = [f["text"] for f in findings if f["level"] in (FAIL, CAVEAT, "info")] or [f["text"] for f in findings]
-    statement = (f"According to the THEMIS report, this dataset is {verdict}, because: "
-                 + " ".join(because)) if because else f"According to the THEMIS report, this dataset is {verdict}."
-    return dict(verdict=verdict, meaning=MEANING[verdict], statement=statement, findings=findings,
-                scope=SCOPE, config_hash=_cfg_hash(cfg))
+    label, lead = cfg["labels"][verdict], cfg["statement_lead"]
+    statement = f"{lead} {label}, because: " + " ".join(because) if because else f"{lead} {label}."
+    return dict(verdict=label, verdict_id=verdict, lead=lead, meaning=MEANING[verdict], statement=statement,
+                findings=findings, scope=SCOPE, config_hash=_cfg_hash(cfg))

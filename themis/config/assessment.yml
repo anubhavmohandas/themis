@@ -1,17 +1,31 @@
 # The closing verdict on an uploaded dataset (themis/assessment.py): is this public
 # source dataset reliable enough to use, and why. Every number the verdict turns on
-# is here, so a reviewer can see, and change, exactly what "trustworthy" means.
+# is here, so a reviewer can see, and change, exactly what each outcome means.
 # Kept out of thresholds.yml on purpose: that file's hash is recorded by every
 # paper-reproduction run, and a verdict rule is not part of the paper.
 #
-# Each measure has a `caveat` level (the dataset can still be called trustworthy,
+# Each measure has a `caveat` level (the evidence can still be called supported,
 # but the reader is told) and, where a bad value is proof of a problem rather than
-# absence of evidence, a `fail` level (the dataset is called NOT TRUSTWORTHY).
+# absence of evidence, a `fail` level (the outcome is `concerns`).
 # All values are shares in [0, 1] of the stated denominator.
+
+# The words shown to the reader for each outcome. The keys are the stable ids the
+# code compares; this map is the only place the wording lives (CLI, API, GUI, and
+# tests all read it). The outcome summarises measured evidence; it is not proof that
+# any label is correct, so the wording avoids "trust".
+labels:
+  supported: EVIDENCE SUPPORTED
+  supported_with_caveats: SUPPORTED WITH CAVEATS
+  not_established: NOT ESTABLISHED
+  concerns: EVIDENCE CONCERNS
+  cannot_assess: CANNOT ASSESS
+
+# The sentence the outcome is put in: "<statement_lead> <label>, because: ..."
+statement_lead: According to the THEMIS report, the assessment of this dataset is
 
 # The reference corpus must have spoken about at least this many of the dataset's
 # addresses before agreement or conflict with it is treated as evidence. Below it
-# the verdict is NOT ESTABLISHED, never trustworthy: nothing external was tested.
+# the outcome is `not_established`, never `supported`: nothing external was tested.
 min_comparable_addresses: 30
 
 # Rows that failed validation / rows in the file.

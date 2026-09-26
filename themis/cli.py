@@ -291,10 +291,10 @@ def _print_preflight(pf: dict) -> None:
 
 def _print_assessment(a: dict) -> None:
     """The closing executive summary: the verdict and the measured reasons behind it."""
-    colour = {"TRUSTWORTHY": GRN, "TRUSTWORTHY WITH CAVEATS": GRN, "NOT ESTABLISHED": YEL,
-              "NOT TRUSTWORTHY": RED, "CANNOT ASSESS": YEL}[a["verdict"]]
+    colour = {"supported": GRN, "supported_with_caveats": GRN, "not_established": YEL,
+              "concerns": RED, "cannot_assess": YEL}[a["verdict_id"]]
     rule("EXECUTIVE SUMMARY")
-    print(f"  According to the THEMIS report, this dataset is {_c(a['verdict'], colour)}.")
+    print(f"  {a['lead']} {_c(a['verdict'], colour)}.")
     print(f"  {a['meaning']}")
     print("\n  because:")
     mark = {"ok": _c("+", GRN), "caveat": _c("!", YEL), "fail": _c("x", RED), "info": _c("-", DIM)}

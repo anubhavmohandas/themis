@@ -252,16 +252,16 @@ export function Limitations({ items, title = "Evidential limitations" }) {
 }
 
 // The closing verdict on an uploaded dataset (themis/assessment.py). The text carries the verdict, never the colour alone.
-const VERDICT_TONE = { "TRUSTWORTHY": "--tl", "TRUSTWORTHY WITH CAVEATS": "--tl", "NOT ESTABLISHED": "--oc", "NOT TRUSTWORTHY": "--ac", "CANNOT ASSESS": "--nt" };
+const VERDICT_TONE = { supported: "--tl", supported_with_caveats: "--tl", not_established: "--oc", concerns: "--ac", cannot_assess: "--nt" };
 const FINDING_MARK = { ok: "+", caveat: "!", fail: "×", info: "–" };
 
 export function ExecutiveSummary({ assessment: a }) {
   if (!a) return null;
-  const tone = `var(${VERDICT_TONE[a.verdict] || "--nt"})`;
+  const tone = `var(${VERDICT_TONE[a.verdict_id] || "--nt"})`;
   return (
     <Section title="Executive summary" note="The closing verdict, computed only from the measured figures above and the cut-offs in config/assessment.yml.">
       <div className="panel pad" role="region" aria-label="Executive summary" style={{ borderLeft: `4px solid ${tone}` }}>
-        <p style={{ margin: 0 }}>According to the THEMIS report, this dataset is <b style={{ color: tone }}>{a.verdict}</b>.</p>
+        <p style={{ margin: 0 }}>{a.lead} <b style={{ color: tone }}>{a.verdict}</b>.</p>
         <p className="small mut" style={{ margin: "4px 0 10px" }}>{a.meaning}</p>
         <div className="small" style={{ fontWeight: 600 }}>because:</div>
         <ul className="small" style={{ margin: "4px 0 10px", paddingLeft: 18, listStyle: "none" }}>
