@@ -168,13 +168,14 @@ Schema roles (address, label, category, source, timestamp, confidence) are
 inferred from column names and sampled values and can be overridden. Try it with
 the synthetic files in `examples/`.
 
-**The closing verdict.** Every analysis ends with an executive summary: *"According to the
-THEMIS report, this dataset is X, because …"*, where X is `TRUSTWORTHY`,
-`TRUSTWORTHY WITH CAVEATS`, `NOT ESTABLISHED` (nothing wrong, but too little independent
-evidence to say it is right), `NOT TRUSTWORTHY` (a measured problem rules the labels out) or
+**The closing assessment.** Every analysis ends with an executive summary: *"According to the
+THEMIS report, the assessment of this dataset is X, because …"*, where X is `EVIDENCE SUPPORTED`,
+`SUPPORTED WITH CAVEATS`, `NOT ESTABLISHED` (nothing wrong, but too little independent
+evidence to say it is right), `EVIDENCE CONCERNS` (a measured problem rules the labels out) or
 `CANNOT ASSESS` (failed pre-flight). It reads only figures the pipeline already measured and
-the cut-offs in `themis/config/assessment.yml`, and lists the numbers behind it. It judges the
-evidence for the labels, not any single label: coverage is not accuracy.
+the cut-offs in `themis/config/assessment.yml` (which also holds the wording of each outcome),
+and lists the numbers behind it. It summarises the evidence for the labels, not any single
+label: coverage is not accuracy, and no outcome means the labels are proven correct.
 
 An unrecognized `--source-id` has no provenance rule in `config/sources/`, so
 every claim resolves **UNRESOLVED** by construction — a new dataset is never
@@ -315,10 +316,6 @@ paper's own "99.9% over three years old" irreproducible.
 
 ## 15. Limitations
 
-- **The paper and THEMIS disagree on 32 numbers**, chiefly §5.1's agreement
-  breakdown (the paper pipeline counts one interpretable label as agreement),
-  WatchYourBack-dependent overlaps and kappa values, and §5.4's exact-rate
-  interval. `REPRODUCE.md` lists them.
 - Several paper figures need the **full corpus**, not the sample: the
   multi-dataset-rate interval, 853,604 upper-bound clusters, corpus-wide
   freshness. The bundled sample keeps every multi-dataset address, so agreement,
