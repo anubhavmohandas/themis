@@ -2,8 +2,6 @@
 
 **Measuring how much evidence really stands behind a public "this crypto address belongs to X" label.**
 
-<sub>Made with ❤️ by Anubhav Mohandas · MIT licence · Python 3.10+ · release tag `v1.0-paper`</sub>
-
 ![How THEMIS works: trace, compare, stress-test, report](docs/images/how-it-works.svg)
 
 ## What it is
@@ -85,3 +83,7 @@ Full detail is in [docs/wiki/](docs/wiki/README.md):
 ## Licence and citation
 
 THEMIS's code is MIT ([LICENSE](LICENSE)). It grants no rights over third-party datasets; see [Data and licences](docs/wiki/data-and-licenses.md). Until the paper has a final reference, cite it by title.
+
+---
+
+<sub>Made with ❤️ by Anubhav Mohandas</sub>
