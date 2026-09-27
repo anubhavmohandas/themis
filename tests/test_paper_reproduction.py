@@ -76,6 +76,16 @@ class TestGeneratedFromTheAnalysis(unittest.TestCase):
         self.assertEqual(pdf["status"], "PASS", res["pdf"])
         self.assertTrue(pdf["same_file_as_manifest"])
 
+    def test_a_pdf_other_than_the_pinned_one_fails_even_if_every_phrase_matches(self):
+        other = copy.deepcopy(MANIFEST)
+        other["paper"]["sha256"] = "0" * 64
+        res = pv.verify(shared()["metrics"], other)
+        if res["pdf"]["status"] == "NOT_CHECKED":
+            self.skipTest(res["pdf"].get("reason"))
+        self.assertEqual(res["pdf"]["failed"], [])
+        self.assertEqual(res["status"], "FAIL")
+        self.assertIn("paper.sha256", res["failing"])
+
     def test_the_bundled_sample_can_never_yield_pass(self):
         s = shared()
         self.assertFalse(s["corpus"].full)

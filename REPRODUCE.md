@@ -19,8 +19,8 @@ lists where each source lives.
 
 **Release identity.** The tag `v1.0-paper` is the final release of the ICISHCT 2026 manuscript
 (`git rev-parse v1.0-paper^{commit}` gives its commit). The manuscript itself is not distributed;
-its identity is `ICISHCT2026_THEMIS_Conference_Revised.pdf`, 828,801 bytes, SHA-256
-`16cfb693980a5175ccfc8f99acee15c8ae4e62c9401a53f124a84f6d468a011f`, pinned in `paper/paper_claims.yml`.
+its identity is `ICISHCT2026_THEMIS_Conference_Revised.pdf`, 719,990 bytes, SHA-256
+`ed2918b968d745182031d31d65a9d0e19d7a7c04b3f6596f4eeae10a89fa8286`, pinned in `paper/paper_claims.yml`.
 
 Exact reproduction of the Ransomwhere-dependent figures (including the revenue in Table 2) needs the
 author's retained, hashed 2026-09-20 export: the live service changes over time. Every other source is
@@ -325,6 +325,8 @@ date, never the wall clock.
   the PDF with `--paper FILE` or `THEMIS_PAPER_PDF`, or place it in `paper/` (git-ignored).
   Without the PDF the PDF layer is reported `NOT_CHECKED` in `verification.json`, and a PASS
   then covers the manifest against THEMIS only, not the printed text of the manuscript.
+  A PDF whose SHA-256 is not the pinned one fails the run (`paper.sha256` in `failing`),
+  even if every printed number matches: it is a different manuscript.
 - *Definitions fixed in THEMIS, not the paper:* "33 provenance descriptors" counts
   distinct descriptor strings as `pipeline/analyse.py` does (`rodwald:S` is declared by
   both Rodwald datasets); `anchor_robust_max_ci_width` (a threshold of THEMIS's own

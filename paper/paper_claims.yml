@@ -21,16 +21,18 @@
 # failure does to the overall verdict. `id@suffix` reuses one metric under a second rule.
 
 paper:
-  # The definitive conference manuscript (9 pages, 828,801 bytes). The hash is its
+  # The definitive conference manuscript (8 pages, 719,990 bytes). The hash is its
   # identity; a browser may have saved it as "...Conference_Revised(3).pdf".
   file: ICISHCT2026_THEMIS_Conference_Revised.pdf
-  sha256: 16cfb693980a5175ccfc8f99acee15c8ae4e62c9401a53f124a84f6d468a011f
+  sha256: ed2918b968d745182031d31d65a9d0e19d7a7c04b3f6596f4eeae10a89fa8286
   title: 'Provenance Before Precision: Auditing Public Bitcoin Attribution Labels and Their Effect on Forensic Conclusions'
   version: conference_revised
-  # Historical only, not an active pin: the earlier pin, whose file is no longer on disk.
+  # Historical only, not active pins: earlier revisions of the manuscript, newest first.
   superseded:
-    file: ICISHCT2026_THEMIS_Final_Verified.pdf
-    sha256: 11ad4bd19a7618ac578068ebef1e7377838af530b1caf65a99f958ae673bd8ea
+    - file: ICISHCT2026_THEMIS_Conference_Revised.pdf
+      sha256: 16cfb693980a5175ccfc8f99acee15c8ae4e62c9401a53f124a84f6d468a011f
+    - file: ICISHCT2026_THEMIS_Final_Verified.pdf
+      sha256: 11ad4bd19a7618ac578068ebef1e7377838af530b1caf65a99f958ae673bd8ea
 policy:
   HEADLINE_STABLE:
     on_fail: fail
@@ -830,7 +832,7 @@ claims:
     expected: 9176
     comparison: exact_integer
     pdf:
-      text: '{v} addresses carry a princeton prefix'
+      text: '{v} addresses carry a “princeton” prefix'
   circularity.naming_residue.padua_conti_2018:
     section: '5.2'
     class: SUPPORTING_STABLE
@@ -840,7 +842,7 @@ claims:
     expected: 1801
     comparison: exact_integer
     pdf:
-      text: '{v} carry padua'
+      text: '{v} carry “padua”'
   circularity.naming_residue.montreal_paquet_clouston_2019:
     section: '5.2'
     class: SUPPORTING_STABLE
@@ -850,7 +852,7 @@ claims:
     expected: 819
     comparison: exact_integer
     pdf:
-      text: and {v} carry montreal
+      text: 'and {v} carry “montreal”'
   circularity.naming_residue.attributed:
     section: '5.2'
     class: SUPPORTING_STABLE
@@ -1182,7 +1184,7 @@ claims:
     expected: 7457
     comparison: exact_integer
     pdf:
-      row: D – highest declared confidence
+      row: D – declared-confidence tier
       col: 1
   drift.D.addresses:
     section: '5.3'
@@ -1192,7 +1194,7 @@ claims:
     expected: 7457
     comparison: exact_integer
     pdf:
-      row: D – highest declared confidence
+      row: D – declared-confidence tier
       col: 2
   drift.D.revenue:
     section: '5.3'
@@ -1202,7 +1204,7 @@ claims:
     expected: 112426902
     comparison: exact_integer
     pdf:
-      row: D – highest declared confidence
+      row: D – declared-confidence tier
       col: 3
   drift.D.ratio_vs_B:
     section: '5.3'
@@ -1213,7 +1215,7 @@ claims:
     comparison: rounded_decimal
     decimals: 2
     pdf:
-      row: D – highest declared confidence
+      row: D – declared-confidence tier
       col: 4
       suffix: ×
   drift.D.coverage_vs_B:
@@ -1225,7 +1227,7 @@ claims:
     comparison: rounded_percent
     decimals: 1
     pdf:
-      row: D – highest declared confidence
+      row: D – declared-confidence tier
       col: 5
   drift.B.revenue@abstract:
     section: Abstract

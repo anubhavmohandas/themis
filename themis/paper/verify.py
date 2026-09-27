@@ -221,7 +221,8 @@ def verify_pdf(manifest: dict, pdf=None) -> dict:
     declared = (manifest.get("paper") or {}).get("sha256")
     res = {cid: check_pdf_claim(c, pages) for cid, c in manifest["claims"].items() if c.get("pdf")}
     bad = [k for k, v in res.items() if v["status"] == FAIL]
-    return dict(status=FAIL if bad else PASS, path=str(path), sha256=sha, pages=len(pages),
+    wrong_file = bool(declared) and declared != sha
+    return dict(status=FAIL if bad or wrong_file else PASS, path=str(path), sha256=sha, pages=len(pages),
                 same_file_as_manifest=(declared == sha) if declared else None,
                 n_checked=len(res), failed=bad, results=res)
 
@@ -257,6 +258,8 @@ def verify(metrics, manifest: dict, pdf=None, check_pdf: bool = True) -> dict:
     failing = [r["id"] for r in rows if r["status"] == FAIL and effect(r, "on_fail") == "fail"]
     pdf_bad = [k for k in pdf_res.get("failed", [])
                if effect(next(r for r in rows if r["id"] == k), "on_fail") == "fail"]
+    if pdf_res.get("same_file_as_manifest") is False:   # matching phrases in an unpinned PDF prove nothing about the pinned one
+        pdf_bad.append("paper.sha256")
     blocked = [r["id"] for r in rows if r["status"] == NOT_REPRODUCED and effect(r, "on_not_reproduced") == "block"]
     status = FAIL if (failing or pdf_bad) else BLOCKED if blocked else PASS
     return dict(status=status, claims=rows, counts=counts, failing=failing + pdf_bad, blocked=blocked,
