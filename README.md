@@ -204,7 +204,7 @@ cd frontend && npm ci && npm run build
 |---|---|
 | **Release** | tag `v1.0-paper`, the artifact of the final ICISHCT 2026 manuscript |
 | **Manuscript** | not distributed; [`paper/paper_claims.yml`](paper/paper_claims.yml) pins its SHA-256 |
-| **Third-party data** | **not shipped.** Redistribution terms of the underlying sources are not uniform, so `demo_data/` holds only a README |
+| **Third-party data** | **not shipped.** Redistribution terms of the underlying sources are not uniform, so `demo_data/` is git-ignored and not in the repository |
 | **Rebuild** | fetch the seven sources, run `scripts/build_corpus.py`; source locations, hashes and expected outputs are in [REPRODUCE.md](REPRODUCE.md) and [THIRD_PARTY_DATA.md](THIRD_PARTY_DATA.md) |
 | **Ransomwhere** | the live service changes, so exact reproduction of its figures needs the author's retained, hashed 2026 export |
 

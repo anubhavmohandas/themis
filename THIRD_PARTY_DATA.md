@@ -6,7 +6,7 @@ derives from, and the one government list the anchor file draws on.
 
 **Nothing below is shipped.** As of the `v1.0-paper` release the repository and the release contain
 no third-party record: the files that used to live under `demo_data/` are untracked and git-ignored
-(Option B, decided by the author on 2026-09-26; `demo_data/README.md` explains). Earlier commits
+(Option B, decided by the author on 2026-09-26). Earlier commits
 still contain them: history was deliberately not rewritten. The table below describes the files the
 author keeps privately, all *derived*, none a source's original file:
 
@@ -114,7 +114,7 @@ policy is the author's (see "What is decided and what is not").
 ### What is decided and what is not
 
 - **Decided by the author (2026-09-26): Option B.** The five `demo_data/` files are untracked (`git rm --cached`) and
-  git-ignored, kept only on the author's machine; a tracked `demo_data/README.md` explains why. History was not rewritten.
+  git-ignored, kept only on the author's machine; the whole folder is git-ignored. History was not rewritten.
   `scripts/make_release.py` also ships none of them.
 - **The repository is public** (github.com/anubhavmohandas/themis, created 2026-09-16; on 2026-09-24 it reported 0 forks, 0 stars,
   0 watchers and no releases; `main` only was pushed, the `v1.0-paper*` tags exist locally). `demo_data/` has been in it since

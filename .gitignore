@@ -82,6 +82,5 @@ frontend/.vite/
 /paper/manuscript/
 
 # Real reference-corpus files are kept on the author's machine only: third-party
-# redistribution terms are not uniform (demo_data/README.md, THIRD_PARTY_DATA.md)
-/demo_data/*
-!/demo_data/README.md
+# redistribution terms are not uniform (THIRD_PARTY_DATA.md)
+/demo_data/

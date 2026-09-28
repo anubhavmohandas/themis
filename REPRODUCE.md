@@ -14,7 +14,7 @@ no other version has been run.
 
 The paper's data statement is that the derived observation table is not
 redistributed, so neither the release nor the public repository contains any real
-file under `demo_data/` (only its `README.md`). `THIRD_PARTY_DATA.md` says why and
+file under `demo_data/` (the folder is git-ignored). `THIRD_PARTY_DATA.md` says why and
 lists where each source lives.
 
 **Release identity.** The tag `v1.0-paper` is the final release of the ICISHCT 2026 manuscript
