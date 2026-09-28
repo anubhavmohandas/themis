@@ -49,7 +49,7 @@ Needs Python 3.10+ (Node 18+ only for the dashboard).
 
 ```bash
 git clone https://github.com/anubhavmohandas/themis && cd themis
-python -m venv .venv && source .venv/bin/activate
+python -m venv .venv && source .venv/bin/activate    # Windows: .venv\Scripts\activate
 pip install -e ".[test]"
 
 themis ingest examples/example_attribution.csv --source-id demo --no-reference
@@ -61,14 +61,18 @@ themis ingest examples/example_attribution.csv --source-id demo --no-reference
 <br>
 
 ```
-According to the THEMIS report, the assessment of this dataset is EVIDENCE CONCERNS.
+EXECUTIVE SUMMARY
+  According to the THEMIS report, the assessment of this dataset is EVIDENCE CONCERNS.
+  A measured problem is large enough that the labels should not be relied on until it is resolved.
+
   because:
     x 1 of 11 addresses (9.1%) carry labels in this file that contradict each other.
     + All 12 rows carried a valid identifier.
     - No reference corpus was supplied, so the labels were not tested against any other public source.
+    - Currency was not assessed: no attribution date is available for this dataset.
 ```
 
-Every analysis ends this way: an outcome, and the measured numbers behind it.
+Every analysis ends this way: an outcome, and the measured numbers behind it. The full report above the summary lists every count it used.
 
 </details>
 
@@ -77,10 +81,15 @@ Every analysis ends this way: an outcome, and the measured numbers behind it.
 
 <br>
 
-```bash
-pip install -e ".[ui]"
-python run.py            # needs Node 18+
-```
+Needs Python 3.10+, Node 18+ and git. Then, in the `themis` folder:
+
+| System | Do this |
+|---|---|
+| **Windows** | double-click `start.bat` |
+| **macOS** | double-click `start.command` (first time: right-click → Open, if macOS says it is from an unidentified developer) |
+| **Linux / any terminal** | `python3 run.py` |
+
+The first run creates `.venv` and installs everything itself; later runs start in seconds. Open **http://localhost:5173**. Close the window (or press Ctrl-C) to stop.
 
 The dashboard calls the same analysis functions as the command line; it adds no analysis of its own.
 

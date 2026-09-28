@@ -10,6 +10,12 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e ".[test]"          # add ,ui to run the web backend: pip install -e ".[test,ui]"
 ```
 
+**Dashboard, no terminal needed:** double-click `start.bat` (Windows) or
+`start.command` (macOS; the first time, right-click → Open if macOS blocks it), or run
+`python3 run.py`. It pulls the latest commit (`NO_PULL=1` skips that), creates `.venv`,
+installs the Python and Node dependencies on the first run, and starts the API
+(port 5001, `THEMIS_API_PORT`) and the frontend at http://localhost:5173.
+
 Python ≥ 3.10 (developed and tested on 3.14.6; the 3.10 floor is from inspection,
 not a test run). One required dependency, PyYAML. NumPy is optional and never
 changes a canonical result (see [Reproduce the paper](reproduce-the-paper.md#reproducibility)). Node ≥ 18 for the dashboard.
