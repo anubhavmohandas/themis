@@ -2,7 +2,7 @@
 
 <div align="center">
 
-# THEMIS
+# T H E M I S
 
 ### How much evidence really stands behind a public<br>"this crypto address belongs to X" label?
 
